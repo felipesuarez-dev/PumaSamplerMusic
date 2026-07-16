@@ -6,6 +6,7 @@ import { createVideoDisplay } from './video-display.js';
 import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
 import { createSessionManager } from './session.js';
+import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
 
 const store = createStore({
   videos: [],
@@ -20,6 +21,8 @@ const videoDisplay = createVideoDisplay(document.getElementById('video-player'))
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
 let editorPreviewVideo = null;
+let isCapturingKey = false;
+let masterFxControls = null;
 
 const STOP_KEY_STORAGE = 'puma-stop-key';
 const PREVIEW_VOLUME_STORAGE = 'puma-preview-volume';
@@ -49,7 +52,7 @@ function saveStopKey(key) {
   stopKey = key;
   localStorage.setItem(STOP_KEY_STORAGE, key);
   updateStopKeyLabel();
-  showToast(`Stop key set to ${formatKeyLabel(key)}`, 'success');
+  showToast(t('toast.stopKeySet', { key: formatKeyLabel(key) }), 'success');
 }
 
 function showToast(message, type = 'info') {
@@ -65,7 +68,7 @@ function stopAll() {
   if (editorPreviewVideo) {
     editorPreviewVideo.pause();
   }
-  showToast('All stopped', 'info');
+  showToast(t('toast.allStopped'), 'info');
 }
 
 // Stop button
@@ -79,9 +82,9 @@ const stopKeyCapture = document.getElementById('stop-key-capture');
 if (stopKeyCapture) {
   stopKeyCapture.addEventListener('click', () => {
     stopKeyCapture.classList.add('listening');
-    stopKeyCapture.textContent = 'Press a key...';
-    window.__pumaKeyCapturing = true;
-    window.__pumaStopCapturing = true;
+    stopKeyCapture.textContent = t('common.pressKey');
+    isCapturingKey = true;
+    pads.setKeyCapturing(true);
 
     const handler = (e) => {
       e.preventDefault();
@@ -89,8 +92,8 @@ if (stopKeyCapture) {
       const combo = buildKeyCombo(e);
       saveStopKey(combo);
       stopKeyCapture.classList.remove('listening');
-      window.__pumaKeyCapturing = false;
-      window.__pumaStopCapturing = false;
+      isCapturingKey = false;
+      pads.setKeyCapturing(false);
       window.removeEventListener('keydown', handler);
     };
 
@@ -102,7 +105,7 @@ updateStopKeyLabel();
 
 // Global stop key (capture phase so it fires before pad handlers)
 window.addEventListener('keydown', (e) => {
-  if (window.__pumaStopCapturing) return;
+  if (isCapturingKey) return;
   const combo = buildKeyCombo(e).toLowerCase();
   if (combo !== stopKey.toLowerCase()) return;
 
@@ -122,7 +125,7 @@ window.addEventListener('keydown', (e) => {
 
 // Waveform shortcuts (I/O for in/out, Space for preview when editor active)
 window.addEventListener('keydown', (e) => {
-  if (window.__pumaKeyCapturing) return;
+  if (isCapturingKey) return;
   const active = document.activeElement;
   const isInput = active && (
     active.tagName === 'INPUT' ||
@@ -170,33 +173,32 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Tabs
-function initTabs() {
-  const buttons = document.querySelectorAll('.tab-button');
-  buttons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      buttons.forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-    });
+function initLibrarySidenav() {
+  const sidenav = document.getElementById('library-sidenav');
+  const toggle = document.getElementById('library-sidenav-toggle');
+  if (!sidenav || !toggle) return;
+
+  toggle.addEventListener('click', () => {
+    const expanded = sidenav.classList.toggle('expanded');
+    toggle.setAttribute('aria-expanded', String(expanded));
   });
 }
 
 function initPanelToggle() {
-  const panel = document.querySelector('.panel.tabs');
-  const toggle = document.querySelector('.panel-toggle');
-  if (!panel || !toggle) return;
+  document.querySelectorAll('.panel').forEach((panel) => {
+    const toggle = panel.querySelector('.panel-toggle');
+    if (!toggle) return;
 
-  toggle.addEventListener('click', () => {
-    const collapsed = panel.classList.toggle('collapsed');
-    toggle.textContent = collapsed ? '▴' : '▾';
-    toggle.title = collapsed ? 'Expand panel' : 'Collapse panel';
-    toggle.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel');
-    if (!collapsed && editorWaveform) {
-      editorWaveform.resize();
-      editorWaveform.draw();
-    }
+    toggle.addEventListener('click', () => {
+      const collapsed = panel.classList.toggle('collapsed');
+      toggle.textContent = collapsed ? '▴' : '▾';
+      toggle.title = collapsed ? t('panel.expandTitle') : t('panel.collapseTitle');
+      toggle.setAttribute('aria-label', collapsed ? t('panel.expandTitle') : t('panel.collapseTitle'));
+      if (!collapsed && editorWaveform) {
+        editorWaveform.resize();
+        editorWaveform.draw();
+      }
+    });
   });
 }
 
@@ -240,7 +242,7 @@ if (gridSizeSelect) {
     const count = parseInt(gridSizeSelect.value, 10);
     if (count >= 1 && count <= MAX_PADS) {
       pads.resize(count);
-      showToast(`Pads resized to ${count}`, 'success');
+      showToast(t('toast.padsResized', { n: count }), 'success');
     }
   });
 }
@@ -363,6 +365,28 @@ function initMasterControls() {
       saveMasterFx(state);
     });
   }
+
+  function getState() {
+    return { ...state };
+  }
+
+  function applyState(fx) {
+    for (const ctrl of controls) {
+      const input = document.getElementById(ctrl.id);
+      const display = document.getElementById(ctrl.displayId);
+      if (!input) continue;
+
+      const v = fx[ctrl.key] ?? state[ctrl.key];
+      input.value = v;
+      const value = ctrl.toValue(input.value);
+      if (display) display.textContent = ctrl.toDisplay(value);
+      ctrl.apply(value);
+      state[ctrl.key] = value;
+    }
+    saveMasterFx(state);
+  }
+
+  return { getState, applyState };
 }
 
 async function triggerPad(position, data) {
@@ -370,7 +394,7 @@ async function triggerPad(position, data) {
 
   const video = store.get().videos.find((v) => v.videoId === data.videoId);
   if (!video) {
-    showToast('Video not loaded', 'error');
+    showToast(t('toast.videoNotLoaded'), 'error');
     return;
   }
 
@@ -380,12 +404,9 @@ async function triggerPad(position, data) {
   try {
     await audio.loadAudio(data.videoId, audioUrl);
   } catch (err) {
-    showToast(`Audio load failed: ${err.message}`, 'error');
+    showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
     return;
   }
-
-  // Exclusive playback: only one pad at a time.
-  audio.stopAll();
 
   await audio.play(position, {
     videoId: data.videoId,
@@ -415,101 +436,101 @@ function renderPadEditor(position, data) {
   }
 
   if (!position) {
-    editorEl.innerHTML = '<p class="hint">Click a pad to edit</p>';
+    editorEl.innerHTML = `<p class="hint">${t('editor.clickPadToEdit')}</p>`;
     return;
   }
 
   const videos = store.get().videos;
   const videoOptions =
-    `<option value="" disabled ${!data?.videoId ? 'selected' : ''}>Select a video...</option>` +
+    `<option value="" disabled ${!data?.videoId ? 'selected' : ''}>${t('editor.selectVideo')}</option>` +
     videos
       .map((v) => `<option value="${v.videoId}" ${data?.videoId === v.videoId ? 'selected' : ''}>${escapeHtml(v.title || v.videoId)}</option>`)
       .join('');
 
   editorEl.innerHTML = `
-    <h3>Pad ${position}</h3>
+    <h3>PAD ${position}</h3>
     <div class="form-row">
-      <label>Label</label>
-      <input type="text" id="pad-label" value="${escapeHtml(data?.label || '')}" placeholder="Kick, Bass, etc.">
+      <label>${t('editor.labelField')}</label>
+      <input type="text" id="pad-label" value="${escapeHtml(data?.label || '')}" placeholder="${t('editor.labelPlaceholder')}">
     </div>
     <div class="form-row">
-      <label>Key</label>
+      <label>${t('editor.keyField')}</label>
       <div class="key-capture" id="pad-key-capture" data-key="${escapeHtml(data?.key || '')}">
-        ${data?.key ? `Key: ${escapeHtml(data.key)}` : 'Click and press a key'}
+        ${data?.key ? t('editor.keyValue', { key: escapeHtml(data.key) }) : t('editor.clickPressKey')}
       </div>
     </div>
     <div class="form-row">
-      <label>Video</label>
+      <label>${t('editor.videoField')}</label>
       <select id="pad-video">${videoOptions}</select>
     </div>
     <div class="form-row">
-      <label>Preview</label>
+      <label>${t('editor.previewField')}</label>
       <video id="editor-preview-video" class="editor-preview-video" controls playsinline></video>
     </div>
     <div class="form-row">
-      <label>Transport</label>
+      <label>${t('editor.transportField')}</label>
       <div class="transport-bar">
-        <button id="btn-preview-play" class="btn btn-transport" title="Play preview (Space)"><span class="material-symbols-outlined">play_arrow</span></button>
-        <button id="btn-preview-pause" class="btn btn-transport hidden" title="Pause preview (Space)"><span class="material-symbols-outlined">pause</span></button>
-        <button id="btn-preview-stop" class="btn btn-transport btn-transport-stop" title="Stop preview"><span class="material-symbols-outlined">stop</span></button>
+        <button id="btn-preview-play" class="btn btn-transport" title="${t('editor.playTitle')}"><span class="material-symbols-outlined">play_arrow</span></button>
+        <button id="btn-preview-pause" class="btn btn-transport hidden" title="${t('editor.pauseTitle')}"><span class="material-symbols-outlined">pause</span></button>
+        <button id="btn-preview-stop" class="btn btn-transport btn-transport-stop" title="${t('editor.stopTitle')}"><span class="material-symbols-outlined">stop</span></button>
         <div class="transport-divider"></div>
-        <button id="btn-set-in" class="btn btn-mark" title="Set In point at current position">Set In [I]</button>
-        <button id="btn-set-out" class="btn btn-mark" title="Set Out point at current position">Set Out [O]</button>
+        <button id="btn-set-in" class="btn btn-mark" title="${t('editor.setInTitle')}">${t('editor.setIn')}</button>
+        <button id="btn-set-out" class="btn btn-mark" title="${t('editor.setOutTitle')}">${t('editor.setOut')}</button>
         <div class="transport-time" id="preview-time">00:00.000</div>
       </div>
     </div>
     <div class="form-row waveform-section">
       <label class="waveform-label-row">
-        <span>Waveform</span>
-        <span class="help-icon" data-tooltip="Ctrl + Wheel = zoom&#10;Drag empty area = pan&#10;I = Set In&#10;O = Set Out&#10;Space = Play / Pause&#10;Drag handles = adjust start / end&#10;Click waveform = seek">?</span>
+        <span>${t('waveform.label')}</span>
+        <span class="help-icon" data-tooltip="${t('tip.waveformHelp')}">?</span>
         <span class="waveform-zoom-controls">
-          <button type="button" class="btn-zoom" id="btn-waveform-zoom-out" title="Zoom out">-</button>
+          <button type="button" class="btn-zoom" id="btn-waveform-zoom-out" title="${t('waveform.zoomOutTitle')}">-</button>
           <span class="zoom-level" id="waveform-zoom-level">1x</span>
-          <button type="button" class="btn-zoom" id="btn-waveform-zoom-in" title="Zoom in">+</button>
-          <button type="button" class="btn-zoom" id="btn-waveform-zoom-reset" title="Reset zoom">⟲</button>
+          <button type="button" class="btn-zoom" id="btn-waveform-zoom-in" title="${t('waveform.zoomInTitle')}">+</button>
+          <button type="button" class="btn-zoom" id="btn-waveform-zoom-reset" title="${t('waveform.zoomResetTitle')}">⟲</button>
         </span>
       </label>
       <div class="waveform-container">
         <canvas id="waveform-ruler" class="waveform-ruler"></canvas>
         <canvas id="waveform-canvas"></canvas>
       </div>
-      <div class="waveform-status" id="waveform-status">In: 00:00.000 | Out: 00:00.000 | Dur: 00:00.000</div>
+      <div class="waveform-status" id="waveform-status">${t('waveform.status', { in: '00:00.000', out: '00:00.000', dur: '00:00.000' })}</div>
     </div>
     <div class="time-row">
       <div class="form-row">
-        <label>Start</label>
+        <label>${t('editor.startField')}</label>
         <input type="text" id="pad-start" value="${formatTime(data?.start ?? 0)}">
       </div>
       <div class="form-row">
-        <label>End</label>
+        <label>${t('editor.endField')}</label>
         <input type="text" id="pad-end" value="${formatTime(data?.end ?? 0)}">
       </div>
     </div>
     <div class="form-row">
-      <label>Preview Volume <span class="vol-value" id="pad-preview-volume-value">${Math.round(previewVolume * 100)}%</span></label>
+      <label>${t('editor.previewVolumeField')} <span class="vol-value" id="pad-preview-volume-value">${Math.round(previewVolume * 100)}%</span></label>
       <input type="range" id="pad-preview-volume" min="0" max="1" step="0.05" value="${previewVolume}">
     </div>
     <div class="form-row">
-      <label>Pad Volume <span class="vol-value" id="pad-volume-value">${Math.round((data?.volume ?? 0.2) / 2 * 100)}%</span></label>
+      <label>${t('editor.padVolumeField')} <span class="vol-value" id="pad-volume-value">${Math.round((data?.volume ?? 0.2) / 2 * 100)}%</span></label>
       <input type="range" id="pad-volume" min="0" max="2" step="0.05" value="${data?.volume ?? 0.2}">
     </div>
     <div class="form-row">
-      <label>Trigger Mode</label>
+      <label>${t('editor.triggerModeField')} <span class="help-icon" data-tooltip="${t('tip.triggerMode')}">?</span></label>
       <select id="pad-trigger-mode">
-        <option value="oneshot" ${data?.triggerMode === 'oneshot' ? 'selected' : ''}>One-shot (press once)</option>
-        <option value="gate" ${data?.triggerMode === 'gate' ? 'selected' : ''}>Gate (while held)</option>
+        <option value="oneshot" ${data?.triggerMode === 'oneshot' ? 'selected' : ''}>${t('editor.oneshotOption')}</option>
+        <option value="gate" ${data?.triggerMode === 'gate' ? 'selected' : ''}>${t('editor.gateOption')}</option>
       </select>
     </div>
     <div class="form-row">
-      <label>Color</label>
+      <label>${t('editor.colorField')}</label>
       <input type="color" id="pad-color" value="${data?.color || '#ff9f1c'}">
     </div>
     <div class="form-row">
       <label>
-        <input type="checkbox" id="pad-loop" ${data?.loop ? 'checked' : ''}> Loop
+        <input type="checkbox" id="pad-loop" ${data?.loop ? 'checked' : ''}> ${t('editor.loopField')}
       </label>
     </div>
-    <button id="pad-save" class="btn">Apply to Pad</button>
+    <button id="pad-save" class="btn">${t('editor.applyButton')}</button>
   `;
 
   const canvas = document.getElementById('waveform-canvas');
@@ -573,7 +594,7 @@ function setupPreviewVideo(videoId) {
   });
 
   editorPreviewVideo.addEventListener('error', () => {
-    showToast('Preview video failed to load', 'error');
+    showToast(t('toast.previewLoadFailed'), 'error');
   });
 
   editorPreviewVideo.addEventListener('seeked', () => {
@@ -615,7 +636,7 @@ function cleanupPreviewVideo() {
 }
 
 async function loadEditorWaveform(videoId, start, end) {
-  if (editorWaveform) editorWaveform.setLoading('Loading waveform...');
+  if (editorWaveform) editorWaveform.setLoading(t('waveform.loading'));
   const audioUrl = api.getAudioUrl(videoId);
   try {
     const buffer = await audio.loadAudio(videoId, audioUrl);
@@ -623,7 +644,7 @@ async function loadEditorWaveform(videoId, start, end) {
     editorWaveform.setSegment(start, end);
   } catch (err) {
     console.error('Failed to load waveform:', err);
-    if (editorWaveform) editorWaveform.setEmpty('No audio track');
+    if (editorWaveform) editorWaveform.setEmpty(t('waveform.noAudioTrack'));
   }
 }
 
@@ -638,7 +659,7 @@ function updateWaveformStatus(start, end) {
   const statusEl = document.getElementById('waveform-status');
   if (!statusEl) return;
   const duration = Math.max(0, end - start);
-  statusEl.textContent = `In: ${formatTime(start)} | Out: ${formatTime(end)} | Dur: ${formatTime(duration)}`;
+  statusEl.textContent = t('waveform.status', { in: formatTime(start), out: formatTime(end), dur: formatTime(duration) });
 }
 
 function syncPlayhead() {
@@ -681,8 +702,9 @@ function initEditorListeners(position) {
 
   keyCapture.addEventListener('click', () => {
     keyCapture.classList.add('listening');
-    keyCapture.textContent = 'Press a key...';
-    window.__pumaKeyCapturing = true;
+    keyCapture.textContent = t('common.pressKey');
+    isCapturingKey = true;
+    pads.setKeyCapturing(true);
 
     const handler = (e) => {
       e.preventDefault();
@@ -696,10 +718,11 @@ function initEditorListeners(position) {
       const key = e.key.toLowerCase();
       const combo = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key;
 
-      keyCapture.textContent = `Key: ${combo}`;
+      keyCapture.textContent = t('editor.keyValue', { key: combo });
       keyCapture.dataset.key = combo;
       keyCapture.classList.remove('listening');
-      window.__pumaKeyCapturing = false;
+      isCapturingKey = false;
+      pads.setKeyCapturing(false);
       window.removeEventListener('keydown', handler);
       autoCommitPad(position, { key: combo });
     };
@@ -792,7 +815,7 @@ function initEditorListeners(position) {
 
   if (labelInput) {
     labelInput.addEventListener('change', () => {
-      autoCommitPad(position, { label: labelInput.value || `Pad ${position}` });
+      autoCommitPad(position, { label: labelInput.value || `PAD ${position}` });
     });
   }
 
@@ -836,7 +859,7 @@ function initEditorListeners(position) {
       syncPlayhead();
     } catch (err) {
       console.warn('Preview play failed:', err);
-      showToast('Preview play failed', 'error');
+      showToast(t('toast.previewPlayFailed'), 'error');
     } finally {
       playBtn.disabled = false;
       pauseBtn.disabled = false;
@@ -887,7 +910,7 @@ function initEditorListeners(position) {
     const data = {
       position,
       key,
-      label: document.getElementById('pad-label').value || `Pad ${position}`,
+      label: document.getElementById('pad-label').value || `PAD ${position}`,
       videoId: videoSelect.value,
       start: segment.start,
       end: segment.end,
@@ -898,20 +921,20 @@ function initEditorListeners(position) {
     };
 
     if (!data.key) {
-      showToast('Assign a key first', 'warning');
+      showToast(t('toast.assignKeyFirst'), 'warning');
       return;
     }
     if (!data.videoId) {
-      showToast('Select a video first', 'warning');
+      showToast(t('toast.selectVideoFirst'), 'warning');
       return;
     }
     if (data.start >= data.end) {
-      showToast('End must be after start', 'warning');
+      showToast(t('toast.endAfterStart'), 'warning');
       return;
     }
 
     pads.update(position, data);
-    showToast(`Pad ${position} updated`, 'success');
+    showToast(t('toast.padUpdated', { position }), 'success');
   });
 }
 
@@ -922,8 +945,12 @@ async function refreshVideos() {
     store.set({ videos, activeDownloads: active });
     renderVideoList();
   } catch (err) {
-    showToast(`Failed to load videos: ${err.message}`, 'error');
+    showToast(t('toast.videosLoadFailed', { message: err.message }), 'error');
   }
+}
+
+function statusLabel(status) {
+  return t(`video.status.${status}`) || status;
 }
 
 function renderVideoList() {
@@ -942,7 +969,7 @@ function renderVideoList() {
 
     const statusText = video.status === 'downloading'
       ? `<span class="loading-spinner"></span>${Math.round(video.progress || 0)}%`
-      : video.status;
+      : statusLabel(video.status);
 
     li.innerHTML = `
       <div class="video-item-info">
@@ -950,17 +977,17 @@ function renderVideoList() {
         <span class="video-item-meta">${formatTime(video.duration || 0)} · ${video.videoId}</span>
       </div>
       <span class="status ${video.status}">${statusText}</span>
-      <button data-id="${video.videoId}" title="Remove">×</button>
+      <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
     `;
 
     li.querySelector('button').addEventListener('click', async () => {
       try {
         await api.deleteVideo(video.videoId);
         audio.unload(video.videoId);
-        showToast(`Removed ${video.title || video.videoId}`, 'success');
+        showToast(t('toast.videoRemoved', { name: video.title || video.videoId }), 'success');
         await refreshVideos();
       } catch (err) {
-        showToast(`Remove failed: ${err.message}`, 'error');
+        showToast(t('toast.removeFailed', { message: err.message }), 'error');
       }
     });
 
@@ -979,15 +1006,28 @@ document.getElementById('add-video-form').addEventListener('submit', async (e) =
     const result = await api.addVideo(url);
     input.value = '';
     if (result.status === 'ready') {
-      showToast('Video already available', 'success');
+      showToast(t('toast.videoAlreadyAvailable'), 'success');
     } else {
-      showToast('Video queued for download', 'info');
+      showToast(t('toast.videoQueued'), 'info');
     }
     await refreshVideos();
   } catch (err) {
-    showToast(`Add failed: ${err.message}`, 'error');
+    showToast(t('toast.addFailed', { message: err.message }), 'error');
   }
 });
+
+// Import session from ZIP
+const importInput = document.getElementById('import-session-file');
+const importBtn = document.getElementById('btn-import-session');
+if (importBtn && importInput) {
+  importBtn.addEventListener('click', () => importInput.click());
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files && importInput.files[0];
+    importInput.value = '';
+    if (!file) return;
+    await sessionManager.importFromZip(file);
+  });
+}
 
 // WebSocket events
 ws.on('download:progress', refreshVideos);
@@ -1002,6 +1042,7 @@ const sessionManager = createSessionManager({
     const sessionData = {
       name: document.getElementById('session-name').value.trim(),
       pads: pads.getAll(),
+      masterFx: masterFxControls ? masterFxControls.getState() : undefined,
     };
     sessionManager.save(sessionData);
   },
@@ -1018,18 +1059,69 @@ const sessionManager = createSessionManager({
     pads.setAll(padsArray);
     store.set({ selectedPosition: null, currentPad: null });
     renderPadEditor(null, null);
+    if (masterFxControls) {
+      masterFxControls.applyState(session.masterFx || loadMasterFxDefaults());
+    }
   },
 });
 
+// Export session
+const exportBtn = document.getElementById('btn-export-session');
+if (exportBtn) {
+  exportBtn.addEventListener('click', async () => {
+    const name = document.getElementById('session-name').value.trim();
+    if (!name) {
+      showToast(t('toast.saveOrLoadBeforeExport'), 'error');
+      return;
+    }
+    // Save first so the export reflects live/auto-committed pad edits, not
+    // whatever was last written to disk.
+    try {
+      const saved = await sessionManager.save({
+        pads: pads.getAll(),
+        masterFx: masterFxControls ? masterFxControls.getState() : undefined,
+      });
+      if (!saved) return;
+      window.open(api.exportSession(saved.name), '_blank');
+    } catch {
+      // sessionManager.save() already showed an error toast.
+    }
+  });
+}
+
+// Locale switcher
+function initLocaleSwitcher() {
+  const localeSelect = document.getElementById('locale-select');
+  if (!localeSelect) return;
+
+  localeSelect.value = getLocale();
+
+  localeSelect.addEventListener('change', () => {
+    setLocale(localeSelect.value);
+    applyTranslations(document);
+
+    // Re-render already-painted dynamic content that depends on text.
+    const selectedPosition = store.get().selectedPosition;
+    const currentPad = store.get().currentPad;
+    if (selectedPosition) {
+      renderPadEditor(selectedPosition, currentPad);
+    }
+    renderVideoList();
+    sessionManager.refreshList();
+  });
+}
+
 // Initial load
-initTabs();
 initPanelToggle();
-initMasterControls();
+initLibrarySidenav();
+initLocaleSwitcher();
+applyTranslations(document);
+masterFxControls = initMasterControls();
 refreshVideos();
 setInterval(refreshVideos, 2000);
 setInterval(() => sessionManager.refreshList(), 10000);
 
-showToast('PumaSamplerMusic ready', 'success');
+showToast(t('toast.appReady'), 'success');
 
 // Cleanup on page unload
 window.addEventListener('beforeunload', cleanupPreviewVideo);

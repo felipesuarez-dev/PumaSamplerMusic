@@ -65,4 +65,8 @@ export const api = {
   deleteSession(name) {
     return request(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
   },
+
+  exportSession(name) {
+    return `${API_BASE}/api/sessions/${encodeURIComponent(name)}/export`;
+  },
 };

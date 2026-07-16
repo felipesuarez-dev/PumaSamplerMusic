@@ -18,22 +18,32 @@
       </div>
       <div class="header-actions">
         <div class="stop-group">
-          <button id="btn-stop-all" class="btn btn-stop" title="Stop all">
+          <button id="btn-stop-all" class="btn btn-stop" data-i18n-title="header.stopAllTitle" title="Stop all">
             <svg class="stop-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
               <rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/>
             </svg>
             STOP
             <span class="key-label" id="stop-key-label">[ESC]</span>
           </button>
-          <div class="key-capture" id="stop-key-capture" title="Click to set stop key" data-key="escape">ESC</div>
+          <div class="key-capture" id="stop-key-capture" data-i18n-title="header.stopKeyCaptureTitle" title="Click to set stop key" data-key="escape">ESC</div>
+          <span class="help-icon" data-i18n-tooltip="tip.stopKeyCapture" data-tooltip="Click, then press a key to set it as the global stop shortcut.">?</span>
         </div>
         <div class="session-controls">
-          <input type="text" id="session-name" placeholder="session name" autocomplete="off">
-          <button id="btn-save-session" class="btn">Save</button>
+          <input type="text" id="session-name" data-i18n-placeholder="header.sessionNamePlaceholder" placeholder="session name" autocomplete="off">
+          <button id="btn-save-session" class="btn" data-i18n="header.save">Save</button>
           <select id="session-select">
-            <option value="">Load session...</option>
+            <option value="" data-i18n="header.loadSessionOption">Load session...</option>
           </select>
-          <button id="btn-new-session" class="btn btn-secondary">New</button>
+          <button id="btn-new-session" class="btn btn-secondary" data-i18n="header.new">New</button>
+          <button id="btn-export-session" class="btn btn-secondary" data-i18n-title="header.exportTitle" title="Export session as ZIP" data-i18n="header.export">Export</button>
+          <input type="file" id="import-session-file" accept=".zip" style="display:none">
+          <button id="btn-import-session" class="btn btn-secondary" data-i18n-title="header.importTitle" title="Import session from ZIP" data-i18n="header.import">Import</button>
+        </div>
+        <div class="locale-switcher">
+          <select id="locale-select" class="locale-select" data-i18n-title="header.localeSelectTitle" title="Language">
+            <option value="en">EN</option>
+            <option value="es">ES</option>
+          </select>
         </div>
       </div>
     </header>
@@ -42,6 +52,68 @@
       <section class="left-panel">
         <div class="pad-area">
           <div class="pad-toolbar">
+            <div class="master-strip" id="master-strip">
+              <div class="master-knob">
+                <div class="master-label-row">
+                  <label class="master-label" for="master-volume" data-i18n="master.volume">Volume</label>
+                  <span class="help-icon" data-i18n-tooltip="tip.volume" data-tooltip="Overall output volume.">?</span>
+                </div>
+                <div class="master-knob-control">
+                  <input type="range" id="master-volume" min="0" max="2" step="0.05" value="1" aria-label="Master volume">
+                </div>
+                <span class="master-value" id="master-volume-value">100%</span>
+              </div>
+              <div class="master-knob">
+                <div class="master-label-row">
+                  <label class="master-label" for="master-cutoff" data-i18n="master.cutoff">Cutoff</label>
+                  <span class="help-icon" data-i18n-tooltip="tip.cutoff" data-tooltip="Low-pass filter cutoff frequency. Lower values sound darker/muffled.">?</span>
+                </div>
+                <div class="master-knob-control">
+                  <input type="range" id="master-cutoff" min="0" max="100" step="1" value="100" aria-label="Filter cutoff">
+                </div>
+                <span class="master-value" id="master-cutoff-value">20kHz</span>
+              </div>
+              <div class="master-knob">
+                <div class="master-label-row">
+                  <label class="master-label" for="master-resonance" data-i18n="master.resonance">Res</label>
+                  <span class="help-icon" data-i18n-tooltip="tip.resonance" data-tooltip="Emphasizes frequencies near the filter cutoff.">?</span>
+                </div>
+                <div class="master-knob-control">
+                  <input type="range" id="master-resonance" min="0.1" max="20" step="0.1" value="0.1" aria-label="Filter resonance">
+                </div>
+                <span class="master-value" id="master-resonance-value">0.1</span>
+              </div>
+              <div class="master-knob">
+                <div class="master-label-row">
+                  <label class="master-label" for="master-reverb" data-i18n="master.reverb">Reverb</label>
+                  <span class="help-icon" data-i18n-tooltip="tip.reverb" data-tooltip="Adds space/ambience to the sound. 0% is fully dry.">?</span>
+                </div>
+                <div class="master-knob-control">
+                  <input type="range" id="master-reverb" min="0" max="1" step="0.05" value="0" aria-label="Reverb mix">
+                </div>
+                <span class="master-value" id="master-reverb-value">0%</span>
+              </div>
+              <div class="master-knob">
+                <div class="master-label-row">
+                  <label class="master-label" for="master-delay-time" data-i18n="master.delayTime">D.Time</label>
+                  <span class="help-icon" data-i18n-tooltip="tip.delayTime" data-tooltip="Time in milliseconds between each echo repeat.">?</span>
+                </div>
+                <div class="master-knob-control">
+                  <input type="range" id="master-delay-time" min="50" max="1000" step="10" value="250" aria-label="Delay time">
+                </div>
+                <span class="master-value" id="master-delay-time-value">250ms</span>
+              </div>
+              <div class="master-knob">
+                <div class="master-label-row">
+                  <label class="master-label" for="master-delay-feedback" data-i18n="master.delayFeedback">D.FB</label>
+                  <span class="help-icon" data-i18n-tooltip="tip.delayFeedback" data-tooltip="How many times the echo repeats before fading out.">?</span>
+                </div>
+                <div class="master-knob-control">
+                  <input type="range" id="master-delay-feedback" min="0" max="90" step="1" value="0" aria-label="Delay feedback">
+                </div>
+                <span class="master-value" id="master-delay-feedback-value">0%</span>
+              </div>
+            </div>
             <div class="grid-controls">
               <label for="grid-size">PADS</label>
               <select id="grid-size">
@@ -50,50 +122,7 @@
                 <option value="18">3×6 (18)</option>
                 <option value="27">3×9 (27)</option>
               </select>
-            </div>
-            <div class="master-strip" id="master-strip">
-              <div class="master-knob">
-                <label class="master-label" for="master-volume">Volume</label>
-                <div class="master-knob-control">
-                  <input type="range" id="master-volume" min="0" max="2" step="0.05" value="1" aria-label="Master volume">
-                </div>
-                <span class="master-value" id="master-volume-value">100%</span>
-              </div>
-              <div class="master-knob">
-                <label class="master-label" for="master-cutoff">Cutoff</label>
-                <div class="master-knob-control">
-                  <input type="range" id="master-cutoff" min="0" max="100" step="1" value="100" aria-label="Filter cutoff">
-                </div>
-                <span class="master-value" id="master-cutoff-value">20kHz</span>
-              </div>
-              <div class="master-knob">
-                <label class="master-label" for="master-resonance">Res</label>
-                <div class="master-knob-control">
-                  <input type="range" id="master-resonance" min="0.1" max="20" step="0.1" value="0.1" aria-label="Filter resonance">
-                </div>
-                <span class="master-value" id="master-resonance-value">0.1</span>
-              </div>
-              <div class="master-knob">
-                <label class="master-label" for="master-reverb">Reverb</label>
-                <div class="master-knob-control">
-                  <input type="range" id="master-reverb" min="0" max="1" step="0.05" value="0" aria-label="Reverb mix">
-                </div>
-                <span class="master-value" id="master-reverb-value">0%</span>
-              </div>
-              <div class="master-knob">
-                <label class="master-label" for="master-delay-time">D.Time</label>
-                <div class="master-knob-control">
-                  <input type="range" id="master-delay-time" min="50" max="1000" step="10" value="250" aria-label="Delay time">
-                </div>
-                <span class="master-value" id="master-delay-time-value">250ms</span>
-              </div>
-              <div class="master-knob">
-                <label class="master-label" for="master-delay-feedback">D.FB</label>
-                <div class="master-knob-control">
-                  <input type="range" id="master-delay-feedback" min="0" max="90" step="1" value="0" aria-label="Delay feedback">
-                </div>
-                <span class="master-value" id="master-delay-feedback-value">0%</span>
-              </div>
+              <span class="help-icon" data-i18n-tooltip="tip.gridSize" data-tooltip="Shrinking the grid discards any extra PADs that no longer fit.">?</span>
             </div>
           </div>
           <div class="pad-grid" id="pad-grid">
@@ -107,38 +136,46 @@
           <video id="video-player" playsinline muted></video>
           <div id="video-placeholder" class="video-placeholder">
             <img src="/logo.png" alt="" class="placeholder-logo">
-            <p>Add a video and assign it to a pad</p>
+            <p data-i18n="video.placeholder">Add a video and assign it to a pad</p>
           </div>
         </div>
 
-        <div class="panel tabs">
+        <section class="panel">
           <div class="panel-header">
-            <div class="tab-buttons">
-              <button class="tab-button active" data-tab="pad-editor">Pad Editor</button>
-              <button class="tab-button" data-tab="video-library">Video Library</button>
-            </div>
-            <button class="panel-toggle" title="Collapse panel" aria-label="Collapse panel">▾</button>
+            <h3 class="panel-title" data-i18n="panel.padEditorTitle">PAD Editor</h3>
+            <button class="panel-toggle" data-i18n-title="panel.collapseTitle" title="Collapse panel" aria-label="Collapse panel">▾</button>
           </div>
 
-          <div class="tab-content active" id="tab-pad-editor">
+          <div class="panel-content">
             <div id="pad-editor" class="pad-editor">
-              <p class="hint">Click a pad to edit</p>
+              <p class="hint" data-i18n="editor.clickPadToEdit">Click a pad to edit</p>
             </div>
           </div>
+        </section>
+      </section>
 
-          <div class="tab-content" id="tab-video-library">
-            <div class="video-library">
-              <form id="add-video-form" class="add-video-form">
-                <input type="url" id="video-url" placeholder="https://youtube.com/watch?v=..." required>
-                <button type="submit" class="btn">Add Video</button>
-              </form>
-              <ul id="video-list" class="video-list">
-                <!-- Videos populated by JS -->
-              </ul>
-            </div>
+      <aside class="library-sidenav" id="library-sidenav">
+        <button id="library-sidenav-toggle" class="library-sidenav-toggle" data-i18n-title="library.toggleTitle" title="Toggle Video Library" aria-label="Toggle Video Library" aria-expanded="false" aria-controls="library-sidenav-body">
+          <span data-i18n="library.toggleLabel">Videos</span>
+        </button>
+
+        <div class="library-sidenav-body" id="library-sidenav-body">
+          <div class="library-sidenav-header">
+            <h3 class="panel-title" data-i18n="panel.videoLibraryTitle">Video Library</h3>
+          </div>
+
+          <div class="video-library">
+            <form id="add-video-form" class="add-video-form">
+              <input type="url" id="video-url" data-i18n-placeholder="video.urlPlaceholder" placeholder="https://youtube.com/watch?v=..." required>
+              <button type="submit" class="btn" data-i18n="video.addButton">Add Video</button>
+              <span class="help-icon" data-i18n-tooltip="tip.addVideo" data-tooltip="Only YouTube links are supported. Downloads happen in the background.">?</span>
+            </form>
+            <ul id="video-list" class="video-list">
+              <!-- Videos populated by JS -->
+            </ul>
           </div>
         </div>
-      </section>
+      </aside>
     </main>
 
     <div id="toast" class="toast" role="alert" aria-live="polite"></div>

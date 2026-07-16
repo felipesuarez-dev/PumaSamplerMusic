@@ -112,6 +112,28 @@ body {
   border-color: var(--accent);
 }
 
+.locale-switcher {
+  display: flex;
+  align-items: center;
+}
+
+.locale-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.locale-select:focus {
+  border-color: var(--accent);
+}
+
 /* Buttons */
 .btn {
   background: var(--accent);
@@ -282,6 +304,81 @@ body {
   overflow: hidden;
 }
 
+/* Video Library sidenav */
+.library-sidenav {
+  flex: 0 0 auto;
+  width: 48px;
+  display: flex;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: width 0.25s ease, height 0.25s ease;
+}
+
+.library-sidenav.expanded {
+  width: min(300px, 85vw);
+}
+
+.library-sidenav-toggle {
+  flex: 0 0 48px;
+  width: 48px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 0;
+  transition: var(--transition);
+}
+
+.library-sidenav-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.library-sidenav-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.library-sidenav.expanded .library-sidenav-body {
+  opacity: 1;
+}
+
+.library-sidenav-body::-webkit-scrollbar { width: 6px; }
+.library-sidenav-body::-webkit-scrollbar-track { background: transparent; }
+.library-sidenav-body::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.library-sidenav-header {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Pad grid */
 .pad-area {
   display: flex;
@@ -335,9 +432,8 @@ body {
 .pad-toolbar {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
   gap: 12px;
   width: 100%;
 }
@@ -345,6 +441,7 @@ body {
 /* Master controls strip */
 .master-strip {
   flex-shrink: 0;
+  align-self: stretch;
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
@@ -362,7 +459,16 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  width: 64px;
+  min-width: 64px;
+  width: auto;
+}
+
+.master-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
 }
 
 .master-label {
@@ -372,6 +478,24 @@ body {
   color: var(--text-muted);
   text-align: center;
   line-height: 1.1;
+}
+
+.master-label-row .help-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 0.6rem;
+}
+
+/* Keep the tooltip bubble on-screen for knobs at either edge of the strip. */
+.master-strip .master-knob:first-child .help-icon::after {
+  left: 0;
+  transform: translateX(0);
+}
+
+.master-strip .master-knob:last-child .help-icon::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0);
 }
 
 .master-knob-control {
@@ -626,7 +750,7 @@ body {
   display: none;
 }
 
-/* Panel / Tabs */
+/* Panel */
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -647,10 +771,12 @@ body {
   padding-bottom: 12px;
 }
 
-.tab-buttons {
-  display: flex;
-  gap: 8px;
+.panel-title {
   flex: 1;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .panel-toggle {
@@ -671,7 +797,7 @@ body {
   color: var(--text);
 }
 
-.panel.collapsed .tab-content { display: none; }
+.panel.collapsed .panel-content { display: none; }
 .panel.collapsed .panel-header {
   border-bottom: none;
   padding-bottom: 0;
@@ -679,44 +805,19 @@ body {
 }
 .panel.collapsed { flex: 0 0 auto; min-height: 0; }
 
-.tab-button {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  padding: 8px 14px;
-  cursor: pointer;
-  font-weight: 700;
-  border-radius: 8px;
-  transition: var(--transition);
-}
-
-.tab-button:hover {
-  color: var(--text);
-  background: var(--surface-light);
-}
-
-.tab-button.active {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.tab-content {
-  display: none;
+.panel-content {
+  display: block;
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
 
-.tab-content::-webkit-scrollbar { width: 6px; }
-.tab-content::-webkit-scrollbar-track { background: transparent; }
-.tab-content::-webkit-scrollbar-thumb {
+.panel-content::-webkit-scrollbar { width: 6px; }
+.panel-content::-webkit-scrollbar-track { background: transparent; }
+.panel-content::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
-}
-
-.tab-content.active {
-  display: block;
 }
 
 /* Pad Editor */
@@ -1004,12 +1105,14 @@ body {
 /* Video Library */
 .add-video-form {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 14px;
 }
 
 .add-video-form input {
   flex: 1;
+  min-width: 0;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
@@ -1230,7 +1333,8 @@ body {
   }
 
   .master-knob {
-    width: 60px;
+    min-width: 60px;
+    width: auto;
   }
 
   .master-knob input[type='range'] {
@@ -1243,7 +1347,10 @@ body {
   }
 
   .right-panel {
+    flex: 0 0 auto;
+    height: auto;
     min-height: 0;
+    overflow: visible;
     gap: 12px;
   }
 
@@ -1254,6 +1361,31 @@ body {
 
   .panel {
     flex: 0 0 auto;
+    padding: 12px;
+  }
+
+  .library-sidenav {
+    flex-direction: column;
+    width: 100%;
+    height: 44px;
+  }
+
+  .library-sidenav.expanded {
+    width: 100%;
+    height: auto;
+  }
+
+  .library-sidenav-toggle {
+    flex: 0 0 44px;
+    width: 100%;
+    height: 44px;
+    writing-mode: horizontal-tb;
+    transform: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .library-sidenav-body {
     padding: 12px;
   }
 
@@ -1297,11 +1429,6 @@ body {
     padding-bottom: 10px;
   }
 
-  .tab-button {
-    padding: 6px 10px;
-    font-size: 0.85rem;
-  }
-
   .waveform-container {
     height: 150px;
   }
@@ -1331,7 +1458,8 @@ body {
   }
 
   .master-knob {
-    width: 52px;
+    min-width: 52px;
+    width: auto;
     gap: 4px;
   }
 

@@ -1,4 +1,18 @@
 import { formatTime } from './state.js';
+import { t } from './i18n.js';
+import { buildPeakCache as buildPeakCacheFromSamples } from './waveform-peaks.js';
+
+const PEAK_BUCKET_COUNT = 8192;
+
+// Module-level cache of precomputed min/max peaks for the currently loaded
+// audio buffer. Avoids rescanning the raw Float32Array on every draw() call
+// (e.g. on every mousemove while dragging a handle).
+let peakCache = null;
+
+function buildPeakCache(buffer) {
+  const data = buffer.getChannelData(0);
+  peakCache = buildPeakCacheFromSamples(data, PEAK_BUCKET_COUNT);
+}
 
 export function createWaveform(canvas, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -14,7 +28,7 @@ export function createWaveform(canvas, options = {}) {
   let dragTarget = null;
   let wasDragging = false;
   let isLoading = false;
-  let emptyMessage = 'Select a video';
+  let emptyMessage = t('waveform.selectVideo');
 
   let zoomLevel = 1;
   let zoomCenter = 0;
@@ -92,26 +106,30 @@ export function createWaveform(canvas, options = {}) {
     zoomCenter = duration / 2;
     clampZoom();
     isLoading = false;
+    peakCache = null;
+    if (buffer) buildPeakCache(buffer);
     draw();
   }
 
-  function setLoading(message = 'Loading waveform...') {
+  function setLoading(message = t('waveform.loading')) {
     isLoading = true;
     emptyMessage = message;
     audioBuffer = null;
     duration = 0;
     zoomLevel = 1;
     zoomCenter = 0;
+    peakCache = null;
     draw();
   }
 
-  function setEmpty(message = 'Select a video') {
+  function setEmpty(message = t('waveform.selectVideo')) {
     isLoading = false;
     audioBuffer = null;
     duration = 0;
     zoomLevel = 1;
     zoomCenter = 0;
     emptyMessage = message;
+    peakCache = null;
     draw();
   }
 
@@ -291,16 +309,31 @@ export function createWaveform(canvas, options = {}) {
 
     const { visibleStart } = getVisibleRange();
     const sampleOffset = Math.floor((visibleStart / duration) * data.length);
+    const useCache = peakCache && step >= peakCache.bucketSize;
+    const numBuckets = useCache ? peakCache.mins.length : 0;
 
     for (let x = xMin; x < xMax; x += 1) {
       let min = 1;
       let max = -1;
       const offset = sampleOffset + Math.floor(x * step);
-      for (let i = 0; i < step && offset + i < data.length; i++) {
-        const sample = data[offset + i] || 0;
-        if (sample < min) min = sample;
-        if (sample > max) max = sample;
+
+      if (useCache) {
+        let bucketStart = Math.floor(offset / peakCache.bucketSize);
+        let bucketEnd = Math.ceil((offset + step) / peakCache.bucketSize);
+        bucketStart = Math.max(0, Math.min(bucketStart, numBuckets - 1));
+        bucketEnd = Math.max(bucketStart + 1, Math.min(bucketEnd, numBuckets));
+        for (let b = bucketStart; b < bucketEnd; b++) {
+          if (peakCache.mins[b] < min) min = peakCache.mins[b];
+          if (peakCache.maxs[b] > max) max = peakCache.maxs[b];
+        }
+      } else {
+        for (let i = 0; i < step && offset + i < data.length; i++) {
+          const sample = data[offset + i] || 0;
+          if (sample < min) min = sample;
+          if (sample > max) max = sample;
+        }
       }
+
       const yMin = (1 + min) * amp;
       const yMax = (1 + max) * amp;
       samples.push({ x, yMin, yMax });

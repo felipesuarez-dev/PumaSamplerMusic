@@ -6,6 +6,7 @@ export function createPads(container, options = {}, initialCount = 9) {
   const state = new Map(); // position -> pad data
   let selectedPosition = null;
   let padCount = 0;
+  let capturingKey = false;
 
   function createPadElement(position) {
     const el = document.createElement('div');
@@ -16,7 +17,7 @@ export function createPads(container, options = {}, initialCount = 9) {
       <span class="pad-key"></span>
       <span class="pad-position">${position}</span>
       <span class="pad-playing-indicator"></span>
-      <span class="pad-label">Pad ${position}</span>
+      <span class="pad-label">PAD ${position}</span>
       <span class="pad-time"></span>
       <span class="pad-color-indicator"></span>
     `;
@@ -75,7 +76,7 @@ export function createPads(container, options = {}, initialCount = 9) {
       el.style.borderColor = '';
       el.style.boxShadow = '';
       el.querySelector('.pad-key').textContent = '';
-      el.querySelector('.pad-label').textContent = `Pad ${position}`;
+      el.querySelector('.pad-label').textContent = `PAD ${position}`;
       el.querySelector('.pad-time').textContent = '';
       el.querySelector('.pad-color-indicator').style.background = 'var(--accent)';
       return;
@@ -83,7 +84,7 @@ export function createPads(container, options = {}, initialCount = 9) {
 
     el.className = `pad ${selectedPosition === position ? 'selected' : ''}`;
     el.querySelector('.pad-key').textContent = data.key || '';
-    el.querySelector('.pad-label').textContent = data.label || `Pad ${position}`;
+    el.querySelector('.pad-label').textContent = data.label || `PAD ${position}`;
     el.querySelector('.pad-time').textContent = `${formatTime(data.start)} - ${formatTime(data.end)}`;
     el.querySelector('.pad-color-indicator').style.background = data.color || 'var(--accent)';
   }
@@ -214,8 +215,12 @@ export function createPads(container, options = {}, initialCount = 9) {
     }
   }
 
+  function setKeyCapturing(value) {
+    capturingKey = Boolean(value);
+  }
+
   function isInputFocused() {
-    if (window.__pumaKeyCapturing) return true;
+    if (capturingKey) return true;
     const active = document.activeElement;
     return active && (
       active.tagName === 'INPUT' ||
@@ -254,6 +259,7 @@ export function createPads(container, options = {}, initialCount = 9) {
     trigger,
     release,
     setPlaying,
+    setKeyCapturing,
   };
 }
 

@@ -1,3 +1,10 @@
+export function computeSliceTimes(start, end, bufferDuration) {
+  const startTime = Math.max(0, start || 0);
+  const endTime = Math.min(bufferDuration, end || bufferDuration);
+  const duration = Math.max(0.01, endTime - startTime);
+  return { startTime, endTime, duration };
+}
+
 export function createAudioEngine() {
   let audioContext = null;
   const buffers = new Map(); // videoId -> AudioBuffer
@@ -96,6 +103,8 @@ export function createAudioEngine() {
     const masterGain = ctx.createGain();
     masterGain.gain.value = 1;
 
+    const compressor = ctx.createDynamicsCompressor();
+
     // Routing
     masterInput.connect(masterFilter);
     masterFilter.connect(dryGain);
@@ -112,7 +121,8 @@ export function createAudioEngine() {
     delayNode.connect(delayFeedback);
     delayFeedback.connect(delayNode);
 
-    masterGain.connect(ctx.destination);
+    masterGain.connect(compressor);
+    compressor.connect(ctx.destination);
 
     masterChain = {
       ctx,
@@ -126,6 +136,7 @@ export function createAudioEngine() {
       delayFeedback,
       delayWet,
       masterGain,
+      compressor,
     };
 
     // Apply any values that were set before the chain existed.
@@ -203,12 +214,19 @@ export function createAudioEngine() {
     const audioBuffer = buffers.get(videoId);
     if (!audioBuffer) return false;
 
-    const startTime = Math.max(0, start || 0);
-    const endTime = Math.min(audioBuffer.duration, end || audioBuffer.duration);
-    const duration = Math.max(0.01, endTime - startTime);
+    const { startTime, endTime, duration } = computeSliceTimes(start, end, audioBuffer.duration);
 
     // Stop any existing playback on this pad
     stop(position);
+
+    // One-shot voices don't layer with each other: any new trigger cuts
+    // whatever one-shots are currently playing. Loops are left alone so
+    // they can keep sounding as a background layer.
+    activeSources.forEach((active, pos) => {
+      if (pos !== position && !active.source.loop) {
+        stop(pos);
+      }
+    });
 
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
@@ -256,26 +274,20 @@ export function createAudioEngine() {
       } catch {
         // ignore
       }
+      try {
+        active.source.disconnect();
+      } catch {
+        // ignore
+      }
       activeSources.delete(position);
       emit('audiosourcestop', { position, videoId: active.videoId });
     }
   }
 
   function stopAll() {
-    activeSources.forEach((active) => {
-      try {
-        active.source.stop();
-      } catch {
-        // ignore
-      }
-      try {
-        active.gain.disconnect();
-      } catch {
-        // ignore
-      }
-      emit('audiosourcestop', { position: active.position, videoId: active.videoId });
-    });
-    activeSources.clear();
+    for (const position of [...activeSources.keys()]) {
+      stop(position);
+    }
   }
 
   function getActivePositions() {
