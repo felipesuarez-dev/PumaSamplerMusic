@@ -230,9 +230,10 @@ body {
 .left-panel {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-right: 10px;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .right-panel {
@@ -245,7 +246,17 @@ body {
 }
 
 /* Pad grid */
+.pad-area {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  margin: auto 0;
+}
+
 .pad-grid {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: repeat(3, var(--pad-size));
   grid-auto-rows: var(--pad-size);
@@ -253,18 +264,24 @@ body {
 }
 
 .grid-controls {
-  margin-top: 12px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   font-size: 0.8rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .grid-controls label {
   font-weight: 700;
-  text-transform: uppercase;
 }
 
 .grid-controls select {
@@ -418,9 +435,9 @@ body {
   background: rgba(0, 0, 0, 0.75);
   color: #fff;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 0.85rem;
+  font-size: clamp(0.9rem, 2.5vw, 1.25rem);
   font-weight: 700;
-  padding: 4px 8px;
+  padding: clamp(3px, 0.8vw, 6px) clamp(6px, 1.5vw, 12px);
   border-radius: 6px;
   pointer-events: none;
   z-index: 10;
@@ -465,13 +482,46 @@ body {
   flex-direction: column;
 }
 
-.tab-buttons {
+.panel-header {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 12px;
 }
+
+.tab-buttons {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.panel-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: var(--transition);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.panel-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.panel.collapsed .tab-content { display: none; }
+.panel.collapsed .panel-header {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+.panel.collapsed { flex: 0 0 auto; min-height: 0; }
 
 .tab-button {
   background: transparent;
@@ -872,9 +922,17 @@ body {
   }
 
   .left-panel {
-    justify-content: center;
     padding-right: 0;
     flex: 0 0 auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  .pad-area {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
   }
 
   .pad-grid {
@@ -882,7 +940,7 @@ body {
   }
 
   .grid-controls {
-    margin-top: 10px;
+    position: static;
   }
 
   .right-panel {
@@ -936,7 +994,7 @@ body {
     justify-content: center;
   }
 
-  .tab-buttons {
+  .panel-header {
     padding-bottom: 10px;
   }
 

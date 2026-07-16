@@ -130,6 +130,23 @@ function initTabs() {
   });
 }
 
+function initPanelToggle() {
+  const panel = document.querySelector('.panel.tabs');
+  const toggle = document.querySelector('.panel-toggle');
+  if (!panel || !toggle) return;
+
+  toggle.addEventListener('click', () => {
+    const collapsed = panel.classList.toggle('collapsed');
+    toggle.textContent = collapsed ? '▾' : '▴';
+    toggle.title = collapsed ? 'Expand panel' : 'Collapse panel';
+    toggle.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel');
+    if (!collapsed && editorWaveform) {
+      editorWaveform.resize();
+      editorWaveform.draw();
+    }
+  });
+}
+
 const MAX_PADS = 27;
 
 // Pads
@@ -162,7 +179,7 @@ if (gridSizeSelect) {
     const count = parseInt(gridSizeSelect.value, 10);
     if (count >= 1 && count <= MAX_PADS) {
       pads.resize(count);
-      showToast(`Grid resized to ${count} pads`, 'success');
+      showToast(`Pads resized to ${count}`, 'success');
     }
   });
 }
@@ -430,7 +447,6 @@ function initEditorListeners(position) {
   const startInput = document.getElementById('pad-start');
   const endInput = document.getElementById('pad-end');
   const volumeInput = document.getElementById('pad-volume');
-  const volumeValue = document.getElementById('pad-volume-value');
   const saveBtn = document.getElementById('pad-save');
   const playBtn = document.getElementById('btn-preview-play');
   const stopBtn = document.getElementById('btn-preview-stop');
@@ -488,7 +504,8 @@ function initEditorListeners(position) {
 
   volumeInput.addEventListener('input', () => {
     const pct = Math.round(volumeInput.value / 2 * 100);
-    volumeValue.textContent = `${pct}%`;
+    const volumeValue = document.getElementById('pad-volume-value');
+    if (volumeValue) volumeValue.textContent = `${pct}%`;
   });
 
   // Preview transport
@@ -690,6 +707,7 @@ const sessionManager = createSessionManager({
 
 // Initial load
 initTabs();
+initPanelToggle();
 refreshVideos();
 setInterval(refreshVideos, 2000);
 setInterval(() => sessionManager.refreshList(), 10000);
