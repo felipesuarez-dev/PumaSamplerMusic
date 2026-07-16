@@ -28,18 +28,53 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a 
 - **Full video download** — `yt-dlp` downloads the complete video; `ffmpeg` extracts the audio track.
 - **Up to 27 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
 - **Time-slice editor** — waveform display with drag handles, plus transport controls (play, mark in, mark out) to set the exact segment while the video is playing.
-- **Polyphonic playback** — Web Audio API plays audio buffers at low latency; multiple pads can overlap.
 - **Session persistence** — save/load your pad layout as a JSON file.
+- **Configurable pads** — 9 to 27 pads with per-pad color, volume, key, trigger mode, and loop.
 - **Runs in Docker** — single container, one port, no local Node.js or Python required.
 
 ## Quick Start
 
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
+- Or, for bare-metal development: Node.js 22+, Python 3, yt-dlp, ffmpeg
+
+### Option 1: manage.sh (recommended)
+
 ```bash
-cd /opt/pumasamplermusic
+git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
+cd PumaSamplerMusic
 ./manage.sh start
 ```
 
+### Option 2: Docker Compose
+
+```bash
+git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
+cd PumaSamplerMusic
+docker compose up -d --build
+```
+
 Open http://localhost:4070
+
+### Remote access (Tailscale)
+
+If the server is on your tailnet, open `http://<server-hostname>:4070` from any device. With MagicDNS disabled, use the server's Tailscale IP, for example:
+
+```
+http://100.105.21.49:4070
+```
+
+No port forwarding is needed — Tailscale handles the encrypted tunnel.
+
+### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `I` | Set **In** point at the current preview position |
+| `O` | Set **Out** point at the current preview position |
+| `Space` | Play/pause preview |
+| `Escape` (configurable) | Stop all pads and pause the video |
 
 ## How it works
 
@@ -66,9 +101,9 @@ Open http://localhost:4070
 
 ```mermaid
 flowchart TD
-    subgraph Browser["Browser · Vanilla JS ES modules"]
-        UI[UI Layer] --> Pads[pad grid (up to 27) + keyboard]
-        UI --> Editor[Pad editor + transport]
+    subgraph Browser["Browser - Vanilla JS ES modules"]
+        UI[UI Layer] --> Pads[Pad grid up to 27 keys]
+        UI --> Editor[Pad editor and transport]
         Pads --> AudioEngine[Web Audio Engine]
         Editor --> Waveform[Waveform canvas]
         Editor --> VideoPreview[Hidden preview video]
@@ -76,32 +111,36 @@ flowchart TD
         MainGain --> Speakers[Speakers]
     end
 
-    UI -->|HTTP + WebSocket| API
-    AudioEngine -->|fetch| Files
-    VideoPreview -->|src| Files
+    UI -->|HTTP WebSocket| API
+    AudioEngine -->|fetch| StaticFiles
+    VideoPreview -->|src| StaticFiles
 
-    subgraph Docker["Docker Container · Node.js 22"]
+    subgraph Docker["Docker Container NodeJS 22"]
         API[Express API]
         WS[WebSocket server]
-        Downloader[yt-dlp downloader]
+        Downloader[ytdlp downloader]
         Ffmpeg[ffmpeg audio extractor]
-        Store[Video store + session store]
+        Store[Video store and session store]
+        StaticFiles[Static files data]
         API --> Downloader
         API --> Store
+        API --> StaticFiles
         Downloader --> Ffmpeg
     end
 
     subgraph Data["Persistent Data"]
-        Videos["./data/videos — video + audio files"]
-        Sessions["./data/sessions — JSON sessions"]
+        Videos[Downloaded videos and audio]
+        Sessions[Saved sessions]
+        Metadata[Video metadata]
     end
 
-    Files --> Videos
+    StaticFiles --> Videos
     Store --> Videos
     Store --> Sessions
+    Videos --> Metadata
 
     API -.->|download progress| WS
-    WS -.->|video:ready| Browser
+    WS -.->|video ready| Browser
 ```
 
 Rule: the frontend only downloads audio buffers via HTTP; the backend handles all YouTube traffic, video download, and audio extraction. Sessions are plain JSON files.
@@ -150,6 +189,7 @@ Edit `docker-compose.yml`:
 
 ```
 ./data/videos/   — downloaded videos (.mp4) + extracted audio (.opus)
+./data/videos/   — video metadata JSON files
 ./data/sessions/ — saved session JSON files
 ```
 

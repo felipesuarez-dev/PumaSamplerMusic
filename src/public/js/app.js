@@ -117,6 +117,56 @@ window.addEventListener('keydown', (e) => {
   stopAll();
 }, true);
 
+// Waveform shortcuts (I/O for in/out, Space for preview when editor active)
+window.addEventListener('keydown', (e) => {
+  if (window.__pumaKeyCapturing) return;
+  const active = document.activeElement;
+  const isInput = active && (
+    active.tagName === 'INPUT' ||
+    active.tagName === 'TEXTAREA' ||
+    active.tagName === 'SELECT' ||
+    active.classList.contains('key-capture')
+  );
+  if (isInput) return;
+
+  const selectedPosition = store.get().selectedPosition;
+  if (!selectedPosition) return;
+
+  if (e.key === 'i' || e.key === 'I') {
+    e.preventDefault();
+    const startInput = document.getElementById('pad-start');
+    const endInput = document.getElementById('pad-end');
+    if (!editorPreviewVideo || !startInput || !endInput) return;
+    const time = editorPreviewVideo.currentTime;
+    const end = parseTime(endInput.value);
+    startInput.value = formatTime(time);
+    endInput.value = formatTime(Math.max(time + 0.1, end));
+    if (editorWaveform) editorWaveform.setSegment(parseTime(startInput.value), parseTime(endInput.value));
+    autoCommitPad(selectedPosition, { start: parseTime(startInput.value), end: parseTime(endInput.value) });
+  } else if (e.key === 'o' || e.key === 'O') {
+    e.preventDefault();
+    const startInput = document.getElementById('pad-start');
+    const endInput = document.getElementById('pad-end');
+    if (!editorPreviewVideo || !startInput || !endInput) return;
+    const time = editorPreviewVideo.currentTime;
+    const start = parseTime(startInput.value);
+    endInput.value = formatTime(Math.max(time, start + 0.1));
+    if (editorWaveform) editorWaveform.setSegment(parseTime(startInput.value), parseTime(endInput.value));
+    autoCommitPad(selectedPosition, { start: parseTime(startInput.value), end: parseTime(endInput.value) });
+  } else if (e.code === 'Space') {
+    e.preventDefault();
+    const playBtn = document.getElementById('btn-preview-play');
+    const pauseBtn = document.getElementById('btn-preview-pause');
+    if (playBtn && pauseBtn) {
+      if (pauseBtn.classList.contains('hidden')) {
+        playBtn.click();
+      } else {
+        pauseBtn.click();
+      }
+    }
+  }
+});
+
 // Tabs
 function initTabs() {
   const buttons = document.querySelectorAll('.tab-button');
@@ -170,7 +220,15 @@ const pads = createPads(document.getElementById('pad-grid'), {
     }
     ws.send('pad:release', { position, videoId: data?.videoId });
   },
-}, 9);
+  }, 9);
+
+function autoCommitPad(position, updates) {
+  const current = pads.getData(position) || store.get().currentPad;
+  if (!current) return;
+  const data = { ...current, ...updates };
+  pads.update(position, data);
+  store.set({ currentPad: data });
+}
 
 // Grid size selector
 const gridSizeSelect = document.getElementById('grid-size');
@@ -235,9 +293,11 @@ function renderPadEditor(position, data) {
   }
 
   const videos = store.get().videos;
-  const videoOptions = videos
-    .map((v) => `<option value="${v.videoId}" ${data?.videoId === v.videoId ? 'selected' : ''}>${escapeHtml(v.title || v.videoId)}</option>`)
-    .join('');
+  const videoOptions =
+    `<option value="" disabled ${!data?.videoId ? 'selected' : ''}>Select a video...</option>` +
+    videos
+      .map((v) => `<option value="${v.videoId}" ${data?.videoId === v.videoId ? 'selected' : ''}>${escapeHtml(v.title || v.videoId)}</option>`)
+      .join('');
 
   editorEl.innerHTML = `
     <h3>Pad ${position}</h3>
@@ -262,17 +322,22 @@ function renderPadEditor(position, data) {
     <div class="form-row">
       <label>Transport</label>
       <div class="transport-bar">
-        <button id="btn-preview-play" class="btn btn-transport" title="Play preview">▶</button>
-        <button id="btn-preview-stop" class="btn btn-transport" title="Stop preview">■</button>
+        <button id="btn-preview-play" class="btn btn-transport" title="Play preview (Space)"><span class="material-symbols-outlined">play_arrow</span></button>
+        <button id="btn-preview-pause" class="btn btn-transport hidden" title="Pause preview (Space)"><span class="material-symbols-outlined">pause</span></button>
+        <button id="btn-preview-stop" class="btn btn-transport btn-transport-stop" title="Stop preview"><span class="material-symbols-outlined">stop</span></button>
         <div class="transport-divider"></div>
-        <button id="btn-set-in" class="btn btn-mark">Set In</button>
-        <button id="btn-set-out" class="btn btn-mark">Set Out</button>
+        <button id="btn-set-in" class="btn btn-mark" title="Set In point at current position">Set In [I]</button>
+        <button id="btn-set-out" class="btn btn-mark" title="Set Out point at current position">Set Out [O]</button>
         <div class="transport-time" id="preview-time">00:00.000</div>
       </div>
     </div>
     <div class="form-row waveform-section">
-      <label>Waveform (drag handles, click to seek)</label>
+      <label class="waveform-label-row">
+        <span>Waveform</span>
+        <span class="help-icon" data-tooltip="I = Set In&#10;O = Set Out&#10;Space = Play / Pause&#10;Drag handles = adjust start / end&#10;Click waveform = seek">?</span>
+      </label>
       <div class="waveform-container">
+        <canvas id="waveform-ruler" class="waveform-ruler"></canvas>
         <canvas id="waveform-canvas"></canvas>
       </div>
       <div class="waveform-status" id="waveform-status">In: 00:00.000 | Out: 00:00.000 | Dur: 00:00.000</div>
@@ -311,13 +376,16 @@ function renderPadEditor(position, data) {
   `;
 
   const canvas = document.getElementById('waveform-canvas');
+  const rulerCanvas = document.getElementById('waveform-ruler');
   editorWaveform = createWaveform(canvas, {
+    rulerCanvas,
     onChange: (segment) => {
       const startInput = document.getElementById('pad-start');
       const endInput = document.getElementById('pad-end');
       if (startInput) startInput.value = formatTime(segment.start);
       if (endInput) endInput.value = formatTime(segment.end);
       updateWaveformStatus(segment.start, segment.end);
+      autoCommitPad(position, { start: segment.start, end: segment.end });
     },
     onSeek: (time) => {
       if (editorPreviewVideo) {
@@ -373,7 +441,12 @@ function setupPreviewVideo(videoId) {
   });
 
   editorPreviewVideo.addEventListener('timeupdate', () => {
-    if (editorPreviewVideo.paused && editorWaveform) {
+    const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
+    if (editorPreviewVideo.currentTime >= segment.end && !editorPreviewVideo.paused) {
+      editorPreviewVideo.pause();
+      editorPreviewVideo.currentTime = segment.start;
+    }
+    if (editorWaveform) {
       editorWaveform.setPlayhead(editorPreviewVideo.currentTime);
     }
     updatePreviewTime();
@@ -381,9 +454,10 @@ function setupPreviewVideo(videoId) {
 
   editorPreviewVideo.addEventListener('pause', () => {
     const playBtn = document.getElementById('btn-preview-play');
-    if (playBtn) {
-      playBtn.classList.remove('active');
-      playBtn.textContent = '▶';
+    const pauseBtn = document.getElementById('btn-preview-pause');
+    if (playBtn && pauseBtn) {
+      playBtn.classList.remove('hidden');
+      pauseBtn.classList.add('hidden');
     }
   });
 
@@ -400,6 +474,7 @@ function cleanupPreviewVideo() {
 }
 
 async function loadEditorWaveform(videoId, start, end) {
+  if (editorWaveform) editorWaveform.setLoading('Loading waveform...');
   const audioUrl = api.getAudioUrl(videoId);
   try {
     const buffer = await audio.loadAudio(videoId, audioUrl);
@@ -407,6 +482,7 @@ async function loadEditorWaveform(videoId, start, end) {
     editorWaveform.setSegment(start, end);
   } catch (err) {
     console.error('Failed to load waveform:', err);
+    if (editorWaveform) editorWaveform.setEmpty('No audio track');
   }
 }
 
@@ -447,8 +523,12 @@ function initEditorListeners(position) {
   const startInput = document.getElementById('pad-start');
   const endInput = document.getElementById('pad-end');
   const volumeInput = document.getElementById('pad-volume');
+  const labelInput = document.getElementById('pad-label');
+  const triggerModeInput = document.getElementById('pad-trigger-mode');
+  const loopInput = document.getElementById('pad-loop');
   const saveBtn = document.getElementById('pad-save');
   const playBtn = document.getElementById('btn-preview-play');
+  const pauseBtn = document.getElementById('btn-preview-pause');
   const stopBtn = document.getElementById('btn-preview-stop');
   const setInBtn = document.getElementById('btn-set-in');
   const setOutBtn = document.getElementById('btn-set-out');
@@ -475,6 +555,7 @@ function initEditorListeners(position) {
       keyCapture.classList.remove('listening');
       window.__pumaKeyCapturing = false;
       window.removeEventListener('keydown', handler);
+      autoCommitPad(position, { key: combo });
     };
 
     window.addEventListener('keydown', handler, { once: true });
@@ -489,6 +570,7 @@ function initEditorListeners(position) {
         const segment = editorWaveform.getSegment();
         startInput.value = formatTime(0);
         endInput.value = formatTime(segment.end);
+        autoCommitPad(position, { videoId, start: 0, end: segment.end });
       }
     }
   });
@@ -497,6 +579,7 @@ function initEditorListeners(position) {
     const start = parseTime(startInput.value);
     const end = parseTime(endInput.value);
     if (editorWaveform) editorWaveform.setSegment(start, end);
+    autoCommitPad(position, { start, end });
   }
 
   startInput.addEventListener('change', updateSegmentFromInputs);
@@ -506,46 +589,88 @@ function initEditorListeners(position) {
     const pct = Math.round(volumeInput.value / 2 * 100);
     const volumeValue = document.getElementById('pad-volume-value');
     if (volumeValue) volumeValue.textContent = `${pct}%`;
+    autoCommitPad(position, { volume: parseFloat(volumeInput.value) });
   });
+
+  const colorInput = document.getElementById('pad-color');
+  if (colorInput) {
+    colorInput.addEventListener('input', () => {
+      autoCommitPad(position, { color: colorInput.value });
+    });
+  }
+
+  if (labelInput) {
+    labelInput.addEventListener('change', () => {
+      autoCommitPad(position, { label: labelInput.value || `Pad ${position}` });
+    });
+  }
+
+  if (triggerModeInput) {
+    triggerModeInput.addEventListener('change', () => {
+      autoCommitPad(position, { triggerMode: triggerModeInput.value });
+    });
+  }
+
+  if (loopInput) {
+    loopInput.addEventListener('change', () => {
+      autoCommitPad(position, { loop: loopInput.checked });
+    });
+  }
+
+  function setTransportState(isPlaying) {
+    if (isPlaying) {
+      playBtn.classList.add('hidden');
+      pauseBtn.classList.remove('hidden');
+    } else {
+      playBtn.classList.remove('hidden');
+      pauseBtn.classList.add('hidden');
+    }
+  }
 
   // Preview transport
-  playBtn.addEventListener('click', async () => {
+  async function playPreview() {
     if (!editorPreviewVideo) return;
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
+    if (!editorPreviewVideo.paused) return;
 
-    if (editorPreviewVideo.paused) {
-      try {
-        if (editorPreviewVideo.__readyPromise) {
-          await editorPreviewVideo.__readyPromise;
-        }
-        editorPreviewVideo.currentTime = segment.start;
-        await editorPreviewVideo.play();
-        playBtn.classList.add('active');
-        playBtn.textContent = '⏸';
-        syncPlayhead();
-      } catch (err) {
-        console.warn('Preview play failed:', err);
-        showToast('Preview play failed', 'error');
+    playBtn.disabled = true;
+    pauseBtn.disabled = true;
+    try {
+      if (editorPreviewVideo.__readyPromise) {
+        await editorPreviewVideo.__readyPromise;
       }
-    } else {
-      editorPreviewVideo.pause();
-      playBtn.classList.remove('active');
-      playBtn.textContent = '▶';
+      editorPreviewVideo.currentTime = segment.start;
+      await editorPreviewVideo.play();
+      setTransportState(true);
+      syncPlayhead();
+    } catch (err) {
+      console.warn('Preview play failed:', err);
+      showToast('Preview play failed', 'error');
+    } finally {
+      playBtn.disabled = false;
+      pauseBtn.disabled = false;
     }
-  });
+  }
 
-  stopBtn.addEventListener('click', () => {
-    if (editorPreviewVideo) {
-      editorPreviewVideo.pause();
-      editorPreviewVideo.currentTime = 0;
-    }
-    if (playBtn) {
-      playBtn.classList.remove('active');
-      playBtn.textContent = '▶';
-    }
-    if (editorWaveform) editorWaveform.setPlayhead(0);
+  function pausePreview() {
+    if (!editorPreviewVideo) return;
+    editorPreviewVideo.pause();
+    setTransportState(false);
+  }
+
+  function stopPreview() {
+    if (!editorPreviewVideo) return;
+    const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
+    editorPreviewVideo.pause();
+    editorPreviewVideo.currentTime = segment.start;
+    setTransportState(false);
+    if (editorWaveform) editorWaveform.setPlayhead(segment.start);
     updatePreviewTime();
-  });
+  }
+
+  playBtn.addEventListener('click', playPreview);
+  pauseBtn.addEventListener('click', pausePreview);
+  stopBtn.addEventListener('click', stopPreview);
 
   // Mark in/out
   setInBtn.addEventListener('click', () => {
@@ -682,6 +807,7 @@ ws.on('video:removed', refreshVideos);
 // Session Manager
 const sessionManager = createSessionManager({
   showToast,
+  hasConfiguredPads: () => pads.getAll().length > 0,
   onSaveRequest() {
     const sessionData = {
       name: document.getElementById('session-name').value.trim(),
