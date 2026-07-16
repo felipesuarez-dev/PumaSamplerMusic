@@ -4,42 +4,45 @@
 
 # PumaSamplerMusic
 
-**Turn YouTube videos into a keyboard sampler.** Download a video, pick any slice of time, and assign it to a key. Press the key — hear the audio and see the video play.
+**Convierte videos de YouTube en un sampler de teclado.** Descarga un video, elige cualquier fragmento de tiempo y asígnalo a una tecla. Presiona la tecla — escucha el audio y mira el video reproducirse.
+
+📖 [Read in English](README_EN.md)
 
 [![Docker][docker-badge]][docker-link]
 [![Node.js][node-badge]][node-link]
 [![License][license-badge]](LICENSE)
 [![PumaSoft][pumasoft-badge]][pumasoft-link]
 
-[Download / Run](#quick-start) · [How it works](#how-it-works) · [Features](#features) · [Architecture](#architecture) · [Development](#development)
+[Descargar / Ejecutar](#inicio-rápido) · [Cómo funciona](#cómo-funciona) · [Características](#características) · [Arquitectura](#arquitectura) · [Desarrollo](#desarrollo)
 
 </div>
 
 ---
 
-## Problem
+## Problema
 
-Creating samplers from online videos is usually a multi-tool workflow: download with one app, cut with another, load into a DAW, map to MIDI. You just want a quick way to grab a kick from a drum video, a vocal stab from a live set, or a bass hit from a tutorial and play it from your keyboard.
+Crear samplers a partir de videos en línea suele ser un flujo de trabajo con varias herramientas: descargar con una aplicación, cortar con otra, cargarlo en un DAW, mapearlo a MIDI. La necesidad es simple: tomar rápidamente el bombo de un video de batería, un fragmento vocal de un show en vivo, o un golpe de bajo de un tutorial, y reproducirlo desde el teclado.
 
-PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a slice, assign a key, play.
+PumaSamplerMusic resuelve esto en una sola ventana del navegador: pega una URL de YouTube, marca un fragmento, asigna una tecla, reproduce.
 
-## Solution
+## Solución
 
-- **Full video download** — `yt-dlp` downloads the complete video; `ffmpeg` extracts the audio track.
-- **Up to 27 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
-- **Time-slice editor** — waveform display with drag handles, plus transport controls (play, mark in, mark out) to set the exact segment while the video is playing.
-- **Session persistence** — save/load your pad layout as a JSON file.
-- **Configurable pads** — 9 to 27 pads with per-pad color, volume, key, trigger mode, and loop.
-- **Runs in Docker** — single container, one port, no local Node.js or Python required.
+- **Descarga completa de video** — `yt-dlp` descarga el video completo; `ffmpeg` extrae la pista de audio.
+- **Hasta 27 PADs asignables** — cada PAD puede vincularse a cualquier tecla del teclado (o combinación como `shift+a`).
+- **Editor de fragmentos de tiempo** — visualización de forma de onda con controladores de arrastre, más controles de transporte (reproducir, marcar entrada, marcar salida) para fijar el segmento exacto mientras el video se reproduce.
+- **Persistencia de sesiones** — guarda/carga la disposición de PADs como un archivo JSON, o inicia una sesión nueva a partir de una plantilla copiada de una sesión existente.
+- **PADs configurables** — de 9 a 27 PADs con color, volumen, tecla, modo de disparo y loop por PAD.
+- **Cadena de FX maestra** — volumen maestro, filtro pasabajos (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena.
+- **Corre en Docker** — un solo contenedor, un puerto, sin necesidad de Node.js o Python local.
 
-## Quick Start
+## Inicio rápido
 
-### Prerequisites
+### Requisitos previos
 
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
-- Or, for bare-metal development: Node.js 22+, Python 3, yt-dlp, ffmpeg
+- [Docker](https://docs.docker.com/get-docker/) y Docker Compose v2
+- O, para desarrollo sin contenedores: Node.js 22+, Python 3, yt-dlp, ffmpeg
 
-### Option 1: manage.sh (recommended)
+### Opción 1: manage.sh (recomendado)
 
 ```bash
 git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
@@ -47,7 +50,7 @@ cd PumaSamplerMusic
 ./manage.sh start
 ```
 
-### Option 2: Docker Compose
+### Opción 2: Docker Compose
 
 ```bash
 git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
@@ -55,83 +58,87 @@ cd PumaSamplerMusic
 docker compose up -d --build
 ```
 
-Open http://localhost:4070
+Abre http://localhost:4070
 
-### Remote access (Tailscale)
+### Acceso remoto (Tailscale)
 
-If the server is on your tailnet, open `http://<server-hostname>:4070` from any device. With MagicDNS disabled, use the server's Tailscale IP, for example:
+Si el servidor está en tu tailnet, abre `http://<nombre-del-servidor>:4070` desde cualquier dispositivo. Con MagicDNS deshabilitado, usa la IP de Tailscale del servidor, por ejemplo:
 
 ```
 http://100.105.21.49:4070
 ```
 
-No port forwarding is needed — Tailscale handles the encrypted tunnel.
+No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 
-### Keyboard shortcuts
+### Atajos de teclado
 
-| Key | Action |
+| Tecla | Acción |
 |---|---|
-| `I` | Set **In** point at the current preview position |
-| `O` | Set **Out** point at the current preview position |
-| `Space` | Play/pause preview |
-| `Escape` (configurable) | Stop all pads and pause the video |
+| `I` | Fija el punto de **entrada** en la posición actual de la previsualización |
+| `O` | Fija el punto de **salida** en la posición actual de la previsualización |
+| `Espacio` | Reproducir/pausar previsualización |
+| `Ctrl` + rueda del mouse | Hace zoom in/out en la forma de onda en la posición del cursor |
+| `Escape` (configurable) | Detiene todos los PADs y pausa el video |
 
-## How it works
+## Cómo funciona
 
-1. **Add a video** — paste a YouTube URL in the **Video Library** tab and click **Add Video**.
-2. **Wait for the download** — the backend downloads the full video and extracts the audio.
-3. **Edit a pad** — click one of the pads. Pick the video, assign a key, and set the time segment.
-4. **Use the transport** — click **Play Preview** to watch the video, then **Set In** and **Set Out** to mark the slice. Or drag the waveform handles directly.
-5. **Play** — press the assigned key. The audio plays through Web Audio API and the video appears in the visualizer.
-6. **Save your session** — give it a name and load it later.
+1. **Agregar un video** — pega una URL de YouTube en la pestaña **Video Library** y haz clic en **Add Video**.
+2. **Esperar la descarga** — el backend descarga el video completo y extrae el audio.
+3. **Editar un PAD** — haz clic en uno de los PADs. Elige el video, asigna una tecla y fija el segmento de tiempo. Cada cambio (inicio/fin, color, volumen, tecla, video, modo de disparo, loop) se guarda automáticamente en el PAD a medida que se hace — no hay un botón de guardado por PAD.
+4. **Usar el transporte** — haz clic en **Play Preview** para ver el video, luego en **Set In** y **Set Out** para marcar el fragmento. O arrastra los controladores de la forma de onda directamente. Usa `Ctrl` + rueda del mouse para hacer zoom en la forma de onda y arrastra para desplazarte (pan), útil para hacer cortes precisos en muestras largas.
+5. **Reproducir** — presiona la tecla asignada. El audio se reproduce a través del motor Web Audio (pasando por la cadena de FX maestra — filtro, reverb, delay) y el video aparece en el visualizador.
+6. **Guardar la sesión** — asígnale un nombre y cárgala después. Al iniciar una sesión nueva se abre un modal de plantilla: empezar desde una disposición en blanco, o copiar los PADs de una sesión existente como punto de partida.
 
-## Features
+## Características
 
-| Area | What it does |
+| Área | Qué hace |
 |---|---|
-| **Video Library** | Add YouTube URLs, see download progress, remove cached videos, view title + duration |
-| **Pad Grid** | Click to edit, press assigned key to trigger, activity LED when a pad is playing |
-| **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor |
-| **Transport** | Play preview, mark in, mark out, stop; playhead synced to the video position |
-| **Session Manager** | Save/load/delete session JSON files |
-| **Global Stop** | STOP button or **Escape** key silences all pads and pauses the video |
-| **Docker** | One command to build, run, backup, and update |
+| **Video Library** | Agregar URLs de YouTube, ver progreso de descarga, eliminar videos en caché, ver título + duración |
+| **Grilla de PADs** | Clic para editar, presionar la tecla asignada para disparar, LED de actividad cuando un PAD está sonando |
+| **Editor de PAD** | Etiqueta, tecla, volumen, color, modo de disparo (one-shot / gate), loop, editor de segmento de forma de onda; cada edición se guarda automáticamente, sin botón de guardado por PAD |
+| **Zoom/Pan de forma de onda** | `Ctrl` + rueda del mouse para zoom, arrastrar para pan, más botones de zoom in/out/reset para cortes precisos en muestras largas |
+| **Transporte** | Reproducir previsualización, marcar entrada, marcar salida, detener; playhead sincronizado con la posición del video; íconos Material Symbols en vez de glifos Unicode planos |
+| **Gestor de sesiones** | Guardar/cargar/eliminar archivos JSON de sesión; modal de sesión nueva para empezar de cero o copiar PADs de una sesión existente como plantilla |
+| **FX maestros** | Volumen maestro, filtro (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena |
+| **Detención global** | El botón STOP o la tecla **Escape** silencia todos los PADs y pausa el video |
+| **Docker** | Un solo comando para compilar, ejecutar, respaldar y actualizar |
 
-## Architecture
+## Arquitectura
 
 ```mermaid
 flowchart TD
-    subgraph Browser["Browser - Vanilla JS ES modules"]
-        UI[UI Layer] --> Pads[Pad grid up to 27 keys]
-        UI --> Editor[Pad editor and transport]
-        Pads --> AudioEngine[Web Audio Engine]
-        Editor --> Waveform[Waveform canvas]
-        Editor --> VideoPreview[Hidden preview video]
-        AudioEngine --> MainGain[Master gain]
-        MainGain --> Speakers[Speakers]
+    subgraph Browser["Navegador - Modulos ES de JS vanilla"]
+        UI[Capa de UI] --> Pads[Grilla de PADs hasta 27 teclas]
+        UI --> Editor[Editor de PAD y transporte]
+        Pads --> AudioEngine[Motor Web Audio]
+        Editor --> Waveform[Canvas de forma de onda con zoom y pan]
+        Editor --> VideoPreview[Video de previsualizacion oculto]
+        AudioEngine --> MasterFX[Cadena de FX maestra filtro reverb delay]
+        MasterFX --> MainGain[Ganancia maestra]
+        MainGain --> Speakers[Parlantes]
     end
 
     UI -->|HTTP WebSocket| API
     AudioEngine -->|fetch| StaticFiles
     VideoPreview -->|src| StaticFiles
 
-    subgraph Docker["Docker Container NodeJS 22"]
-        API[Express API]
-        WS[WebSocket server]
-        Downloader[ytdlp downloader]
-        Ffmpeg[ffmpeg audio extractor]
-        Store[Video store and session store]
-        StaticFiles[Static files data]
+    subgraph Docker["Contenedor Docker NodeJS 22"]
+        API[API Express]
+        WS[Servidor WebSocket]
+        Downloader[Descargador ytdlp]
+        Ffmpeg[Extractor de audio ffmpeg]
+        Store[Almacen de videos y sesiones]
+        StaticFiles[Archivos estaticos data]
         API --> Downloader
         API --> Store
         API --> StaticFiles
         Downloader --> Ffmpeg
     end
 
-    subgraph Data["Persistent Data"]
-        Videos[Downloaded videos and audio]
-        Sessions[Saved sessions]
-        Metadata[Video metadata]
+    subgraph Data["Datos Persistentes"]
+        Videos[Videos y audio descargados]
+        Sessions[Sesiones guardadas]
+        Metadata[Metadatos de video]
     end
 
     StaticFiles --> Videos
@@ -139,68 +146,68 @@ flowchart TD
     Store --> Sessions
     Videos --> Metadata
 
-    API -.->|download progress| WS
-    WS -.->|video ready| Browser
+    API -.->|progreso de descarga| WS
+    WS -.->|video listo| Browser
 ```
 
-Rule: the frontend only downloads audio buffers via HTTP; the backend handles all YouTube traffic, video download, and audio extraction. Sessions are plain JSON files.
+Regla: el frontend solo descarga buffers de audio por HTTP; el backend maneja todo el tráfico de YouTube, la descarga de video y la extracción de audio. Las sesiones son archivos JSON simples.
 
-## Tech Stack
+## Stack tecnológico
 
 | Frontend | Backend | DevOps |
 |---|---|---|
-| Vanilla JS ES modules | Node.js 22 | Docker + docker-compose |
-| Web Audio API | Express | `manage.sh` wrapper |
-| HTML5 `<video>` | `ws` library | HEALTHCHECK |
-| Canvas waveform | yt-dlp | bind-mount `./data` |
-| CSS Grid + custom properties | ffmpeg | node user (uid 1000) |
+| Módulos ES de JS vanilla | Node.js 22 | Docker + docker-compose |
+| Web Audio API (cadena de filtro, reverb, delay) | Express | Wrapper `manage.sh` |
+| `<video>` de HTML5 | Librería `ws` | HEALTHCHECK |
+| Forma de onda en canvas con zoom/pan | yt-dlp | bind-mount de `./data` |
+| CSS Grid + propiedades personalizadas | ffmpeg | usuario node (uid 1000) |
+| Material Symbols (Google Fonts) | | |
 
-## Development
+## Desarrollo
 
 ```bash
-# Start container in background
+# Iniciar el contenedor en segundo plano
 ./manage.sh start
 
-# View logs
+# Ver logs
 ./manage.sh logs
 
-# Stop
+# Detener
 ./manage.sh stop
 
-# Rebuild image
+# Reconstruir la imagen
 ./manage.sh update
 
-# Backup data + config
+# Respaldar datos + configuración
 ./manage.sh backup
 ```
 
-## Configuration
+## Configuración
 
-Edit `docker-compose.yml`:
+Edita `docker-compose.yml`:
 
-| Variable | Default | Meaning |
+| Variable | Por defecto | Significado |
 |---|---|---|
-| `MAX_CACHE_GB` | 10 | Max disk space for cached videos |
-| `MAX_CONCURRENT_DOWNLOADS` | 2 | Parallel downloads |
-| `TZ` | America/Santiago | Timezone |
-| `PORT` | 4070 | Internal + external port |
+| `MAX_CACHE_GB` | 10 | Espacio máximo en disco para videos en caché |
+| `MAX_CONCURRENT_DOWNLOADS` | 2 | Descargas en paralelo |
+| `TZ` | America/Santiago | Zona horaria |
+| `PORT` | 4070 | Puerto interno + externo |
 
-## Data Layout
+## Estructura de datos
 
 ```
-./data/videos/   — downloaded videos (.mp4) + extracted audio (.opus)
-./data/videos/   — video metadata JSON files
-./data/sessions/ — saved session JSON files
+./data/videos/   — videos descargados (.mp4), audio extraído (.opus) y archivos JSON de metadatos de video
+./data/sessions/ — archivos JSON de sesiones guardadas
 ```
 
-## Notes
+## Notas
 
-- Only YouTube URLs are accepted (`youtube.com/watch?v=...` and `youtu.be/...`).
-- First playback of a video may have a short load time while the browser decodes the audio buffer.
-- One-shot mode plays the full segment on key press; gate mode plays while the key is held.
-- The video cache uses disk, not RAM, because full 1080p videos exceed practical tmpfs limits.
+- Solo se aceptan URLs de YouTube (`youtube.com/watch?v=...` y `youtu.be/...`).
+- La primera reproducción de un video puede tener una breve carga mientras el navegador decodifica el buffer de audio.
+- El modo one-shot reproduce el segmento completo al presionar la tecla; el modo gate reproduce mientras la tecla se mantiene presionada.
+- El caché de video usa disco, no RAM, porque los videos 1080p completos exceden los límites prácticos de tmpfs.
 
-## Author
+## Autor
 
 <div align="center">
 
@@ -210,9 +217,9 @@ Edit `docker-compose.yml`:
 
 </div>
 
-## License
+## Licencia
 
-MIT © 2026 PumaSoft — see [LICENSE](LICENSE).
+MIT © 2026 PumaSoft — ver [LICENSE](LICENSE).
 
 [docker-badge]: https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white
 [docker-link]: https://www.docker.com
