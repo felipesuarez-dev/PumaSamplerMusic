@@ -137,7 +137,7 @@ function initPanelToggle() {
 
   toggle.addEventListener('click', () => {
     const collapsed = panel.classList.toggle('collapsed');
-    toggle.textContent = collapsed ? '▾' : '▴';
+    toggle.textContent = collapsed ? '▴' : '▾';
     toggle.title = collapsed ? 'Expand panel' : 'Collapse panel';
     toggle.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Collapse panel');
     if (!collapsed && editorWaveform) {

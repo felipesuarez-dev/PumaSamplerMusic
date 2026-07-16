@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="/logo.png" alt="PumaSamplerMusic" width="180" />
+<img src="src/public/logo.png" alt="PumaSamplerMusic" width="180" />
 
 # PumaSamplerMusic
 
-**Turn YouTube videos into a 9-pad keyboard sampler.** Download a video, pick any slice of time, and assign it to a key. Press the key — hear the audio and see the video play.
+**Turn YouTube videos into a keyboard sampler.** Download a video, pick any slice of time, and assign it to a key. Press the key — hear the audio and see the video play.
 
 [![Docker][docker-badge]][docker-link]
 [![Node.js][node-badge]][node-link]
@@ -26,10 +26,10 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a 
 ## Solution
 
 - **Full video download** — `yt-dlp` downloads the complete video; `ffmpeg` extracts the audio track.
-- **9 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
+- **Up to 27 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
 - **Time-slice editor** — waveform display with drag handles, plus transport controls (play, mark in, mark out) to set the exact segment while the video is playing.
 - **Polyphonic playback** — Web Audio API plays audio buffers at low latency; multiple pads can overlap.
-- **Session persistence** — save/load your 9-pad layout as a JSON file.
+- **Session persistence** — save/load your pad layout as a JSON file.
 - **Runs in Docker** — single container, one port, no local Node.js or Python required.
 
 ## Quick Start
@@ -45,7 +45,7 @@ Open http://localhost:4070
 
 1. **Add a video** — paste a YouTube URL in the **Video Library** tab and click **Add Video**.
 2. **Wait for the download** — the backend downloads the full video and extracts the audio.
-3. **Edit a pad** — click one of the 9 pads. Pick the video, assign a key, and set the time segment.
+3. **Edit a pad** — click one of the pads. Pick the video, assign a key, and set the time segment.
 4. **Use the transport** — click **Play Preview** to watch the video, then **Set In** and **Set Out** to mark the slice. Or drag the waveform handles directly.
 5. **Play** — press the assigned key. The audio plays through Web Audio API and the video appears in the visualizer.
 6. **Save your session** — give it a name and load it later.
@@ -55,7 +55,7 @@ Open http://localhost:4070
 | Area | What it does |
 |---|---|
 | **Video Library** | Add YouTube URLs, see download progress, remove cached videos, view title + duration |
-| **9-Pad Grid** | Click to edit, press assigned key to trigger, activity LED when a pad is playing |
+| **Pad Grid** | Click to edit, press assigned key to trigger, activity LED when a pad is playing |
 | **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor |
 | **Transport** | Play preview, mark in, mark out, stop; playhead synced to the video position |
 | **Session Manager** | Save/load/delete session JSON files |
@@ -67,7 +67,7 @@ Open http://localhost:4070
 ```mermaid
 flowchart TD
     subgraph Browser["Browser · Vanilla JS ES modules"]
-        UI[UI Layer] --> Pads[9-pad grid + keyboard]
+        UI[UI Layer] --> Pads[pad grid (up to 27) + keyboard]
         UI --> Editor[Pad editor + transport]
         Pads --> AudioEngine[Web Audio Engine]
         Editor --> Waveform[Waveform canvas]
@@ -164,7 +164,7 @@ Edit `docker-compose.yml`:
 
 <div align="center">
 
-<img src="/logo.png" alt="PumaSoft" width="80" />
+<img src="src/public/logo.png" alt="PumaSoft" width="80" />
 
 **[PumaSoft][pumasoft-link]**
 

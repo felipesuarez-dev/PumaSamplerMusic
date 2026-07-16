@@ -234,6 +234,18 @@ body {
   height: 100%;
   overflow-y: auto;
   padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.left-panel::-webkit-scrollbar { width: 6px; }
+.left-panel::-webkit-scrollbar-track { background: transparent; }
+.left-panel::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.left-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .right-panel {
@@ -248,10 +260,9 @@ body {
 /* Pad grid */
 .pad-area {
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 16px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   margin: auto 0;
 }
 
@@ -265,9 +276,6 @@ body {
 
 .grid-controls {
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  z-index: 5;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -548,6 +556,15 @@ body {
   display: none;
   flex: 1;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.tab-content::-webkit-scrollbar { width: 6px; }
+.tab-content::-webkit-scrollbar-track { background: transparent; }
+.tab-content::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
 }
 
 .tab-content.active {
