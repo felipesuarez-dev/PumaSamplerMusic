@@ -1,0 +1,8 @@
+node_modules/
+.engram/
+data/
+backups/
+*.log
+.env
+.env.local
+config/sessions/

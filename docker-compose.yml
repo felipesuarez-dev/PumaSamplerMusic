@@ -1,0 +1,33 @@
+services:
+  pumasamplermusic:
+    container_name: pumasamplermusic
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pumasamplermusic:latest
+    restart: unless-stopped
+    ports:
+      - "4070:4070"
+    environment:
+      - TZ=America/Santiago
+      - NODE_ENV=production
+      - PORT=4070
+      - DATA_DIR=/data
+      - MAX_CACHE_GB=10
+      - MAX_CONCURRENT_DOWNLOADS=2
+    volumes:
+      - ./data:/data
+      - ./src:/app/src
+    networks:
+      - pumasamplermusic-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4070/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  pumasamplermusic-network:
+    name: pumasamplermusic-network
+    driver: bridge
