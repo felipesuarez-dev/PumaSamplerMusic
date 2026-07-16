@@ -332,6 +332,129 @@ body {
   border-color: var(--accent);
 }
 
+.pad-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Master controls strip */
+.master-strip {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.master-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 64px;
+}
+
+.master-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.1;
+}
+
+.master-knob-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+
+.master-knob input[type='range'] {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 24px;
+  height: 110px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  margin: 0;
+}
+
+.master-knob input[type='range']::-webkit-slider-runnable-track {
+  width: 6px;
+  height: 100%;
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.master-knob input[type='range']::-moz-range-track {
+  width: 6px;
+  height: 100%;
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.master-knob input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  margin-left: -6px;
+  transition: var(--transition);
+}
+
+.master-knob input[type='range']::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition: var(--transition);
+}
+
+.master-knob input[type='range']:focus-visible {
+  outline: none;
+}
+
+.master-knob input[type='range']:focus-visible::-webkit-slider-thumb,
+.master-knob input[type='range']:active::-webkit-slider-thumb {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.master-knob input[type='range']:focus-visible::-moz-range-thumb,
+.master-knob input[type='range']:active::-moz-range-thumb {
+  background: var(--accent-hover);
+  transform: scale(1.1);
+}
+
+.master-value {
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text);
+  text-align: center;
+  min-height: 1.2em;
+}
+
 .pad {
   position: relative;
   background: var(--surface);
@@ -694,7 +817,57 @@ body {
 .waveform-label-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  width: 100%;
+}
+
+.waveform-label-row > span:first-child {
+  flex-shrink: 0;
+}
+
+.waveform-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-zoom {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.btn-zoom:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-zoom:active {
+  transform: translateY(1px);
+}
+
+.zoom-level {
+  font-size: 0.75rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--text-muted);
+  min-width: 32px;
+  text-align: center;
+  user-select: none;
 }
 
 .help-icon {
@@ -1033,7 +1206,7 @@ body {
     padding-right: 0;
     flex: 0 0 auto;
     height: auto;
-    overflow: visible;
+    overflow-y: auto;
   }
 
   .pad-area {
@@ -1049,6 +1222,24 @@ body {
 
   .grid-controls {
     position: static;
+  }
+
+  .master-strip {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .master-knob {
+    width: 60px;
+  }
+
+  .master-knob input[type='range'] {
+    height: 90px;
+  }
+
+  .master-label,
+  .master-value {
+    font-size: 0.65rem;
   }
 
   .right-panel {
@@ -1132,6 +1323,30 @@ body {
   .btn {
     padding: 6px 12px;
     font-size: 0.85rem;
+  }
+
+  .master-strip {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .master-knob {
+    width: 52px;
+    gap: 4px;
+  }
+
+  .master-knob input[type='range'] {
+    height: 70px;
+    width: 20px;
+  }
+
+  .master-knob-control {
+    padding: 4px 6px;
+  }
+
+  .master-label,
+  .master-value {
+    font-size: 0.6rem;
   }
 }
 

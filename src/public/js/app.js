@@ -22,7 +22,10 @@ let editorWaveform = null;
 let editorPreviewVideo = null;
 
 const STOP_KEY_STORAGE = 'puma-stop-key';
+const PREVIEW_VOLUME_STORAGE = 'puma-preview-volume';
 let stopKey = localStorage.getItem(STOP_KEY_STORAGE) || 'escape';
+const savedPreviewVolume = parseFloat(localStorage.getItem(PREVIEW_VOLUME_STORAGE));
+let previewVolume = Number.isNaN(savedPreviewVolume) ? 0.30 : savedPreviewVolume;
 
 function formatKeyLabel(key) {
   if (!key) return '?';
@@ -242,6 +245,126 @@ if (gridSizeSelect) {
   });
 }
 
+// Master controls
+const MASTER_FX_STORAGE = 'puma-master-fx';
+
+function percentToFreq(percent) {
+  const min = Math.log10(20);
+  const max = Math.log10(20000);
+  const log = min + (percent / 100) * (max - min);
+  return Math.pow(10, log);
+}
+
+function freqToPercent(freq) {
+  const min = Math.log10(20);
+  const max = Math.log10(20000);
+  return ((Math.log10(freq) - min) / (max - min)) * 100;
+}
+
+function formatHz(freq) {
+  if (freq >= 1000) return `${(freq / 1000).toFixed(1)}kHz`;
+  return `${Math.round(freq)}Hz`;
+}
+
+function loadMasterFxDefaults() {
+  try {
+    const saved = localStorage.getItem(MASTER_FX_STORAGE);
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // ignore
+  }
+  return {
+    volume: 1,
+    cutoff: 100,
+    resonance: 0.1,
+    reverb: 0,
+    delayTime: 250,
+    delayFeedback: 0,
+  };
+}
+
+function saveMasterFx(state) {
+  try {
+    localStorage.setItem(MASTER_FX_STORAGE, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+function initMasterControls() {
+  const state = loadMasterFxDefaults();
+
+  const controls = [
+    {
+      id: 'master-volume',
+      displayId: 'master-volume-value',
+      toValue: (v) => parseFloat(v),
+      toDisplay: (v) => `${Math.round(v * 100)}%`,
+      apply: (v) => audio.setMasterVolume(v),
+      key: 'volume',
+    },
+    {
+      id: 'master-cutoff',
+      displayId: 'master-cutoff-value',
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => formatHz(percentToFreq(v)),
+      apply: (v) => audio.setMasterFilter({ cutoff: percentToFreq(v) }),
+      key: 'cutoff',
+    },
+    {
+      id: 'master-resonance',
+      displayId: 'master-resonance-value',
+      toValue: (v) => parseFloat(v),
+      toDisplay: (v) => v.toFixed(1),
+      apply: (v) => audio.setMasterFilter({ resonance: v }),
+      key: 'resonance',
+    },
+    {
+      id: 'master-reverb',
+      displayId: 'master-reverb-value',
+      toValue: (v) => parseFloat(v),
+      toDisplay: (v) => `${Math.round(v * 100)}%`,
+      apply: (v) => audio.setMasterReverb(v),
+      key: 'reverb',
+    },
+    {
+      id: 'master-delay-time',
+      displayId: 'master-delay-time-value',
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => `${v}ms`,
+      apply: (v) => audio.setMasterDelay({ time: v / 1000 }),
+      key: 'delayTime',
+    },
+    {
+      id: 'master-delay-feedback',
+      displayId: 'master-delay-feedback-value',
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => `${v}%`,
+      apply: (v) => audio.setMasterDelay({ feedback: v / 100 }),
+      key: 'delayFeedback',
+    },
+  ];
+
+  for (const ctrl of controls) {
+    const input = document.getElementById(ctrl.id);
+    const display = document.getElementById(ctrl.displayId);
+    if (!input) continue;
+
+    input.value = state[ctrl.key] ?? input.value;
+    const value = ctrl.toValue(input.value);
+    if (display) display.textContent = ctrl.toDisplay(value);
+    ctrl.apply(value);
+
+    input.addEventListener('input', () => {
+      const v = ctrl.toValue(input.value);
+      if (display) display.textContent = ctrl.toDisplay(v);
+      ctrl.apply(v);
+      state[ctrl.key] = v;
+      saveMasterFx(state);
+    });
+  }
+}
+
 async function triggerPad(position, data) {
   if (!data || !data.videoId) return;
 
@@ -286,6 +409,10 @@ const editorEl = document.getElementById('pad-editor');
 
 function renderPadEditor(position, data) {
   cleanupPreviewVideo();
+  if (editorWaveform) {
+    editorWaveform.destroy();
+    editorWaveform = null;
+  }
 
   if (!position) {
     editorEl.innerHTML = '<p class="hint">Click a pad to edit</p>';
@@ -334,7 +461,13 @@ function renderPadEditor(position, data) {
     <div class="form-row waveform-section">
       <label class="waveform-label-row">
         <span>Waveform</span>
-        <span class="help-icon" data-tooltip="I = Set In&#10;O = Set Out&#10;Space = Play / Pause&#10;Drag handles = adjust start / end&#10;Click waveform = seek">?</span>
+        <span class="help-icon" data-tooltip="Ctrl + Wheel = zoom&#10;Drag empty area = pan&#10;I = Set In&#10;O = Set Out&#10;Space = Play / Pause&#10;Drag handles = adjust start / end&#10;Click waveform = seek">?</span>
+        <span class="waveform-zoom-controls">
+          <button type="button" class="btn-zoom" id="btn-waveform-zoom-out" title="Zoom out">-</button>
+          <span class="zoom-level" id="waveform-zoom-level">1x</span>
+          <button type="button" class="btn-zoom" id="btn-waveform-zoom-in" title="Zoom in">+</button>
+          <button type="button" class="btn-zoom" id="btn-waveform-zoom-reset" title="Reset zoom">⟲</button>
+        </span>
       </label>
       <div class="waveform-container">
         <canvas id="waveform-ruler" class="waveform-ruler"></canvas>
@@ -353,7 +486,11 @@ function renderPadEditor(position, data) {
       </div>
     </div>
     <div class="form-row">
-      <label>Volume <span class="vol-value" id="pad-volume-value">${Math.round((data?.volume ?? 0.2) / 2 * 100)}%</span></label>
+      <label>Preview Volume <span class="vol-value" id="pad-preview-volume-value">${Math.round(previewVolume * 100)}%</span></label>
+      <input type="range" id="pad-preview-volume" min="0" max="1" step="0.05" value="${previewVolume}">
+    </div>
+    <div class="form-row">
+      <label>Pad Volume <span class="vol-value" id="pad-volume-value">${Math.round((data?.volume ?? 0.2) / 2 * 100)}%</span></label>
       <input type="range" id="pad-volume" min="0" max="2" step="0.05" value="${data?.volume ?? 0.2}">
     </div>
     <div class="form-row">
@@ -377,6 +514,7 @@ function renderPadEditor(position, data) {
 
   const canvas = document.getElementById('waveform-canvas');
   const rulerCanvas = document.getElementById('waveform-ruler');
+  if (editorWaveform) editorWaveform.destroy();
   editorWaveform = createWaveform(canvas, {
     rulerCanvas,
     onChange: (segment) => {
@@ -391,6 +529,9 @@ function renderPadEditor(position, data) {
       if (editorPreviewVideo) {
         editorPreviewVideo.currentTime = time;
       }
+    },
+    onZoom: () => {
+      updateZoomDisplay();
     },
   });
 
@@ -414,7 +555,7 @@ function setupPreviewVideo(videoId) {
   const newVideo = oldVideo.cloneNode(false);
   newVideo.removeAttribute('src');
   newVideo.src = api.getVideoUrl(videoId);
-  newVideo.volume = 0.30;
+  newVideo.volume = previewVolume;
   oldVideo.parentNode.replaceChild(newVideo, oldVideo);
   editorPreviewVideo = newVideo;
 
@@ -523,6 +664,7 @@ function initEditorListeners(position) {
   const startInput = document.getElementById('pad-start');
   const endInput = document.getElementById('pad-end');
   const volumeInput = document.getElementById('pad-volume');
+  const previewVolumeInput = document.getElementById('pad-preview-volume');
   const labelInput = document.getElementById('pad-label');
   const triggerModeInput = document.getElementById('pad-trigger-mode');
   const loopInput = document.getElementById('pad-loop');
@@ -532,6 +674,10 @@ function initEditorListeners(position) {
   const stopBtn = document.getElementById('btn-preview-stop');
   const setInBtn = document.getElementById('btn-set-in');
   const setOutBtn = document.getElementById('btn-set-out');
+  const zoomInBtn = document.getElementById('btn-waveform-zoom-in');
+  const zoomOutBtn = document.getElementById('btn-waveform-zoom-out');
+  const zoomResetBtn = document.getElementById('btn-waveform-zoom-reset');
+  const zoomLevelEl = document.getElementById('waveform-zoom-level');
 
   keyCapture.addEventListener('click', () => {
     keyCapture.classList.add('listening');
@@ -576,14 +722,59 @@ function initEditorListeners(position) {
   });
 
   function updateSegmentFromInputs() {
-    const start = parseTime(startInput.value);
-    const end = parseTime(endInput.value);
-    if (editorWaveform) editorWaveform.setSegment(start, end);
+    let start = parseTime(startInput.value);
+    let end = parseTime(endInput.value);
+    if (Number.isNaN(start) || Number.isNaN(end)) return;
+    if (editorWaveform) {
+      editorWaveform.setSegment(start, end);
+      const segment = editorWaveform.getSegment();
+      start = segment.start;
+      end = segment.end;
+      startInput.value = formatTime(start);
+      endInput.value = formatTime(end);
+    }
     autoCommitPad(position, { start, end });
   }
 
-  startInput.addEventListener('change', updateSegmentFromInputs);
-  endInput.addEventListener('change', updateSegmentFromInputs);
+  function updateZoomDisplay() {
+    if (!zoomLevelEl || !editorWaveform) return;
+    const level = editorWaveform.getZoomLevel();
+    zoomLevelEl.textContent = `${Math.round(level * 10) / 10}x`;
+  }
+
+  if (zoomInBtn && editorWaveform) {
+    zoomInBtn.addEventListener('click', () => {
+      editorWaveform.zoomIn();
+      updateZoomDisplay();
+    });
+  }
+  if (zoomOutBtn && editorWaveform) {
+    zoomOutBtn.addEventListener('click', () => {
+      editorWaveform.zoomOut();
+      updateZoomDisplay();
+    });
+  }
+  if (zoomResetBtn && editorWaveform) {
+    zoomResetBtn.addEventListener('click', () => {
+      editorWaveform.zoomReset();
+      updateZoomDisplay();
+    });
+  }
+  updateZoomDisplay();
+
+  startInput.addEventListener('input', updateSegmentFromInputs);
+  endInput.addEventListener('input', updateSegmentFromInputs);
+
+  if (previewVolumeInput) {
+    previewVolumeInput.addEventListener('input', () => {
+      previewVolume = parseFloat(previewVolumeInput.value);
+      localStorage.setItem(PREVIEW_VOLUME_STORAGE, String(previewVolume));
+      const pct = Math.round(previewVolume * 100);
+      const previewVolumeValue = document.getElementById('pad-preview-volume-value');
+      if (previewVolumeValue) previewVolumeValue.textContent = `${pct}%`;
+      if (editorPreviewVideo) editorPreviewVideo.volume = previewVolume;
+    });
+  }
 
   volumeInput.addEventListener('input', () => {
     const pct = Math.round(volumeInput.value / 2 * 100);
@@ -807,7 +998,6 @@ ws.on('video:removed', refreshVideos);
 // Session Manager
 const sessionManager = createSessionManager({
   showToast,
-  hasConfiguredPads: () => pads.getAll().length > 0,
   onSaveRequest() {
     const sessionData = {
       name: document.getElementById('session-name').value.trim(),
@@ -834,6 +1024,7 @@ const sessionManager = createSessionManager({
 // Initial load
 initTabs();
 initPanelToggle();
+initMasterControls();
 refreshVideos();
 setInterval(refreshVideos, 2000);
 setInterval(() => sessionManager.refreshList(), 10000);

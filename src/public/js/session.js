@@ -1,7 +1,7 @@
 import { api } from './api.js';
 
 export function createSessionManager(options = {}) {
-  const { onSessionLoad, onSessionListChange, hasConfiguredPads, showToast } = options;
+  const { onSessionLoad, onSessionListChange, showToast } = options;
   const nameInput = document.getElementById('session-name');
   const saveBtn = document.getElementById('btn-save-session');
   const newBtn = document.getElementById('btn-new-session');
@@ -79,11 +79,6 @@ export function createSessionManager(options = {}) {
 
   async function showNewSessionModal() {
     if (modalOpen) return;
-    const hasPads = typeof hasConfiguredPads === 'function' ? hasConfiguredPads() : false;
-    if (!hasPads) {
-      clearWorkspace();
-      return;
-    }
 
     modalOpen = true;
     const sessions = await refreshList();
@@ -115,8 +110,14 @@ export function createSessionManager(options = {}) {
     document.body.appendChild(backdrop);
     document.body.appendChild(modal);
 
+    let escHandler = null;
+
     function cleanup() {
       closeModal(modal, backdrop);
+      if (escHandler) {
+        window.removeEventListener('keydown', escHandler);
+        escHandler = null;
+      }
     }
 
     modal.querySelector('#modal-start-fresh').addEventListener('click', () => {
@@ -135,7 +136,7 @@ export function createSessionManager(options = {}) {
         }
         cleanup();
         await load(name);
-        setName('');
+        nameInput.value = '';
         showToast('Session copied. Enter a new name and save.', 'info');
       });
     }
@@ -143,10 +144,9 @@ export function createSessionManager(options = {}) {
     modal.querySelector('#modal-cancel').addEventListener('click', cleanup);
     backdrop.addEventListener('click', cleanup);
 
-    const escHandler = (e) => {
+    escHandler = (e) => {
       if (e.key === 'Escape') {
         cleanup();
-        window.removeEventListener('keydown', escHandler);
       }
     };
     window.addEventListener('keydown', escHandler);
