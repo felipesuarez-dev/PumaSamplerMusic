@@ -85,6 +85,8 @@ export function validateSession(session) {
 
     if (!pad.videoId || typeof pad.videoId !== 'string') {
       errors.push(`videoId is required for pad ${pad.position || '?'}`);
+    } else if (!/^[a-zA-Z0-9_-]{11}$/.test(pad.videoId)) {
+      errors.push(`Invalid videoId for pad ${pad.position || '?'}`);
     }
   }
 

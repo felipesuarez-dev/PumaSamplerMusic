@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { validateSession } from '../utils/validation.js';
+import archiver from 'archiver';
+import { validateSession, sanitizeFilename } from '../utils/validation.js';
 import * as sessionStore from '../services/session-store.js';
+import * as videoStore from '../services/video-store.js';
 
 const router = Router();
 
@@ -45,6 +47,41 @@ router.get('/:name', async (req, res) => {
     res.json(session);
   } catch (err) {
     console.error('Failed to load session:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:name/export', async (req, res) => {
+  const { name } = req.params;
+  try {
+    const session = await sessionStore.load(name);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const filename = `${sanitizeFilename(name)}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', (err) => {
+      console.error('Failed to export session:', err.message);
+      res.status(500).end();
+    });
+    archive.pipe(res);
+
+    archive.append(JSON.stringify(session, null, 2), { name: 'session.json' });
+
+    const videoIds = [...new Set((session.pads || []).map((pad) => pad.videoId).filter(Boolean))];
+    for (const videoId of videoIds) {
+      if (await videoStore.exists(videoId)) {
+        archive.file(videoStore.getAudioFilePath(videoId), { name: `audio/${videoId}.opus` });
+      }
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    console.error('Failed to export session:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

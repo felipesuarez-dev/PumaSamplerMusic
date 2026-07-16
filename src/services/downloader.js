@@ -81,10 +81,12 @@ async function runDownload({ videoId, url, callbacks }) {
   try {
     await mkdir(tempDir, { recursive: true });
 
-    // Step 1: Download video to temp directory
+    // Step 1: Download video to temp directory (mapped to the lower half of the
+    // overall progress range so it doesn't visually jump from 100% back to 0%
+    // when the audio extraction phase starts)
     await runYtDlp(url, tempDir, (progress) => {
-      state.progress = progress;
-      notify(callbacks, 'download:progress', { videoId, progress });
+      state.progress = Math.round(progress / 2);
+      notify(callbacks, 'download:progress', { videoId, progress: state.progress });
     });
 
     const videoFile = await videoStore.findTempVideoFile(videoId);
@@ -95,9 +97,13 @@ async function runDownload({ videoId, url, callbacks }) {
     state.status = STATUS.EXTRACTING;
     notify(callbacks, 'download:extracting', { videoId });
 
-    // Step 2: Extract audio
+    // Step 2: Extract audio (mapped to the upper half of the overall progress range
+    // so it doesn't visually jump from 100% back to 0% after the video phase)
+    await runYtDlpAudio(url, tempDir, (progress) => {
+      state.progress = 50 + Math.round(progress / 2);
+      notify(callbacks, 'download:progress', { videoId, progress: state.progress });
+    });
     const tempAudio = await videoStore.getTempAudioPath(videoId);
-    await runFfmpegAudio(videoFile, tempAudio);
 
     // Step 3: Extract metadata from info.json sidecar
     const metadata = await extractMetadata(videoId);
@@ -200,20 +206,35 @@ function runYtDlp(url, tempDir, onProgress) {
   });
 }
 
-function runFfmpegAudio(inputPath, outputPath) {
+function runYtDlpAudio(url, tempDir, onProgress) {
   return new Promise((resolve, reject) => {
     const args = [
-      '-y',
-      '-i', inputPath,
-      '-vn',
-      '-c:a', 'libopus',
-      '-b:a', '128k',
-      '-application', 'audio',
-      outputPath,
+      '-f', 'bestaudio',
+      '-x',
+      '--audio-format', 'opus',
+      '--audio-quality', '160K',
+      '--no-playlist',
+      '--no-warnings',
+      '-o', 'audio.%(ext)s',
+      '-P', tempDir,
+      url,
     ];
 
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
+    let lastProgress = 0;
+
+    proc.stdout.on('data', (chunk) => {
+      const text = chunk.toString();
+      const match = text.match(/(\d{1,3}\.\d)%/);
+      if (match) {
+        const progress = parseFloat(match[1]);
+        if (progress > lastProgress) {
+          lastProgress = progress;
+          onProgress(progress);
+        }
+      }
+    });
 
     proc.stderr.on('data', (chunk) => {
       stderr += chunk.toString();
@@ -221,9 +242,10 @@ function runFfmpegAudio(inputPath, outputPath) {
 
     proc.on('close', (code) => {
       if (code === 0) {
+        onProgress(100);
         resolve();
       } else {
-        reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
+        reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
       }
     });
 

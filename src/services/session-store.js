@@ -42,12 +42,27 @@ export async function list() {
   }
 }
 
+const DEFAULT_MASTER_FX = {
+  volume: 1,
+  cutoff: 100,
+  resonance: 0.1,
+  reverb: 0,
+  delayTime: 250,
+  delayFeedback: 0,
+};
+
 export async function load(name) {
   const path = getSessionPath(name);
   try {
     await access(path);
     const content = await readFile(path, 'utf8');
-    return JSON.parse(content);
+    const session = JSON.parse(content);
+
+    if (!session.masterFx || (session.schemaVersion || 1) < 2) {
+      session.masterFx = { ...DEFAULT_MASTER_FX, ...session.masterFx };
+    }
+
+    return session;
   } catch (err) {
     if (err.code === 'ENOENT') {
       return null;
@@ -61,10 +76,10 @@ export async function save(session) {
   const now = new Date().toISOString();
 
   const normalized = {
-    schemaVersion: 1,
     ...session,
     createdAt: session.createdAt || now,
     updatedAt: now,
+    schemaVersion: 2,
   };
 
   await writeFile(path, JSON.stringify(normalized, null, 2), 'utf8');
