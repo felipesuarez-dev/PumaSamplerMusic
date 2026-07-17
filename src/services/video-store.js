@@ -185,7 +185,19 @@ export async function findTempVideoFile(videoId) {
   const tempDir = getTempDir(videoId);
   try {
     const entries = await readdir(tempDir);
-    const videoFile = entries.find((e) => !e.startsWith('audio') && !e.endsWith('.info.json') && !e.endsWith('.json'));
+    const candidates = entries.filter((e) => (
+      !e.startsWith('audio')
+      && !e.endsWith('.info.json')
+      && !e.endsWith('.json')
+      && !e.endsWith('.part')
+      && !e.endsWith('.ytdl')
+      && !/\.f\d+\./.test(e)
+    ));
+
+    // Prefer the exact "video.<ext>" name over any other leftover candidate
+    // (readdir order on ext4 is not deterministic).
+    const exactMatch = candidates.find((e) => /^video\.[^.]+$/.test(e));
+    const videoFile = exactMatch || candidates[0];
     return videoFile ? join(tempDir, videoFile) : null;
   } catch {
     return null;
@@ -201,6 +213,41 @@ export async function findTempInfoJsonFile(videoId) {
   } catch {
     return null;
   }
+}
+
+// Purges only the temp working directory, leaving any finalized files (if
+// present) untouched. Used by DELETE /:id when the video never made it to
+// videoStore, so its .tmp_<id>/ scratch dir doesn't linger forever.
+export async function removeTempOnly(videoId) {
+  try {
+    await rm(getTempDir(videoId), { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+}
+
+// Removes leftover .tmp_<videoId> directories from crashes/interruptions
+// that never reached finalizeVideo/removeTempOnly. Meant to run once at
+// boot: by definition there are no legitimate in-flight downloads yet, so
+// every .tmp_* entry found here is orphaned garbage. Benign race: if a
+// download for the same videoId is queued right at boot while its orphaned
+// .tmp_ dir is being swept, both operations are idempotent (worst case is a
+// spurious failed attempt, not corruption).
+export async function sweepOrphanTempDirs() {
+  let removed = 0;
+  try {
+    const entries = await readdir(config.videosDir);
+    const tempDirs = entries.filter((entry) => entry.startsWith('.tmp_'));
+
+    for (const entry of tempDirs) {
+      const videoId = entry.slice('.tmp_'.length);
+      await removeTempOnly(videoId);
+      removed++;
+    }
+  } catch {
+    // ignore
+  }
+  return removed;
 }
 
 export async function finalizeVideo(videoId, videoSource, audioSource) {

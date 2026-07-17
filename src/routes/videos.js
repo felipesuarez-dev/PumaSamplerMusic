@@ -109,6 +109,11 @@ router.delete('/:id', async (req, res) => {
   }
 
   if (!exists) {
+    // A stuck/errored download can leave an orphaned .tmp_<id>/ scratch dir
+    // behind (it never reached videoStore, so the removed-path cleanup
+    // below never runs for it) — purge it here so Retry (delete->add) never
+    // accumulates leaked temp directories.
+    await videoStore.removeTempOnly(videoId);
     getBroadcast(req)('video:removed', { videoId, affectedSessions: [] });
     return res.json({ videoId, removed: true, affectedSessions: [] });
   }

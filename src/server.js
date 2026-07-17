@@ -8,6 +8,8 @@ import { installConsoleCapture, getRecentLogs } from './utils/logger.js';
 import videosRouter from './routes/videos.js';
 import sessionsRouter from './routes/sessions.js';
 import settingsRouter from './routes/settings.js';
+import { startYtDlpAutoUpdate } from './services/ytdlp-updater.js';
+import * as videoStore from './services/video-store.js';
 
 installConsoleCapture();
 
@@ -89,6 +91,16 @@ wss.on('connection', (ws) => {
 
 server.listen(config.port, config.host, () => {
   console.log(`PumaSamplerMusic running on http://${config.host}:${config.port}`);
+  startYtDlpAutoUpdate();
+  videoStore.sweepOrphanTempDirs()
+    .then((count) => {
+      if (count > 0) {
+        console.log(`Swept ${count} orphaned temp directory(ies) from previous crashes/interruptions`);
+      }
+    })
+    .catch((err) => {
+      console.warn('Failed to sweep orphan temp directories:', err.message);
+    });
 });
 
 export { app, server };

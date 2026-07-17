@@ -14,9 +14,12 @@ services:
       - PORT=4070
       - DATA_DIR=/data
       - MAX_CACHE_GB=5
-      - MAX_CONCURRENT_DOWNLOADS=2
+      # Temporary throttle-recovery measure: the server IP is currently in an
+      # active 429 throttle state. Revert to 2 once it clears.
+      - MAX_CONCURRENT_DOWNLOADS=1
       - POT_PROVIDER_URL=http://bgutil-provider:4416
       - COOKIES_FILE=/data/cookies.txt
+      - YTDLP_CHANNEL=stable
     volumes:
       - ./data:/data
       - ./src:/app/src

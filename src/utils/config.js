@@ -31,4 +31,5 @@ export const config = {
   allowedHosts: (env.ALLOWED_HOSTS || '').split(',').filter(Boolean),
   cookiesFile: env.COOKIES_FILE || '',
   potProviderUrl: env.POT_PROVIDER_URL || '',
+  ytdlpChannel: env.YTDLP_CHANNEL || 'stable',
 };
