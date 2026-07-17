@@ -13,8 +13,10 @@ services:
       - NODE_ENV=production
       - PORT=4070
       - DATA_DIR=/data
-      - MAX_CACHE_GB=10
+      - MAX_CACHE_GB=5
       - MAX_CONCURRENT_DOWNLOADS=2
+      - POT_PROVIDER_URL=http://bgutil-provider:4416
+      - COOKIES_FILE=/data/cookies.txt
     volumes:
       - ./data:/data
       - ./src:/app/src
@@ -26,6 +28,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  bgutil-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: bgutil-provider
+    init: true
+    restart: unless-stopped
+    networks:
+      - pumasamplermusic-network
 
 networks:
   pumasamplermusic-network:

@@ -4,8 +4,12 @@ import { WebSocketServer } from 'ws';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './utils/config.js';
+import { installConsoleCapture, getRecentLogs } from './utils/logger.js';
 import videosRouter from './routes/videos.js';
 import sessionsRouter from './routes/sessions.js';
+import settingsRouter from './routes/settings.js';
+
+installConsoleCapture();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,9 +46,15 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', port: config.port, time: new Date().toISOString() });
 });
 
+// In-app log viewer (see logger.js) — recent server console output.
+app.get('/api/logs', (_req, res) => {
+  res.json({ logs: getRecentLogs() });
+});
+
 // API routes
 app.use('/api/videos', videosRouter);
 app.use('/api/sessions', sessionsRouter);
+app.use('/api/settings', settingsRouter);
 
 // Static frontend
 app.use(express.static(join(__dirname, 'public')));

@@ -1,4 +1,4 @@
-import { readdir, stat, unlink, rename, access, mkdir, rmdir, readFile, writeFile } from 'node:fs/promises';
+import { readdir, stat, unlink, rename, access, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { config } from '../utils/config.js';
 
@@ -145,7 +145,7 @@ export async function remove(videoId) {
   }
 
   try {
-    await rmdir(getTempDir(videoId), { recursive: true });
+    await rm(getTempDir(videoId), { recursive: true, force: true });
   } catch {
     // ignore
   }
@@ -212,7 +212,7 @@ export async function finalizeVideo(videoId, videoSource, audioSource) {
   await rename(audioSource, finalAudio);
 
   try {
-    await rmdir(tempDir, { recursive: true });
+    await rm(tempDir, { recursive: true, force: true });
   } catch {
     // ignore
   }

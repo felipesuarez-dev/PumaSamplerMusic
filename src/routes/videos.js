@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { access } from 'node:fs/promises';
 import { isValidYouTubeUrl, extractYouTubeId } from '../utils/validation.js';
+import { config } from '../utils/config.js';
 import * as downloader from '../services/downloader.js';
 import * as videoStore from '../services/video-store.js';
 import * as sessionStore from '../services/session-store.js';
@@ -11,10 +12,17 @@ function getBroadcast(req) {
   return req.app.locals.broadcast || (() => {});
 }
 
+async function removeVideoAndNotify(videoId, broadcast) {
+  const affectedSessions = await sessionStore.findByVideoId(videoId);
+  await videoStore.remove(videoId);
+  broadcast('video:removed', { videoId, affectedSessions });
+  return affectedSessions;
+}
+
 router.get('/', async (_req, res) => {
   const videos = await videoStore.list();
   const active = downloader.listActive();
-  res.json({ videos, active });
+  res.json({ videos, active, maxCacheGb: config.maxCacheGb });
 });
 
 router.post('/', async (req, res) => {
@@ -91,17 +99,37 @@ router.get('/:id/audio', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const videoId = req.params.id;
   const exists = await videoStore.exists(videoId);
-  if (!exists) {
+  // A stuck/errored/in-progress download never reaches videoStore (only
+  // downloader's in-memory activeDownloads has it) — without this, the
+  // remove button 404s on it and it lingers forever with no way to clear it.
+  const cancelled = downloader.cancelDownload(videoId);
+
+  if (!exists && !cancelled) {
     return res.status(404).json({ error: 'Video not found' });
   }
 
-  const affectedSessions = await sessionStore.findByVideoId(videoId);
-  await videoStore.remove(videoId);
+  if (!exists) {
+    getBroadcast(req)('video:removed', { videoId, affectedSessions: [] });
+    return res.json({ videoId, removed: true, affectedSessions: [] });
+  }
 
-  const broadcast = getBroadcast(req);
-  broadcast('video:removed', { videoId, affectedSessions });
-
+  const affectedSessions = await removeVideoAndNotify(videoId, getBroadcast(req));
   res.json({ videoId, removed: true, affectedSessions });
+});
+
+router.delete('/', async (req, res) => {
+  const videos = await videoStore.list();
+  const broadcast = getBroadcast(req);
+  const removed = [];
+  for (const video of videos) {
+    try {
+      await removeVideoAndNotify(video.videoId, broadcast);
+      removed.push(video.videoId);
+    } catch (err) {
+      console.error(`Bulk delete failed for ${video.videoId}:`, err.message);
+    }
+  }
+  res.json({ removed: removed.length, videoIds: removed });
 });
 
 export default router;

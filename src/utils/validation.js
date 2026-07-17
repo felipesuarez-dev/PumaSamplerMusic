@@ -88,6 +88,24 @@ export function validateSession(session) {
     } else if (!/^[a-zA-Z0-9_-]{11}$/.test(pad.videoId)) {
       errors.push(`Invalid videoId for pad ${pad.position || '?'}`);
     }
+
+    // Per-pad FX fields are optional (older sessions won't have them, and
+    // session-store.load() fills defaults on read) — only range-check when present.
+    if (pad.pitch !== undefined && (!Number.isInteger(pad.pitch) || pad.pitch < -12 || pad.pitch > 12)) {
+      errors.push(`Invalid pitch for pad ${pad.position || '?'} (must be an integer -12..12)`);
+    }
+    if (pad.cutoff !== undefined && (typeof pad.cutoff !== 'number' || pad.cutoff < 0 || pad.cutoff > 100)) {
+      errors.push(`Invalid cutoff for pad ${pad.position || '?'} (must be 0..100)`);
+    }
+    if (pad.resonance !== undefined && (typeof pad.resonance !== 'number' || pad.resonance < 0.1 || pad.resonance > 20)) {
+      errors.push(`Invalid resonance for pad ${pad.position || '?'} (must be 0.1..20)`);
+    }
+    if (pad.reverbSend !== undefined && (typeof pad.reverbSend !== 'number' || pad.reverbSend < 0 || pad.reverbSend > 1)) {
+      errors.push(`Invalid reverbSend for pad ${pad.position || '?'} (must be 0..1)`);
+    }
+    if (pad.delaySend !== undefined && (typeof pad.delaySend !== 'number' || pad.delaySend < 0 || pad.delaySend > 1)) {
+      errors.push(`Invalid delaySend for pad ${pad.position || '?'} (must be 0..1)`);
+    }
   }
 
   return errors;

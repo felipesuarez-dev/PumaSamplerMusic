@@ -29,4 +29,6 @@ export const config = {
   maxConcurrentDownloads,
   nodeEnv: env.NODE_ENV || 'development',
   allowedHosts: (env.ALLOWED_HOSTS || '').split(',').filter(Boolean),
+  cookiesFile: env.COOKIES_FILE || '',
+  potProviderUrl: env.POT_PROVIDER_URL || '',
 };

@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
 import { stat, mkdir, readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { extractYouTubeId } from '../utils/validation.js';
 import * as videoStore from './video-store.js';
+import { config } from '../utils/config.js';
 
 const STATUS = {
   QUEUED: 'queued',
@@ -21,6 +23,30 @@ export function getStatus(videoId) {
 
 export function listActive() {
   return Array.from(activeDownloads.values());
+}
+
+// Cancels a queued/in-flight/errored download so the UI's remove button can
+// clear entries that never reached videoStore (see DELETE /api/videos/:id).
+// Returns false when the videoId has no active download state.
+export function cancelDownload(videoId) {
+  const state = activeDownloads.get(videoId);
+  if (!state) return false;
+
+  const queuedIndex = queue.findIndex((item) => item.videoId === videoId);
+  if (queuedIndex !== -1) {
+    queue.splice(queuedIndex, 1);
+  }
+
+  if (state.currentProcess && state.currentProcess.exitCode === null) {
+    try {
+      state.currentProcess.kill('SIGTERM');
+    } catch {
+      // Process already gone
+    }
+  }
+
+  activeDownloads.delete(videoId);
+  return true;
 }
 
 export async function queueDownload(url, callbacks = {}) {
@@ -87,7 +113,7 @@ async function runDownload({ videoId, url, callbacks }) {
     await runYtDlp(url, tempDir, (progress) => {
       state.progress = Math.round(progress / 2);
       notify(callbacks, 'download:progress', { videoId, progress: state.progress });
-    });
+    }, state);
 
     const videoFile = await videoStore.findTempVideoFile(videoId);
     if (!videoFile) {
@@ -102,7 +128,7 @@ async function runDownload({ videoId, url, callbacks }) {
     await runYtDlpAudio(url, tempDir, (progress) => {
       state.progress = 50 + Math.round(progress / 2);
       notify(callbacks, 'download:progress', { videoId, progress: state.progress });
-    });
+    }, state);
     const tempAudio = await videoStore.getTempAudioPath(videoId);
 
     // Step 3: Extract metadata from info.json sidecar
@@ -128,10 +154,13 @@ async function runDownload({ videoId, url, callbacks }) {
     state.progress = 100;
     notify(callbacks, 'download:ready', { videoId, info });
   } catch (err) {
+    const errorMessage = err.message.includes('Sign in to confirm')
+      ? `YouTube bot-check triggered. Configure YouTube cookies in the Videos panel settings. Original: ${err.message}`
+      : err.message;
     state.status = STATUS.ERROR;
-    state.error = err.message;
+    state.error = errorMessage;
     console.error(`Download failed for ${videoId}:`, err.message);
-    notify(callbacks, 'download:error', { videoId, error: err.message });
+    notify(callbacks, 'download:error', { videoId, error: errorMessage });
   } finally {
     // Keep state around briefly so UI can read status, then clean up
     setTimeout(() => {
@@ -160,11 +189,13 @@ async function extractMetadata(videoId) {
   }
 }
 
-function runYtDlp(url, tempDir, onProgress) {
+function runYtDlp(url, tempDir, onProgress, state) {
   return new Promise((resolve, reject) => {
     const args = [
       '--no-playlist',
       '--no-warnings',
+      ...cookiesArgs(),
+      ...providerArgs(),
       '--write-info-json',
       '-f', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[height<=1080]',
       '--merge-output-format', 'mp4',
@@ -174,6 +205,13 @@ function runYtDlp(url, tempDir, onProgress) {
     ];
 
     const proc = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    // Non-enumerable: state objects are JSON-serialized by GET /api/videos,
+    // and a ChildProcess holds circular references that would break res.json.
+    if (state) {
+      Object.defineProperty(state, 'currentProcess', {
+        value: proc, writable: true, configurable: true, enumerable: false,
+      });
+    }
     let stderr = '';
     let lastProgress = 0;
 
@@ -206,7 +244,7 @@ function runYtDlp(url, tempDir, onProgress) {
   });
 }
 
-function runYtDlpAudio(url, tempDir, onProgress) {
+function runYtDlpAudio(url, tempDir, onProgress, state) {
   return new Promise((resolve, reject) => {
     const args = [
       '-f', 'bestaudio',
@@ -215,12 +253,21 @@ function runYtDlpAudio(url, tempDir, onProgress) {
       '--audio-quality', '160K',
       '--no-playlist',
       '--no-warnings',
+      ...cookiesArgs(),
+      ...providerArgs(),
       '-o', 'audio.%(ext)s',
       '-P', tempDir,
       url,
     ];
 
     const proc = spawn('yt-dlp', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    // Non-enumerable: state objects are JSON-serialized by GET /api/videos,
+    // and a ChildProcess holds circular references that would break res.json.
+    if (state) {
+      Object.defineProperty(state, 'currentProcess', {
+        value: proc, writable: true, configurable: true, enumerable: false,
+      });
+    }
     let stderr = '';
     let lastProgress = 0;
 
@@ -251,6 +298,18 @@ function runYtDlpAudio(url, tempDir, onProgress) {
 
     proc.on('error', (err) => reject(err));
   });
+}
+
+function cookiesArgs() {
+  return config.cookiesFile && existsSync(config.cookiesFile)
+    ? ['--cookies', config.cookiesFile]
+    : [];
+}
+
+function providerArgs() {
+  return config.potProviderUrl
+    ? ['--extractor-args', `youtubepot-bgutilhttp:base_url=${config.potProviderUrl}`]
+    : [];
 }
 
 function notify(callbacks, event, payload) {

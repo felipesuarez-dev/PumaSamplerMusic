@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     ca-certificates \
-    && pip3 install --break-system-packages --no-cache-dir yt-dlp \
+    && pip3 install --break-system-packages --no-cache-dir yt-dlp bgutil-ytdlp-pot-provider \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
