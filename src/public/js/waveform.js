@@ -406,7 +406,10 @@ export function createWaveform(canvas, options = {}) {
   }
 
   function drawPlayhead(x, height) {
-    if (x < -20 || x > canvas.width + 20) return;
+    if (x < -20 || x > canvas.width + 20) {
+      drawOffscreenIndicator(x < 0 ? 'left' : 'right', height);
+      return;
+    }
 
     const dpr = window.devicePixelRatio || 1;
     const headHeight = 12 * dpr;
@@ -434,6 +437,25 @@ export function createWaveform(canvas, options = {}) {
     ctx.lineTo(x + halfWidth, headHeight);
     ctx.closePath();
     ctx.fill();
+  }
+
+  function drawOffscreenIndicator(side, height) {
+    const dpr = window.devicePixelRatio || 1;
+    const cy = height / 2;
+    const size = 8 * dpr;
+    const pad = 4 * dpr;
+    const xTip = side === 'left' ? pad : canvas.width - pad;
+    const dir = side === 'left' ? 1 : -1;
+
+    ctx.fillStyle = '#ef4444';
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(xTip, cy);
+    ctx.lineTo(xTip + dir * size, cy - size);
+    ctx.lineTo(xTip + dir * size, cy + size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
   }
 
   function drawInOutLabels(startX, endX, height, accent) {
@@ -559,7 +581,15 @@ export function createWaveform(canvas, options = {}) {
     if (playheadDist < playheadRadius && playheadDist < startDist && playheadDist < endDist) return 'playhead';
     if (startDist < handleRadius && startDist < endDist) return 'start';
     if (endDist < handleRadius && endDist < startDist) return 'end';
-    if (x > startX && x < endX) return 'segment';
+
+    // Solo tratar el clic como "mover selección completa" cuando AMBOS
+    // bordes están visibles en el canvas — si el zoom actual no alcanza a
+    // mostrar dónde empieza o termina la selección (el caso típico apenas
+    // se hace zoom, ya que la selección por defecto es el clip entero), el
+    // clic debe pasar a pan en vez de intentar mover una selección que no
+    // se puede ver ni mover de forma coherente.
+    const bothEdgesVisible = startX >= 0 && startX <= canvas.width && endX >= 0 && endX <= canvas.width;
+    if (bothEdgesVisible && x > startX && x < endX) return 'segment';
     return null;
   }
 

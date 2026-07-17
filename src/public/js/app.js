@@ -7,6 +7,18 @@ import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
 import { createSessionManager } from './session.js';
 import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
+import { enhanceKnobs } from './knob.js';
+
+// Duplicated from src/utils/validation.js (server-only, not servable over
+// HTTP since only src/public is exposed as static content) so the client can
+// reject a non-YouTube URL before a round-trip to the server. Keep these
+// patterns in sync with that file if they ever change.
+const YT_PATTERNS = [
+  /^https?:\/\/(www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+  /^https?:\/\/(www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+  /^https?:\/\/youtu\.be\/([a-zA-Z0-9_-]{11})/,
+];
+const isValidYouTubeUrl = (url) => YT_PATTERNS.some((p) => p.test(url));
 
 const store = createStore({
   videos: [],
@@ -17,12 +29,13 @@ const store = createStore({
 
 const ws = createWebSocketClient();
 const audio = createAudioEngine();
+window.addEventListener('audioworkletfallback', () => showToast(t('toast.pitchFallbackActive'), 'info'));
 const videoDisplay = createVideoDisplay(document.getElementById('video-player'));
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
-let editorPreviewVideo = null;
 let isCapturingKey = false;
 let masterFxControls = null;
+let padFxControls = null;
 
 const STOP_KEY_STORAGE = 'puma-stop-key';
 const PREVIEW_VOLUME_STORAGE = 'puma-preview-volume';
@@ -61,13 +74,155 @@ function showToast(message, type = 'info') {
   setTimeout(() => toastEl.classList.remove('show'), 3000);
 }
 
+// Reuses the same minimal modal/backdrop pattern as the New Session modal
+// (session.js) instead of introducing a separate modal system.
+function openWaveformHelpModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'session-modal waveform-help-modal';
+  modal.innerHTML = `
+    <h3>${t('waveform.helpTitle')}</h3>
+    <section>
+      <h4>${t('waveform.helpNavTitle')}</h4>
+      <p>${t('waveform.helpNavBody')}</p>
+    </section>
+    <section>
+      <h4>${t('waveform.helpMarkTitle')}</h4>
+      <p>${t('waveform.helpMarkBody')}</p>
+    </section>
+    <section>
+      <h4>${t('waveform.helpPlayTitle')}</h4>
+      <p>${t('waveform.helpPlayBody')}</p>
+    </section>
+    <button class="session-modal-close" id="waveform-help-close" title="${t('common.cancel')}">&times;</button>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function cleanup() {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    window.removeEventListener('keydown', onKeydown);
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') cleanup();
+  }
+
+  modal.querySelector('#waveform-help-close').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', onKeydown);
+}
+
+// Log viewer modal — same modal/backdrop pattern as the others in this app.
+async function openLogsModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'session-modal logs-modal';
+  modal.innerHTML = `
+    <h3>${t('logs.title')}</h3>
+    <div class="logs-list" id="logs-list"><p class="hint">${t('logs.loading')}</p></div>
+    <div class="session-modal-actions">
+      <button class="btn btn-secondary" id="logs-refresh">${t('logs.refresh')}</button>
+    </div>
+    <button class="session-modal-close" id="logs-close" title="${t('common.cancel')}">&times;</button>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  const listEl = modal.querySelector('#logs-list');
+
+  async function loadLogs() {
+    listEl.innerHTML = `<p class="hint">${t('logs.loading')}</p>`;
+    try {
+      const { logs } = await api.getLogs();
+      if (!logs.length) {
+        listEl.innerHTML = `<p class="hint">${t('logs.empty')}</p>`;
+        return;
+      }
+      listEl.innerHTML = logs
+        .map((entry) => {
+          const time = new Date(entry.timestamp).toLocaleTimeString();
+          return `<div class="log-line log-line-${entry.level}"><span class="log-time">${time}</span><span class="log-message">${escapeHtml(entry.message)}</span></div>`;
+        })
+        .join('');
+      listEl.scrollTop = listEl.scrollHeight;
+    } catch (err) {
+      listEl.innerHTML = `<p class="hint">${t('logs.loadFailed', { message: err.message })}</p>`;
+    }
+  }
+
+  function cleanup() {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    window.removeEventListener('keydown', onKeydown);
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') cleanup();
+  }
+
+  modal.querySelector('#logs-close').addEventListener('click', cleanup);
+  modal.querySelector('#logs-refresh').addEventListener('click', loadLogs);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', onKeydown);
+
+  await loadLogs();
+}
+
+// Small reusable confirm dialog, same modal/backdrop pattern as the other
+// two modals in this app — used wherever a destructive action needs an
+// explicit "are you sure" with more context than a native confirm() allows.
+function openConfirmModal({ title, body, confirmLabel, onConfirm }) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'session-modal';
+  modal.innerHTML = `
+    <h3>${title}</h3>
+    <p class="session-modal-hint">${body}</p>
+    <div class="session-modal-actions">
+      <button class="btn btn-danger" id="confirm-modal-confirm">${confirmLabel}</button>
+      <button class="btn btn-secondary" id="confirm-modal-cancel">${t('common.cancel')}</button>
+    </div>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function cleanup() {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    window.removeEventListener('keydown', onKeydown);
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') cleanup();
+  }
+
+  modal.querySelector('#confirm-modal-confirm').addEventListener('click', () => {
+    cleanup();
+    onConfirm();
+  });
+  modal.querySelector('#confirm-modal-cancel').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', onKeydown);
+}
+
 // Global stop
 function stopAll() {
   audio.stopAll();
   videoDisplay.stop();
-  if (editorPreviewVideo) {
-    editorPreviewVideo.pause();
-  }
   showToast(t('toast.allStopped'), 'info');
 }
 
@@ -142,8 +297,9 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     const startInput = document.getElementById('pad-start');
     const endInput = document.getElementById('pad-end');
-    if (!editorPreviewVideo || !startInput || !endInput) return;
-    const time = editorPreviewVideo.currentTime;
+    const previewVideo = videoDisplay.getVideo();
+    if (!previewVideo || !startInput || !endInput) return;
+    const time = previewVideo.currentTime;
     const end = parseTime(endInput.value);
     startInput.value = formatTime(time);
     endInput.value = formatTime(Math.max(time + 0.1, end));
@@ -153,8 +309,9 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     const startInput = document.getElementById('pad-start');
     const endInput = document.getElementById('pad-end');
-    if (!editorPreviewVideo || !startInput || !endInput) return;
-    const time = editorPreviewVideo.currentTime;
+    const previewVideo = videoDisplay.getVideo();
+    if (!previewVideo || !startInput || !endInput) return;
+    const time = previewVideo.currentTime;
     const start = parseTime(startInput.value);
     endInput.value = formatTime(Math.max(time, start + 0.1));
     if (editorWaveform) editorWaveform.setSegment(parseTime(startInput.value), parseTime(endInput.value));
@@ -173,33 +330,167 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Single shared toggle mechanism for both collapsible panels (Pad Editor and
+// the Video Library sidenav) so they present the same visual/interaction
+// language even though their underlying CSS state class differs (one
+// collapses height, the other collapses width) and neither needed to change.
+function createCollapsibleToggle(toggleEl, { isCollapsed, setCollapsed, onExpand } = {}) {
+  if (!toggleEl) return null;
+
+  function sync() {
+    const collapsed = isCollapsed();
+    toggleEl.setAttribute('aria-expanded', String(!collapsed));
+    const title = collapsed ? t('panel.expandTitle') : t('panel.collapseTitle');
+    toggleEl.title = title;
+    toggleEl.setAttribute('aria-label', title);
+  }
+
+  // Fuerza un estado específico (no alterna) — necesario para que el
+  // auto-colapso por umbral del resize (makeResizable) sea idempotente: se
+  // llama en cada mousemove mientras el drag esté por debajo del umbral.
+  function collapse() {
+    if (isCollapsed()) return;
+    setCollapsed(true);
+    sync();
+  }
+
+  sync();
+  toggleEl.addEventListener('click', () => {
+    const next = !isCollapsed();
+    setCollapsed(next);
+    sync();
+    if (!next && typeof onExpand === 'function') onExpand();
+  });
+
+  return { collapse };
+}
+
+// help-icon tooltips use position:fixed (see app.css) so ancestors with
+// overflow:hidden/auto (panels, the sidenav body) never clip them. A single
+// delegated listener covers every icon, including ones injected dynamically
+// (e.g. the waveform's help icon re-rendered per pad), and clamps the
+// horizontal position so the bubble never runs off the viewport edge.
+function initTooltipPositioning() {
+  document.body.addEventListener('mouseover', (e) => {
+    const icon = e.target.closest('.help-icon');
+    if (!icon) return;
+    const rect = icon.getBoundingClientRect();
+    const halfTip = 140; // ~half of .help-icon::after's max-width, for clamping
+    const x = Math.min(
+      Math.max(rect.left + rect.width / 2, halfTip + 8),
+      window.innerWidth - halfTip - 8
+    );
+    // Si no hay espacio arriba (ej. el ícono de STOP, muy cerca del borde
+    // superior de la página), abrir el tooltip hacia abajo en vez de arriba.
+    const estimatedTipHeight = 90;
+    const openBelow = rect.top < estimatedTipHeight + 16;
+    icon.style.setProperty('--tip-x', `${x}px`);
+    icon.style.setProperty('--tip-y', `${openBelow ? rect.bottom + 8 : rect.top - 8}px`);
+    icon.classList.toggle('tip-below', openBelow);
+  });
+}
+
+// Drag-to-resize handle shared by the Video Library sidenav (width) and the
+// Pad Editor panel (height, via flex-basis — .right-panel is a column flex
+// container so the panel's flex-basis controls its vertical extent, not its
+// width). Resets to the CSS default on every reload; not persisted.
+function makeResizable(el, { edge, dimension, min, max, onResizeEnd, collapseBelow, onCollapse } = {}) {
+  const handle = document.createElement('div');
+  handle.className = `resize-handle resize-handle-${edge}`;
+  el.appendChild(handle);
+
+  const sign = (edge === 'right' || edge === 'bottom') ? -1 : 1;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startPos = dimension === 'width' ? e.clientX : e.clientY;
+    const startSize = dimension === 'width' ? el.offsetWidth : el.offsetHeight;
+    handle.classList.add('resizing');
+    document.body.style.userSelect = 'none';
+
+    function onMove(ev) {
+      // Si ya no hay ningún botón del mouse presionado, el drag terminó
+      // aunque el mouseup nunca haya llegado a window (ej. se soltó fuera
+      // de la ventana del navegador) — sin esto, el listener queda pegado.
+      if (ev.buttons === 0) { onUp(); return; }
+      const current = dimension === 'width' ? ev.clientX : ev.clientY;
+      const delta = (startPos - current) * sign;
+      const raw = startSize + delta;
+      if (typeof collapseBelow === 'number' && raw < collapseBelow) {
+        // Limpiar el estilo inline: si no, el ancho/alto arrastrado se queda
+        // pisando la regla de la clase .collapsed/no-.expanded (un estilo
+        // inline le gana en especificidad), y el panel "colapsa" por dentro
+        // sin ningún efecto visible.
+        el.style[dimension === 'width' ? 'width' : 'flexBasis'] = '';
+        if (typeof onCollapse === 'function') onCollapse();
+        return;
+      }
+      const maxPx = typeof max === 'function' ? max() : max;
+      const next = Math.max(min, Math.min(maxPx, raw));
+      el.style[dimension === 'width' ? 'width' : 'flexBasis'] = `${next}px`;
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      handle.classList.remove('resizing');
+      document.body.style.userSelect = '';
+      if (typeof onResizeEnd === 'function') onResizeEnd();
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
 function initLibrarySidenav() {
   const sidenav = document.getElementById('library-sidenav');
   const toggle = document.getElementById('library-sidenav-toggle');
-  if (!sidenav || !toggle) return;
+  if (!sidenav || !toggle) return null;
 
-  toggle.addEventListener('click', () => {
-    const expanded = sidenav.classList.toggle('expanded');
-    toggle.setAttribute('aria-expanded', String(expanded));
+  return createCollapsibleToggle(toggle, {
+    isCollapsed: () => !sidenav.classList.contains('expanded'),
+    setCollapsed: (collapsed) => {
+      sidenav.style.width = '';
+      sidenav.classList.toggle('expanded', !collapsed);
+    },
+  });
+}
+
+function initPadsSidenav() {
+  const sidenav = document.getElementById('pads-sidenav');
+  const toggle = document.getElementById('pads-sidenav-toggle');
+  if (!sidenav || !toggle) return null;
+
+  return createCollapsibleToggle(toggle, {
+    isCollapsed: () => !sidenav.classList.contains('expanded'),
+    setCollapsed: (collapsed) => {
+      sidenav.style.width = '';
+      sidenav.classList.toggle('expanded', !collapsed);
+    },
   });
 }
 
 function initPanelToggle() {
-  document.querySelectorAll('.panel').forEach((panel) => {
+  const controllers = [];
+  document.querySelectorAll('.collapsible-box').forEach((panel) => {
     const toggle = panel.querySelector('.panel-toggle');
     if (!toggle) return;
 
-    toggle.addEventListener('click', () => {
-      const collapsed = panel.classList.toggle('collapsed');
-      toggle.textContent = collapsed ? '▴' : '▾';
-      toggle.title = collapsed ? t('panel.expandTitle') : t('panel.collapseTitle');
-      toggle.setAttribute('aria-label', collapsed ? t('panel.expandTitle') : t('panel.collapseTitle'));
-      if (!collapsed && editorWaveform) {
-        editorWaveform.resize();
-        editorWaveform.draw();
-      }
+    const ctrl = createCollapsibleToggle(toggle, {
+      isCollapsed: () => panel.classList.contains('collapsed'),
+      setCollapsed: (collapsed) => {
+        panel.style.flexBasis = '';
+        panel.classList.toggle('collapsed', collapsed);
+      },
+      onExpand: () => {
+        if (editorWaveform) {
+          editorWaveform.resize();
+          editorWaveform.draw();
+        }
+      },
     });
+    controllers.push({ panel, ctrl });
   });
+  return controllers;
 }
 
 const MAX_PADS = 27;
@@ -212,8 +503,8 @@ const pads = createPads(document.getElementById('pad-grid'), {
   },
   async onTrigger(position, data) {
     if (!data || !data.videoId) return;
-    await triggerPad(position, data);
-    ws.send('pad:trigger', { position, videoId: data.videoId });
+    const played = await triggerPad(position, data);
+    if (played) ws.send('pad:trigger', { position, videoId: data.videoId });
   },
   onRelease(position, data) {
     if (data?.triggerMode === 'gate') {
@@ -252,20 +543,25 @@ const MASTER_FX_STORAGE = 'puma-master-fx';
 
 function percentToFreq(percent) {
   const min = Math.log10(20);
-  const max = Math.log10(20000);
+  const max = Math.log10(10000);
   const log = min + (percent / 100) * (max - min);
   return Math.pow(10, log);
 }
 
 function freqToPercent(freq) {
   const min = Math.log10(20);
-  const max = Math.log10(20000);
+  const max = Math.log10(10000);
   return ((Math.log10(freq) - min) / (max - min)) * 100;
 }
 
 function formatHz(freq) {
   if (freq >= 1000) return `${(freq / 1000).toFixed(1)}kHz`;
   return `${Math.round(freq)}Hz`;
+}
+
+function formatSemitones(semitones) {
+  const n = Math.round(semitones);
+  return `${n > 0 ? '+' : ''}${n}`;
 }
 
 function loadMasterFxDefaults() {
@@ -277,9 +573,6 @@ function loadMasterFxDefaults() {
   }
   return {
     volume: 1,
-    cutoff: 100,
-    resonance: 0.1,
-    reverb: 0,
     delayTime: 250,
     delayFeedback: 0,
   };
@@ -304,30 +597,6 @@ function initMasterControls() {
       toDisplay: (v) => `${Math.round(v * 100)}%`,
       apply: (v) => audio.setMasterVolume(v),
       key: 'volume',
-    },
-    {
-      id: 'master-cutoff',
-      displayId: 'master-cutoff-value',
-      toValue: (v) => parseInt(v, 10),
-      toDisplay: (v) => formatHz(percentToFreq(v)),
-      apply: (v) => audio.setMasterFilter({ cutoff: percentToFreq(v) }),
-      key: 'cutoff',
-    },
-    {
-      id: 'master-resonance',
-      displayId: 'master-resonance-value',
-      toValue: (v) => parseFloat(v),
-      toDisplay: (v) => v.toFixed(1),
-      apply: (v) => audio.setMasterFilter({ resonance: v }),
-      key: 'resonance',
-    },
-    {
-      id: 'master-reverb',
-      displayId: 'master-reverb-value',
-      toValue: (v) => parseFloat(v),
-      toDisplay: (v) => `${Math.round(v * 100)}%`,
-      apply: (v) => audio.setMasterReverb(v),
-      key: 'reverb',
     },
     {
       id: 'master-delay-time',
@@ -389,6 +658,147 @@ function initMasterControls() {
   return { getState, applyState };
 }
 
+// PAD FX knob strip — mirrors the master-strip's knob look, but instead of a
+// global value it edits whichever pad is currently selected (like the
+// physical per-pad knobs on an AKAI MPC). Changes are auto-committed to the
+// pad's stored data AND, if that pad is currently sounding, applied live via
+// audio.updateVoiceFx so you can hear the change while it plays.
+function initPadFxControls() {
+  const labelEl = document.getElementById('pad-fx-label');
+
+  const controls = [
+    {
+      id: 'pad-fx-pitch',
+      displayId: 'pad-fx-pitch-value',
+      key: 'pitch',
+      default: 0,
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => formatSemitones(v),
+    },
+    {
+      id: 'pad-fx-speed',
+      displayId: 'pad-fx-speed-value',
+      key: 'speed',
+      default: 100,
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => `${v}%`,
+    },
+    {
+      id: 'pad-fx-cutoff',
+      displayId: 'pad-fx-cutoff-value',
+      key: 'cutoff',
+      default: 100,
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => formatHz(percentToFreq(v)),
+      toEngine: (v) => percentToFreq(v),
+    },
+    {
+      id: 'pad-fx-resonance',
+      displayId: 'pad-fx-resonance-value',
+      key: 'resonance',
+      default: 0.1,
+      toValue: (v) => parseFloat(v),
+      toDisplay: (v) => v.toFixed(1),
+    },
+    {
+      id: 'pad-fx-reverb-send',
+      displayId: 'pad-fx-reverb-send-value',
+      key: 'reverbSend',
+      default: 0,
+      toValue: (v) => parseInt(v, 10) / 100,
+      toDisplay: (v) => `${Math.round(v * 100)}%`,
+    },
+    {
+      id: 'pad-fx-delay-send',
+      displayId: 'pad-fx-delay-send-value',
+      key: 'delaySend',
+      default: 0,
+      toValue: (v) => parseInt(v, 10) / 100,
+      toDisplay: (v) => `${Math.round(v * 100)}%`,
+    },
+  ];
+
+  // P.SHIFT/STRETCH are checkboxes, not knobs — separate from `controls`
+  // (boolean `checked` instead of a `value` range, `change` instead of
+  // `input`) but committed/applied through the same autoCommitPad +
+  // audio.updateVoiceFx pattern.
+  const switches = [
+    { id: 'pad-fx-pshift', key: 'pitchShiftOn', default: true },
+    { id: 'pad-fx-stretch', key: 'stretchOn', default: false },
+  ];
+
+  // The Speed knob is only meaningful while STRETCH is on, in addition to
+  // the usual "no pad selected" gate every other control follows — kept as
+  // its own function so the STRETCH checkbox's change handler can re-run it
+  // without touching the rest of the strip.
+  function updateSpeedDisabled() {
+    const speedInput = document.getElementById('pad-fx-speed');
+    const stretchInput = document.getElementById('pad-fx-stretch');
+    if (!speedInput) return;
+    const { selectedPosition } = store.get();
+    speedInput.disabled = !selectedPosition || !(stretchInput && stretchInput.checked);
+  }
+
+  for (const ctrl of controls) {
+    const input = document.getElementById(ctrl.id);
+    const display = document.getElementById(ctrl.displayId);
+    if (!input) continue;
+
+    input.addEventListener('input', () => {
+      const { selectedPosition } = store.get();
+      if (!selectedPosition) return;
+
+      const value = ctrl.toValue(input.value);
+      if (display) display.textContent = ctrl.toDisplay(value);
+      autoCommitPad(selectedPosition, { [ctrl.key]: value });
+      audio.updateVoiceFx(selectedPosition, { [ctrl.key]: ctrl.toEngine ? ctrl.toEngine(value) : value });
+    });
+  }
+
+  for (const sw of switches) {
+    const input = document.getElementById(sw.id);
+    if (!input) continue;
+
+    input.addEventListener('change', () => {
+      const { selectedPosition } = store.get();
+      if (!selectedPosition) return;
+
+      autoCommitPad(selectedPosition, { [sw.key]: input.checked });
+      audio.updateVoiceFx(selectedPosition, { [sw.key]: input.checked });
+      if (sw.key === 'stretchOn') updateSpeedDisabled();
+    });
+  }
+
+  function bindPad(position, data) {
+    if (labelEl) {
+      labelEl.textContent = position ? t('pads.fxGroupSelected', { position }) : t('pads.fxGroupNone');
+    }
+
+    for (const ctrl of controls) {
+      const input = document.getElementById(ctrl.id);
+      const display = document.getElementById(ctrl.displayId);
+      if (!input) continue;
+
+      input.disabled = !position;
+      const value = position ? (data?.[ctrl.key] ?? ctrl.default) : ctrl.default;
+      input.value = value;
+      if (display) display.textContent = ctrl.toDisplay(value);
+    }
+
+    for (const sw of switches) {
+      const input = document.getElementById(sw.id);
+      if (!input) continue;
+
+      input.disabled = !position;
+      input.checked = position ? (data?.[sw.key] ?? sw.default) : sw.default;
+    }
+
+    updateSpeedDisabled();
+  }
+
+  return { bindPad };
+}
+
 async function triggerPad(position, data) {
   if (!data || !data.videoId) return;
 
@@ -408,32 +818,49 @@ async function triggerPad(position, data) {
     return;
   }
 
-  await audio.play(position, {
-    videoId: data.videoId,
-    start: data.start,
-    end: data.end,
-    volume: data.volume ?? 0.2,
-    loop: data.loop ?? false,
-    triggerMode: data.triggerMode ?? 'oneshot',
-  });
+  try {
+    await audio.play(position, {
+      videoId: data.videoId,
+      start: data.start,
+      end: data.end,
+      volume: data.volume ?? 0.2,
+      loop: data.loop ?? false,
+      triggerMode: data.triggerMode ?? 'oneshot',
+      pitch: data.pitch ?? 0,
+      cutoff: percentToFreq(data.cutoff ?? 100),
+      resonance: data.resonance ?? 0.1,
+      reverbSend: data.reverbSend ?? 0,
+      delaySend: data.delaySend ?? 0,
+      pitchShiftOn: data.pitchShiftOn ?? true,
+      stretchOn: data.stretchOn ?? false,
+      speed: data.speed ?? 100,
+    });
+  } catch (err) {
+    showToast(t('toast.playbackFailed', { message: err.message }), 'error');
+    return;
+  }
 
   videoDisplay.playSegment({
     videoId: data.videoId,
     url: videoUrl,
     start: data.start,
     end: data.end,
+    muted: true,
   });
+
+  return true;
 }
 
 // Pad Editor
 const editorEl = document.getElementById('pad-editor');
 
 function renderPadEditor(position, data) {
-  cleanupPreviewVideo();
   if (editorWaveform) {
     editorWaveform.destroy();
     editorWaveform = null;
   }
+
+  if (padFxControls) padFxControls.bindPad(position, data);
 
   if (!position) {
     editorEl.innerHTML = `<p class="hint">${t('editor.clickPadToEdit')}</p>`;
@@ -464,10 +891,6 @@ function renderPadEditor(position, data) {
       <select id="pad-video">${videoOptions}</select>
     </div>
     <div class="form-row">
-      <label>${t('editor.previewField')}</label>
-      <video id="editor-preview-video" class="editor-preview-video" controls playsinline></video>
-    </div>
-    <div class="form-row">
       <label>${t('editor.transportField')}</label>
       <div class="transport-bar">
         <button id="btn-preview-play" class="btn btn-transport" title="${t('editor.playTitle')}"><span class="material-symbols-outlined">play_arrow</span></button>
@@ -483,6 +906,7 @@ function renderPadEditor(position, data) {
       <label class="waveform-label-row">
         <span>${t('waveform.label')}</span>
         <span class="help-icon" data-tooltip="${t('tip.waveformHelp')}">?</span>
+        <button type="button" class="link-btn" id="btn-waveform-help-more">${t('waveform.seeMore')}</button>
         <span class="waveform-zoom-controls">
           <button type="button" class="btn-zoom" id="btn-waveform-zoom-out" title="${t('waveform.zoomOutTitle')}">-</button>
           <span class="zoom-level" id="waveform-zoom-level">1x</span>
@@ -547,92 +971,24 @@ function renderPadEditor(position, data) {
       autoCommitPad(position, { start: segment.start, end: segment.end });
     },
     onSeek: (time) => {
-      if (editorPreviewVideo) {
-        editorPreviewVideo.currentTime = time;
-      }
+      videoDisplay.seek(time);
+      if (editorWaveform) editorWaveform.setPlayhead(time);
+      updatePreviewTime();
     },
-    onZoom: () => {
-      updateZoomDisplay();
+    onZoom: (level) => {
+      const zoomLevelEl = document.getElementById('waveform-zoom-level');
+      if (zoomLevelEl) zoomLevelEl.textContent = `${Math.round(level * 10) / 10}x`;
     },
   });
 
   if (data?.videoId) {
     loadEditorWaveform(data.videoId, data.start ?? 0, data.end ?? 0);
-    setupPreviewVideo(data.videoId);
+    videoDisplay.load(data.videoId, api.getVideoUrl(data.videoId));
   }
 
   updateWaveformStatus(data?.start ?? 0, data?.end ?? 0);
 
   initEditorListeners(position);
-}
-
-function setupPreviewVideo(videoId) {
-  cleanupPreviewVideo();
-
-  const oldVideo = document.getElementById('editor-preview-video');
-  if (!oldVideo) return;
-
-  // Replace the element to guarantee a clean slate and fresh listeners.
-  const newVideo = oldVideo.cloneNode(false);
-  newVideo.removeAttribute('src');
-  newVideo.src = api.getVideoUrl(videoId);
-  newVideo.volume = previewVolume;
-  oldVideo.parentNode.replaceChild(newVideo, oldVideo);
-  editorPreviewVideo = newVideo;
-
-  editorPreviewVideo.__readyPromise = new Promise((resolve, reject) => {
-    const onLoaded = () => {
-      resolve();
-      editorPreviewVideo.removeEventListener('error', onError);
-    };
-    const onError = () => {
-      reject(new Error('Preview video failed to load'));
-      editorPreviewVideo.removeEventListener('loadedmetadata', onLoaded);
-    };
-    editorPreviewVideo.addEventListener('loadedmetadata', onLoaded, { once: true });
-    editorPreviewVideo.addEventListener('error', onError, { once: true });
-  });
-
-  editorPreviewVideo.addEventListener('error', () => {
-    showToast(t('toast.previewLoadFailed'), 'error');
-  });
-
-  editorPreviewVideo.addEventListener('seeked', () => {
-    if (editorWaveform) editorWaveform.setPlayhead(editorPreviewVideo.currentTime);
-    updatePreviewTime();
-  });
-
-  editorPreviewVideo.addEventListener('timeupdate', () => {
-    const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
-    if (editorPreviewVideo.currentTime >= segment.end && !editorPreviewVideo.paused) {
-      editorPreviewVideo.pause();
-      editorPreviewVideo.currentTime = segment.start;
-    }
-    if (editorWaveform) {
-      editorWaveform.setPlayhead(editorPreviewVideo.currentTime);
-    }
-    updatePreviewTime();
-  });
-
-  editorPreviewVideo.addEventListener('pause', () => {
-    const playBtn = document.getElementById('btn-preview-play');
-    const pauseBtn = document.getElementById('btn-preview-pause');
-    if (playBtn && pauseBtn) {
-      playBtn.classList.remove('hidden');
-      pauseBtn.classList.add('hidden');
-    }
-  });
-
-  editorPreviewVideo.load();
-}
-
-function cleanupPreviewVideo() {
-  if (editorPreviewVideo) {
-    editorPreviewVideo.pause();
-    editorPreviewVideo.removeAttribute('src');
-    editorPreviewVideo.load();
-    editorPreviewVideo = null;
-  }
 }
 
 async function loadEditorWaveform(videoId, start, end) {
@@ -650,8 +1006,9 @@ async function loadEditorWaveform(videoId, start, end) {
 
 function updatePreviewTime() {
   const timeEl = document.getElementById('preview-time');
-  if (timeEl && editorPreviewVideo) {
-    timeEl.textContent = formatTime(editorPreviewVideo.currentTime);
+  const video = videoDisplay.getVideo();
+  if (timeEl && video) {
+    timeEl.textContent = formatTime(video.currentTime);
   }
 }
 
@@ -662,13 +1019,15 @@ function updateWaveformStatus(start, end) {
   statusEl.textContent = t('waveform.status', { in: formatTime(start), out: formatTime(end), dur: formatTime(duration) });
 }
 
-function syncPlayhead() {
-  if (editorPreviewVideo && editorWaveform) {
-    editorWaveform.setPlayhead(editorPreviewVideo.currentTime);
+function syncPlayhead(videoId) {
+  const video = videoDisplay.getVideo();
+  if (videoDisplay.getVideoId() !== videoId) return; // otro pad tomó el video compartido
+  if (video && editorWaveform) {
+    editorWaveform.setPlayhead(video.currentTime);
     updatePreviewTime();
   }
-  if (editorPreviewVideo && !editorPreviewVideo.paused) {
-    requestAnimationFrame(syncPlayhead);
+  if (video && !video.paused) {
+    requestAnimationFrame(() => syncPlayhead(videoId));
   }
 }
 
@@ -699,6 +1058,10 @@ function initEditorListeners(position) {
   const zoomOutBtn = document.getElementById('btn-waveform-zoom-out');
   const zoomResetBtn = document.getElementById('btn-waveform-zoom-reset');
   const zoomLevelEl = document.getElementById('waveform-zoom-level');
+  const waveformHelpMoreBtn = document.getElementById('btn-waveform-help-more');
+  if (waveformHelpMoreBtn) {
+    waveformHelpMoreBtn.addEventListener('click', openWaveformHelpModal);
+  }
 
   keyCapture.addEventListener('click', () => {
     keyCapture.classList.add('listening');
@@ -733,7 +1096,7 @@ function initEditorListeners(position) {
   videoSelect.addEventListener('change', async () => {
     const videoId = videoSelect.value;
     if (videoId) {
-      setupPreviewVideo(videoId);
+      videoDisplay.load(videoId, api.getVideoUrl(videoId));
       await loadEditorWaveform(videoId, 0, 0);
       if (editorWaveform) {
         const segment = editorWaveform.getSegment();
@@ -795,7 +1158,8 @@ function initEditorListeners(position) {
       const pct = Math.round(previewVolume * 100);
       const previewVolumeValue = document.getElementById('pad-preview-volume-value');
       if (previewVolumeValue) previewVolumeValue.textContent = `${pct}%`;
-      if (editorPreviewVideo) editorPreviewVideo.volume = previewVolume;
+      const previewVideo = videoDisplay.getVideo();
+      if (previewVideo) previewVideo.volume = previewVolume;
     });
   }
 
@@ -843,23 +1207,28 @@ function initEditorListeners(position) {
 
   // Preview transport
   async function playPreview() {
-    if (!editorPreviewVideo) return;
+    const videoId = videoSelect.value;
+    if (!videoId) return;
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
-    if (!editorPreviewVideo.paused) return;
 
     playBtn.disabled = true;
     pauseBtn.disabled = true;
     try {
-      if (editorPreviewVideo.__readyPromise) {
-        await editorPreviewVideo.__readyPromise;
+      const ok = await videoDisplay.playSegment({
+        videoId,
+        url: api.getVideoUrl(videoId),
+        start: segment.start,
+        end: segment.end,
+        muted: false,
+        volume: previewVolume,
+        onStop: () => setTransportState(false),
+      });
+      if (!ok) {
+        showToast(t('toast.previewPlayFailed'), 'error');
+        return;
       }
-      editorPreviewVideo.currentTime = segment.start;
-      await editorPreviewVideo.play();
       setTransportState(true);
-      syncPlayhead();
-    } catch (err) {
-      console.warn('Preview play failed:', err);
-      showToast(t('toast.previewPlayFailed'), 'error');
+      syncPlayhead(videoId);
     } finally {
       playBtn.disabled = false;
       pauseBtn.disabled = false;
@@ -867,16 +1236,14 @@ function initEditorListeners(position) {
   }
 
   function pausePreview() {
-    if (!editorPreviewVideo) return;
-    editorPreviewVideo.pause();
+    videoDisplay.pause();
     setTransportState(false);
   }
 
   function stopPreview() {
-    if (!editorPreviewVideo) return;
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
-    editorPreviewVideo.pause();
-    editorPreviewVideo.currentTime = segment.start;
+    videoDisplay.pause();
+    videoDisplay.seek(segment.start);
     setTransportState(false);
     if (editorWaveform) editorWaveform.setPlayhead(segment.start);
     updatePreviewTime();
@@ -888,8 +1255,9 @@ function initEditorListeners(position) {
 
   // Mark in/out
   setInBtn.addEventListener('click', () => {
-    if (!editorPreviewVideo) return;
-    const time = editorPreviewVideo.currentTime;
+    const previewVideo = videoDisplay.getVideo();
+    if (!previewVideo) return;
+    const time = previewVideo.currentTime;
     const end = parseTime(endInput.value);
     startInput.value = formatTime(time);
     endInput.value = formatTime(Math.max(time + 0.1, end));
@@ -897,8 +1265,9 @@ function initEditorListeners(position) {
   });
 
   setOutBtn.addEventListener('click', () => {
-    if (!editorPreviewVideo) return;
-    const time = editorPreviewVideo.currentTime;
+    const previewVideo = videoDisplay.getVideo();
+    if (!previewVideo) return;
+    const time = previewVideo.currentTime;
     const start = parseTime(startInput.value);
     endInput.value = formatTime(Math.max(time, start + 0.1));
     updateSegmentFromInputs();
@@ -907,7 +1276,11 @@ function initEditorListeners(position) {
   saveBtn.addEventListener('click', () => {
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
     const key = keyCapture.dataset.key || '';
+    // Tune/Cutoff/Resonance/Reverb Send/Delay Send are now edited live via the
+    // PAD knob strip (auto-committed there) — start from the pad's existing
+    // data so this explicit "Apply to PAD" doesn't wipe those out.
     const data = {
+      ...(pads.getData(position) || {}),
       position,
       key,
       label: document.getElementById('pad-label').value || `PAD ${position}`,
@@ -939,14 +1312,27 @@ function initEditorListeners(position) {
 }
 
 // Video Library
+let maxCacheGb = 5;
+
 async function refreshVideos() {
   try {
-    const { videos, active } = await api.listVideos();
+    const { videos, active, maxCacheGb: serverMaxCacheGb } = await api.listVideos();
+    if (typeof serverMaxCacheGb === 'number') maxCacheGb = serverMaxCacheGb;
     store.set({ videos, activeDownloads: active });
     renderVideoList();
+    updateCacheUsage();
   } catch (err) {
     showToast(t('toast.videosLoadFailed', { message: err.message }), 'error');
   }
+}
+
+function updateCacheUsage() {
+  const el = document.getElementById('cache-usage');
+  if (!el) return;
+  const { videos } = store.get();
+  const usedBytes = videos.reduce((sum, v) => sum + (v.sizeBytes || 0), 0);
+  const usedGb = (usedBytes / 1024 ** 3).toFixed(1);
+  el.textContent = t('video.cacheUsage', { used: usedGb, total: maxCacheGb });
 }
 
 function statusLabel(status) {
@@ -1002,6 +1388,11 @@ document.getElementById('add-video-form').addEventListener('submit', async (e) =
   const url = input.value.trim();
   if (!url) return;
 
+  if (!isValidYouTubeUrl(url)) {
+    showToast(t('toast.invalidYoutubeUrl'), 'error');
+    return;
+  }
+
   try {
     const result = await api.addVideo(url);
     input.value = '';
@@ -1027,6 +1418,11 @@ if (importBtn && importInput) {
     if (!file) return;
     await sessionManager.importFromZip(file);
   });
+}
+
+const viewLogsBtn = document.getElementById('btn-view-logs');
+if (viewLogsBtn) {
+  viewLogsBtn.addEventListener('click', openLogsModal);
 }
 
 // WebSocket events
@@ -1089,16 +1485,109 @@ if (exportBtn) {
   });
 }
 
-// Locale switcher
+const clearCacheBtn = document.getElementById('btn-clear-cache');
+if (clearCacheBtn) {
+  clearCacheBtn.addEventListener('click', () => {
+    openConfirmModal({
+      title: t('cache.confirmTitle'),
+      body: t('cache.confirmBody'),
+      confirmLabel: t('cache.confirmButton'),
+      onConfirm: async () => {
+        try {
+          await api.deleteAllVideos();
+          await refreshVideos();
+          showToast(t('toast.cacheCleared'), 'success');
+        } catch (err) {
+          showToast(t('toast.cacheClearFailed', { message: err.message }), 'error');
+        }
+      },
+    });
+  });
+}
+
+// YouTube cookies (fallback auth for downloads the PO-token provider alone
+// can't get past) — a Save/Clear pair plus a quiet status dot; the server
+// never returns the cookie contents back, only { configured }.
+function initCookiesSettings() {
+  const dot = document.getElementById('cookies-status-dot');
+  const textarea = document.getElementById('cookies-input');
+  const saveBtn = document.getElementById('btn-cookies-save');
+  const clearBtn = document.getElementById('btn-cookies-clear');
+  if (!dot || !textarea || !saveBtn || !clearBtn) return;
+
+  async function refreshStatus() {
+    try {
+      const { configured } = await api.getCookiesStatus();
+      dot.classList.toggle('on', !!configured);
+      dot.title = configured ? t('cookies.statusOn') : t('cookies.statusOff');
+    } catch (err) {
+      console.error('Failed to load cookies status:', err);
+    }
+  }
+
+  saveBtn.addEventListener('click', async () => {
+    const content = textarea.value.trim();
+    if (!content) return;
+
+    try {
+      await api.saveCookies(content);
+      textarea.value = '';
+      showToast(t('toast.cookiesSaved'), 'success');
+      await refreshStatus();
+    } catch (err) {
+      showToast(t('toast.cookiesSaveFailed', { message: err.message }), 'error');
+    }
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    try {
+      await api.clearCookies();
+      textarea.value = '';
+      showToast(t('toast.cookiesCleared'), 'success');
+      await refreshStatus();
+    } catch (err) {
+      showToast(t('toast.cookiesSaveFailed', { message: err.message }), 'error');
+    }
+  });
+
+  refreshStatus();
+}
+
+// Locale switcher — a custom button+popover instead of a native <select>,
+// since <option> can't embed the SVG flag icon (plain text only), which made
+// the flag emoji unreliable across platforms/fonts.
 function initLocaleSwitcher() {
-  const localeSelect = document.getElementById('locale-select');
-  if (!localeSelect) return;
+  const wrap = document.getElementById('locale-switcher');
+  const btn = document.getElementById('locale-btn');
+  const menu = document.getElementById('locale-menu');
+  if (!wrap || !btn || !menu) return;
 
-  localeSelect.value = getLocale();
+  const flagEl = btn.querySelector('[data-flag]');
+  const codeEl = btn.querySelector('[data-code]');
 
-  localeSelect.addEventListener('change', () => {
-    setLocale(localeSelect.value);
+  function paint(locale) {
+    const option = menu.querySelector(`[data-locale="${locale}"]`) || menu.querySelector('[data-locale="en"]');
+    flagEl.innerHTML = option.querySelector('.locale-flag').innerHTML;
+    codeEl.textContent = option.querySelector('span:last-child').textContent;
+  }
+
+  function setOpen(open) {
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  }
+
+  paint(getLocale());
+
+  btn.addEventListener('click', () => setOpen(menu.hidden));
+
+  menu.addEventListener('click', (e) => {
+    const option = e.target.closest('[data-locale]');
+    if (!option) return;
+
+    setLocale(option.dataset.locale);
     applyTranslations(document);
+    paint(option.dataset.locale);
+    setOpen(false);
 
     // Re-render already-painted dynamic content that depends on text.
     const selectedPosition = store.get().selectedPosition;
@@ -1109,19 +1598,72 @@ function initLocaleSwitcher() {
     renderVideoList();
     sessionManager.refreshList();
   });
+
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  });
 }
 
 // Initial load
-initPanelToggle();
-initLibrarySidenav();
+const panelToggleControllers = initPanelToggle();
+const librarySidenavToggle = initLibrarySidenav();
+const padsSidenavToggle = initPadsSidenav();
 initLocaleSwitcher();
+initTooltipPositioning();
+
+const librarySidenavEl = document.getElementById('library-sidenav');
+if (librarySidenavEl && librarySidenavToggle) {
+  makeResizable(librarySidenavEl, {
+    edge: 'left',
+    dimension: 'width',
+    min: 220,
+    max: () => Math.min(500, window.innerWidth * 0.9),
+    collapseBelow: 286,
+    onCollapse: () => librarySidenavToggle.collapse(),
+  });
+}
+
+const padsSidenavEl = document.getElementById('pads-sidenav');
+if (padsSidenavEl && padsSidenavToggle) {
+  makeResizable(padsSidenavEl, {
+    edge: 'right',
+    dimension: 'width',
+    min: 300,
+    max: () => Math.min(720, window.innerWidth * 0.6),
+    collapseBelow: 360,
+    onCollapse: () => padsSidenavToggle.collapse(),
+  });
+}
+
+const padEditorPanelEl = document.getElementById('pad-editor-panel');
+const padEditorToggle = panelToggleControllers.find((c) => c.panel === padEditorPanelEl)?.ctrl;
+if (padEditorPanelEl && padEditorToggle) {
+  makeResizable(padEditorPanelEl, {
+    edge: 'top',
+    dimension: 'height',
+    min: 160,
+    max: 600,
+    collapseBelow: 332,
+    onCollapse: () => padEditorToggle.collapse(),
+    onResizeEnd: () => {
+      if (editorWaveform) {
+        editorWaveform.resize();
+        editorWaveform.draw();
+      }
+    },
+  });
+}
+
 applyTranslations(document);
 masterFxControls = initMasterControls();
+padFxControls = initPadFxControls();
+initCookiesSettings();
+enhanceKnobs(document);
 refreshVideos();
 setInterval(refreshVideos, 2000);
 setInterval(() => sessionManager.refreshList(), 10000);
 
 showToast(t('toast.appReady'), 'success');
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', cleanupPreviewVideo);

@@ -135,6 +135,35 @@ export function createSessionManager(options = {}) {
     }
   }
 
+  // Re-queues a download for any videoId a session's pads reference that
+  // isn't already in the video store (e.g. evicted from cache, or cleared
+  // via "Clear cache"). Shared by both load() and importFromZip() so a
+  // session's videos come back regardless of how it was opened.
+  async function reconcileSessionVideos(session) {
+    const videoIds = [...new Set((session.pads || []).map((p) => p.videoId).filter(Boolean))];
+    if (videoIds.length === 0) return;
+
+    const failed = [];
+    try {
+      const { videos: known } = await api.listVideos();
+      const knownIds = new Set(known.map((v) => v.videoId));
+      for (const videoId of videoIds) {
+        if (knownIds.has(videoId)) continue;
+        try {
+          await api.addVideo(`https://youtu.be/${videoId}`);
+        } catch (err) {
+          console.error(`Failed to reconcile video ${videoId}:`, err);
+          failed.push(videoId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to reconcile session videos:', err);
+    }
+    if (failed.length > 0) {
+      showToast(t('toast.sessionImportVideosFailed', { count: failed.length }), 'warning');
+    }
+  }
+
   async function load(name) {
     if (!name) return;
     try {
@@ -142,8 +171,10 @@ export function createSessionManager(options = {}) {
       currentSession = session;
       nameInput.value = session.name;
       select.value = '';
+      select.blur();
       showToast(t('toast.sessionLoaded', { name: session.name }), 'success');
       if (onSessionLoad) onSessionLoad(session);
+      await reconcileSessionVideos(session);
       return session;
     } catch (err) {
       showToast(t('toast.sessionLoadFailed', { message: err.message }), 'error');
@@ -170,34 +201,7 @@ export function createSessionManager(options = {}) {
       showToast(t('toast.sessionImported', { name: saved.name }), 'success');
       await refreshList();
       if (onSessionLoad) onSessionLoad(saved);
-
-      // Reconcile videos referenced by the imported pads: queue any that
-      // aren't already loaded through the same flow used for a normal
-      // YouTube URL submission (api.addVideo). Each video is reconciled
-      // independently so one missing/unavailable source doesn't hide the
-      // failure of the others, and any failures are surfaced to the user
-      // instead of only logged (the source video may no longer exist on
-      // YouTube, which this ZIP-only import path cannot recover from).
-      const videoIds = [...new Set((saved.pads || []).map((p) => p.videoId).filter(Boolean))];
-      const failedVideoIds = [];
-      try {
-        const { videos: knownVideos } = await api.listVideos();
-        const knownIds = new Set(knownVideos.map((v) => v.videoId));
-        for (const videoId of videoIds) {
-          if (knownIds.has(videoId)) continue;
-          try {
-            await api.addVideo(`https://youtu.be/${videoId}`);
-          } catch (err) {
-            console.error(`Failed to reconcile video ${videoId} from imported session:`, err);
-            failedVideoIds.push(videoId);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to reconcile videos from imported session:', err);
-      }
-      if (failedVideoIds.length > 0) {
-        showToast(t('toast.sessionImportVideosFailed', { count: failedVideoIds.length }), 'warning');
-      }
+      await reconcileSessionVideos(saved);
 
       return saved;
     } catch (err) {
@@ -249,8 +253,8 @@ export function createSessionManager(options = {}) {
       <button class="session-modal-close" id="modal-cancel" title="${t('common.cancel')}">&times;</button>
     `;
 
+    backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
-    document.body.appendChild(modal);
 
     let escHandler = null;
 
@@ -284,7 +288,9 @@ export function createSessionManager(options = {}) {
     }
 
     modal.querySelector('#modal-cancel').addEventListener('click', cleanup);
-    backdrop.addEventListener('click', cleanup);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) cleanup();
+    });
 
     escHandler = (e) => {
       if (e.key === 'Escape') {

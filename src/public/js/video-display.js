@@ -42,8 +42,10 @@ export function createVideoDisplay(element, options = {}) {
     }
   }
 
-  async function playSegment({ videoId, url, start, end }) {
+  async function playSegment({ videoId, url, start, end, muted, volume, onStop: onSegmentStop }) {
     load(videoId, url);
+    if (typeof muted === 'boolean') video.muted = muted;
+    if (typeof volume === 'number') video.volume = volume;
     video.removeEventListener('timeupdate', updateOverlay);
     video.addEventListener('timeupdate', updateOverlay);
 
@@ -66,6 +68,7 @@ export function createVideoDisplay(element, options = {}) {
       await video.play();
     } catch (err) {
       console.warn('Video play failed:', err);
+      return false;
     }
 
     const duration = (end - start) * 1000;
@@ -74,7 +77,19 @@ export function createVideoDisplay(element, options = {}) {
       stopTimer = null;
       video.removeEventListener('timeupdate', updateOverlay);
       onStop();
+      if (typeof onSegmentStop === 'function') onSegmentStop();
     }, Math.max(duration, 50));
+    return true;
+  }
+
+  function seek(time) {
+    video.currentTime = time;
+    updateOverlay();
+  }
+
+  function pause() {
+    video.pause();
+    clearStopTimer();
   }
 
   function stop() {
@@ -88,7 +103,10 @@ export function createVideoDisplay(element, options = {}) {
     load,
     unload,
     playSegment,
+    seek,
+    pause,
     stop,
     getVideo: () => video,
+    getVideoId: () => currentVideoId,
   };
 }

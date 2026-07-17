@@ -22,7 +22,15 @@ export function createPads(container, options = {}, initialCount = 9) {
       <span class="pad-color-indicator"></span>
     `;
 
-    el.addEventListener('click', () => select(position));
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button > 0) return;
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      select(position);
+      trigger(position);
+    });
+    el.addEventListener('pointerup', () => release(position));
+    el.addEventListener('pointercancel', () => release(position));
 
     return el;
   }
@@ -82,7 +90,13 @@ export function createPads(container, options = {}, initialCount = 9) {
       return;
     }
 
-    el.className = `pad ${selectedPosition === position ? 'selected' : ''}`;
+    // classList.toggle here (not a full className reset) so it doesn't wipe
+    // out the 'playing'/'active' classes that setPlaying()/trigger() manage
+    // independently — otherwise any auto-committed edit (e.g. moving a PAD
+    // FX knob) while a pad is looping would visually kill its "playing" glow
+    // even though the audio itself never stopped.
+    el.classList.remove('empty');
+    el.classList.toggle('selected', selectedPosition === position);
     el.querySelector('.pad-key').textContent = data.key || '';
     el.querySelector('.pad-label').textContent = data.label || `PAD ${position}`;
     el.querySelector('.pad-time').textContent = `${formatTime(data.start)} - ${formatTime(data.end)}`;

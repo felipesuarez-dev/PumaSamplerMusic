@@ -39,6 +39,10 @@ export const api = {
     return request(`/api/videos/${videoId}`, { method: 'DELETE' });
   },
 
+  deleteAllVideos() {
+    return request('/api/videos', { method: 'DELETE' });
+  },
+
   getAudioUrl(videoId) {
     return `${API_BASE}/api/videos/${videoId}/audio`;
   },
@@ -68,5 +72,24 @@ export const api = {
 
   exportSession(name) {
     return `${API_BASE}/api/sessions/${encodeURIComponent(name)}/export`;
+  },
+
+  getLogs() {
+    return request('/api/logs');
+  },
+
+  getCookiesStatus() {
+    return request('/api/settings/cookies');
+  },
+
+  saveCookies(content) {
+    return request('/api/settings/cookies', {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  },
+
+  clearCookies() {
+    return request('/api/settings/cookies', { method: 'DELETE' });
   },
 };
