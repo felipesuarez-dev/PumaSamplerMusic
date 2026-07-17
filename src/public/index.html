@@ -284,9 +284,10 @@
                 <span class="help-icon" data-i18n-tooltip="tip.addVideo" data-tooltip="Only YouTube links are supported. Downloads happen in the background.">?</span>
               </div>
             </form>
-            <ul id="video-list" class="video-list">
+            <ul id="video-list" class="video-list auto-scroll">
               <!-- Videos populated by JS -->
             </ul>
+            <div class="video-pager" id="video-pager" hidden></div>
             <div class="cache-footer">
               <span class="cache-usage" id="cache-usage"></span>
               <button type="button" class="btn btn-secondary btn-clear-cache" id="btn-clear-cache" data-i18n="video.clearCache">Clear cache</button>
@@ -294,10 +295,12 @@
             <details class="cookies-settings" id="cookies-settings">
               <summary class="cookies-summary">
                 <span data-i18n="cookies.title">YouTube cookies</span>
+                <button type="button" class="help-icon" id="cookies-help-btn" data-i18n-tooltip="cookies.guideTitle" data-tooltip="How to get your cookies">?</button>
+                <span class="cookies-status-text" id="cookies-status-text"></span>
                 <span class="cookies-status-dot" id="cookies-status-dot"></span>
               </summary>
               <p class="cookies-hint" data-i18n="cookies.hint">Paste the content of a cookies.txt exported from your browser to authenticate downloads.</p>
-              <textarea id="cookies-input" rows="4" class="cookies-textarea"></textarea>
+              <textarea id="cookies-input" rows="4" class="cookies-textarea" placeholder="# Netscape HTTP Cookie File…"></textarea>
               <div class="cookies-actions">
                 <button type="button" class="btn btn-secondary" id="btn-cookies-save" data-i18n="cookies.save">Save</button>
                 <button type="button" class="btn btn-secondary" id="btn-cookies-clear" data-i18n="cookies.clear">Clear</button>

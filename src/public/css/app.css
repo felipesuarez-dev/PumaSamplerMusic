@@ -1526,6 +1526,13 @@ body {
   flex: 1;
 }
 
+.video-library {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .video-list {
   list-style: none;
   margin: 0;
@@ -1533,6 +1540,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.video-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-pager {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.video-pager-info {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .cache-footer {
@@ -1577,6 +1605,19 @@ body {
 
 .cookies-summary::-webkit-details-marker {
   display: none;
+}
+
+/* The help icon is a real <button> here (needs to be focusable/clickable),
+   unlike the hover-only <span> tooltips used elsewhere — keep its look but
+   swap the inherited help cursor for a pointer. */
+.cookies-summary .help-icon {
+  cursor: pointer;
+}
+
+.cookies-status-text {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 
 .cookies-status-dot {
@@ -1676,7 +1717,8 @@ body {
   color: var(--success);
 }
 
-.video-item .status.downloading {
+.video-item .status.downloading,
+.video-item .status.retrying {
   background: rgba(251, 191, 36, 0.12);
   color: var(--warning);
 }
@@ -1684,6 +1726,16 @@ body {
 .video-item .status.error {
   background: var(--danger-dim);
   color: var(--danger);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-item-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .video-item button {
@@ -2071,7 +2123,8 @@ body {
   color: var(--text);
 }
 
-.waveform-help-modal {
+.waveform-help-modal,
+.cookies-guide-modal {
   max-width: min(480px, 90vw);
 }
 
@@ -2117,11 +2170,13 @@ body {
   color: var(--danger);
 }
 
-.waveform-help-modal section {
+.waveform-help-modal section,
+.cookies-guide-modal section {
   margin-top: 16px;
 }
 
-.waveform-help-modal section:first-of-type {
+.waveform-help-modal section:first-of-type,
+.cookies-guide-modal section:first-of-type {
   margin-top: 8px;
 }
 
@@ -2133,7 +2188,8 @@ body {
   letter-spacing: 0.04em;
 }
 
-.waveform-help-modal p {
+.waveform-help-modal p,
+.cookies-guide-modal p {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;

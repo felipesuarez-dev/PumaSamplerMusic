@@ -118,6 +118,75 @@ function openWaveformHelpModal() {
   window.addEventListener('keydown', onKeydown);
 }
 
+// Cloned from openWaveformHelpModal()'s pattern (same backdrop/modal classes,
+// Escape/close handling) — walks the user through exporting a cookies.txt,
+// the only manual step the bot-check call-to-action can't do for them.
+function openCookiesGuideModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'session-modal cookies-guide-modal';
+  modal.innerHTML = `
+    <h3>${t('cookies.guideTitle')}</h3>
+    <p class="session-modal-hint">${t('cookies.guideIntro')}</p>
+    <section><p>1. ${t('cookies.guideStep1')}</p></section>
+    <section><p>2. ${t('cookies.guideStep2')}</p></section>
+    <section><p>3. ${t('cookies.guideStep3')}</p></section>
+    <section><p>4. ${t('cookies.guideStep4')}</p></section>
+    <section><p>5. ${t('cookies.guideStep5')}</p></section>
+    <p class="session-modal-hint">${t('cookies.guideNote')}</p>
+    <button class="session-modal-close" id="cookies-guide-close" title="${t('common.cancel')}">&times;</button>
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  function cleanup() {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    window.removeEventListener('keydown', onKeydown);
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') cleanup();
+  }
+
+  modal.querySelector('#cookies-guide-close').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', onKeydown);
+}
+
+// Bot-check call-to-action target: expands the Video Library sidenav (if
+// collapsed), opens the cookies <details> panel, scrolls it into view, and
+// opens the guided export steps — the full path from "download failed" to
+// "here's exactly what to do".
+function openCookiesPanel() {
+  const sidenav = document.getElementById('library-sidenav');
+  const toggle = document.getElementById('library-sidenav-toggle');
+  if (sidenav && !sidenav.classList.contains('expanded')) {
+    // Same classList/aria mechanism as createCollapsibleToggle's setCollapsed
+    // + sync(): librarySidenavToggle only exposes collapse(), not expand().
+    sidenav.style.width = '';
+    sidenav.classList.add('expanded');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'true');
+      const title = t('panel.collapseTitle');
+      toggle.title = title;
+      toggle.setAttribute('aria-label', title);
+    }
+  }
+
+  const details = document.getElementById('cookies-settings');
+  if (details) {
+    details.open = true;
+    details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  openCookiesGuideModal();
+}
+
 // Log viewer modal — same modal/backdrop pattern as the others in this app.
 async function openLogsModal() {
   const backdrop = document.createElement('div');
@@ -1313,6 +1382,8 @@ function initEditorListeners(position) {
 
 // Video Library
 let maxCacheGb = 5;
+let videoPage = 1;
+const VIDEO_PAGE_SIZE = 5;
 
 async function refreshVideos() {
   try {
@@ -1339,6 +1410,16 @@ function statusLabel(status) {
   return t(`video.status.${status}`) || status;
 }
 
+// Same bot-check signature the server itself matches when deciding whether a
+// failure is retryable (src/services/downloader.js) — used here purely to
+// pick which localized message to show, not to make any retry decision.
+// DRM included: label/music videos withhold real formats without an
+// authenticated session, so cookies are the remedy for both failure modes.
+const BOT_CHECK_PATTERN = /Sign in to confirm|bot-check|DRM protected/i;
+// Rotated/expired cookies: same CTA (the guide), but a message that says
+// "re-export" rather than implying cookies were never configured.
+const STALE_COOKIES_PATTERN = /cookies are no longer valid|cookies expired/i;
+
 function renderVideoList() {
   const list = document.getElementById('video-list');
   const { videos, activeDownloads } = store.get();
@@ -1346,31 +1427,78 @@ function renderVideoList() {
 
   const all = [
     ...videos.map((v) => ({ ...v, status: 'ready' })),
-    ...activeDownloads.map((a) => ({ videoId: a.videoId, title: a.videoId, duration: 0, status: a.status, progress: a.progress })),
+    ...activeDownloads.map((a) => ({
+      videoId: a.videoId,
+      title: a.videoId,
+      duration: 0,
+      status: a.status,
+      progress: a.progress,
+      error: a.error,
+      retryAttempt: a.retryAttempt,
+      retryMax: a.retryMax,
+    })),
   ];
 
-  for (const video of all) {
+  const totalPages = Math.max(1, Math.ceil(all.length / VIDEO_PAGE_SIZE));
+  videoPage = Math.min(videoPage, totalPages);
+  const pageItems = all.slice((videoPage - 1) * VIDEO_PAGE_SIZE, videoPage * VIDEO_PAGE_SIZE);
+
+  for (const video of pageItems) {
     const li = document.createElement('li');
     li.className = 'video-item';
 
-    const statusText = video.status === 'downloading'
-      ? `<span class="loading-spinner"></span>${Math.round(video.progress || 0)}%`
-      : statusLabel(video.status);
+    let statusHtml;
+    if (video.status === 'downloading') {
+      statusHtml = `<span class="status downloading"><span class="loading-spinner"></span>${Math.round(video.progress || 0)}%</span>`;
+    } else if (video.status === 'retrying') {
+      // Same spinner as 'downloading' — this reads as self-healing in
+      // progress, not as a failure, so it deliberately avoids the error look.
+      const label = t('video.statusRetrying', { attempt: video.retryAttempt, max: video.retryMax });
+      statusHtml = `<span class="status retrying"><span class="loading-spinner"></span>${label}</span>`;
+    } else if (video.status === 'error') {
+      const fullError = video.error || '';
+      if (STALE_COOKIES_PATTERN.test(fullError)) {
+        statusHtml = `
+          <div class="video-item-status-wrap">
+            <span class="status error" title="${escapeHtml(fullError)}">${t('video.errorStaleCookies')}</span>
+            <button type="button" class="link-btn" data-cookies-cta>${t('video.configureCookies')}</button>
+          </div>
+        `;
+      } else if (BOT_CHECK_PATTERN.test(fullError)) {
+        statusHtml = `
+          <div class="video-item-status-wrap">
+            <span class="status error" title="${escapeHtml(fullError)}">${t('video.errorBotCheck')}</span>
+            <button type="button" class="link-btn" data-cookies-cta>${t('video.configureCookies')}</button>
+          </div>
+        `;
+      } else {
+        const label = fullError || statusLabel('error');
+        statusHtml = `<span class="status error" title="${escapeHtml(fullError)}">${escapeHtml(label)}</span>`;
+      }
+    } else {
+      statusHtml = `<span class="status ${video.status}">${statusLabel(video.status)}</span>`;
+    }
 
     li.innerHTML = `
       <div class="video-item-info">
         <span class="video-item-title">${escapeHtml(video.title || video.videoId)}</span>
         <span class="video-item-meta">${formatTime(video.duration || 0)} · ${video.videoId}</span>
       </div>
-      <span class="status ${video.status}">${statusText}</span>
+      ${statusHtml}
       <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
     `;
 
-    li.querySelector('button').addEventListener('click', async () => {
+    const ctaBtn = li.querySelector('[data-cookies-cta]');
+    if (ctaBtn) {
+      ctaBtn.addEventListener('click', () => openCookiesPanel());
+    }
+
+    li.querySelector('button[data-id]').addEventListener('click', async () => {
       try {
         await api.deleteVideo(video.videoId);
         audio.unload(video.videoId);
         showToast(t('toast.videoRemoved', { name: video.title || video.videoId }), 'success');
+        videoPage = 1;
         await refreshVideos();
       } catch (err) {
         showToast(t('toast.removeFailed', { message: err.message }), 'error');
@@ -1378,6 +1506,41 @@ function renderVideoList() {
     });
 
     list.appendChild(li);
+  }
+
+  renderVideoPager(totalPages);
+}
+
+function renderVideoPager(totalPages) {
+  const pager = document.getElementById('video-pager');
+  if (!pager) return;
+
+  if (totalPages <= 1) {
+    pager.hidden = true;
+    pager.innerHTML = '';
+    return;
+  }
+
+  pager.hidden = false;
+  pager.innerHTML = `
+    <button type="button" class="btn btn-secondary btn-pager" id="video-page-prev" title="${t('video.pagePrev')}" aria-label="${t('video.pagePrev')}" ${videoPage <= 1 ? 'disabled' : ''}>&lsaquo;</button>
+    <span class="video-pager-info">${t('video.pageInfo', { page: videoPage, total: totalPages })}</span>
+    <button type="button" class="btn btn-secondary btn-pager" id="video-page-next" title="${t('video.pageNext')}" aria-label="${t('video.pageNext')}" ${videoPage >= totalPages ? 'disabled' : ''}>&rsaquo;</button>
+  `;
+
+  const prevBtn = document.getElementById('video-page-prev');
+  const nextBtn = document.getElementById('video-page-next');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      videoPage = Math.max(1, videoPage - 1);
+      renderVideoList();
+    });
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      videoPage = Math.min(totalPages, videoPage + 1);
+      renderVideoList();
+    });
   }
 }
 
@@ -1401,6 +1564,7 @@ document.getElementById('add-video-form').addEventListener('submit', async (e) =
     } else {
       showToast(t('toast.videoQueued'), 'info');
     }
+    videoPage = 1;
     await refreshVideos();
   } catch (err) {
     showToast(t('toast.addFailed', { message: err.message }), 'error');
@@ -1428,7 +1592,22 @@ if (viewLogsBtn) {
 // WebSocket events
 ws.on('download:progress', refreshVideos);
 ws.on('download:ready', refreshVideos);
-ws.on('download:error', refreshVideos);
+ws.on('download:error', (payload) => {
+  const message = payload && payload.error;
+  if (message) {
+    const toastMessage = STALE_COOKIES_PATTERN.test(message)
+      ? t('toast.staleCookiesDetected')
+      : BOT_CHECK_PATTERN.test(message)
+        ? t('toast.botCheckDetected')
+        : message;
+    showToast(toastMessage, 'error');
+  }
+  refreshVideos();
+});
+// Self-healing in progress (see downloader.js's retry loop) — the list
+// rendering already shows the 'retrying' spinner/label, so this just keeps
+// the active-downloads state fresh; no toast (would spam on every attempt).
+ws.on('download:retrying', refreshVideos);
 ws.on('video:removed', refreshVideos);
 
 // Session Manager
@@ -1510,16 +1689,20 @@ if (clearCacheBtn) {
 // never returns the cookie contents back, only { configured }.
 function initCookiesSettings() {
   const dot = document.getElementById('cookies-status-dot');
+  const statusText = document.getElementById('cookies-status-text');
   const textarea = document.getElementById('cookies-input');
   const saveBtn = document.getElementById('btn-cookies-save');
   const clearBtn = document.getElementById('btn-cookies-clear');
+  const helpBtn = document.getElementById('cookies-help-btn');
   if (!dot || !textarea || !saveBtn || !clearBtn) return;
 
   async function refreshStatus() {
     try {
       const { configured } = await api.getCookiesStatus();
       dot.classList.toggle('on', !!configured);
-      dot.title = configured ? t('cookies.statusOn') : t('cookies.statusOff');
+      const label = configured ? t('cookies.statusOn') : t('cookies.statusOff');
+      dot.title = label;
+      if (statusText) statusText.textContent = label;
     } catch (err) {
       console.error('Failed to load cookies status:', err);
     }
@@ -1527,13 +1710,17 @@ function initCookiesSettings() {
 
   saveBtn.addEventListener('click', async () => {
     const content = textarea.value.trim();
-    if (!content) return;
+    if (!content) {
+      showToast(t('toast.cookiesEmpty'), 'error');
+      return;
+    }
 
     try {
       await api.saveCookies(content);
       textarea.value = '';
-      showToast(t('toast.cookiesSaved'), 'success');
+      showToast(t('toast.cookiesSavedRetry'), 'success');
       await refreshStatus();
+      await refreshVideos();
     } catch (err) {
       showToast(t('toast.cookiesSaveFailed', { message: err.message }), 'error');
     }
@@ -1549,6 +1736,16 @@ function initCookiesSettings() {
       showToast(t('toast.cookiesSaveFailed', { message: err.message }), 'error');
     }
   });
+
+  if (helpBtn) {
+    // Clicking inside a <summary> toggles the parent <details> — stop that
+    // so the guide modal can open without also flipping the panel open/shut.
+    helpBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openCookiesGuideModal();
+    });
+  }
 
   refreshStatus();
 }
