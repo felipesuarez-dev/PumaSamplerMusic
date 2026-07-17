@@ -83,6 +83,7 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 | `Espacio` | Reproducir/pausar previsualización |
 | `Ctrl` + rueda del mouse | Hace zoom in/out en la forma de onda en la posición del cursor |
 | `Escape` (configurable) | Detiene todos los PADs y pausa el video |
+| `Ctrl/Cmd + Shift + H` | Mostrar/ocultar barra superior |
 
 ## Cómo funciona
 

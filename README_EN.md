@@ -83,6 +83,7 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 | `Space` | Play/pause preview |
 | `Ctrl` + mouse wheel | Zoom the waveform in/out at the cursor position |
 | `Escape` (configurable) | Stop all pads and pause the video |
+| `Ctrl/Cmd + Shift + H` | Show/hide the top bar |
 
 ## How it works
 
