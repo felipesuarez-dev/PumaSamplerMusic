@@ -88,10 +88,11 @@ async function readZipEntryText(file, entryName) {
 }
 
 export function createSessionManager(options = {}) {
-  const { onSessionLoad, onSessionListChange, showToast } = options;
+  const { onSessionLoad, onSessionListChange, showToast, openConfirmModal } = options;
   const nameInput = document.getElementById('session-name');
   const saveBtn = document.getElementById('btn-save-session');
   const newBtn = document.getElementById('btn-new-session');
+  const manageBtn = document.getElementById('btn-manage-sessions');
   const select = document.getElementById('session-select');
 
   let currentSession = null;
@@ -311,11 +312,138 @@ export function createSessionManager(options = {}) {
     showNewSessionModal();
   }
 
+  function formatSessionDate(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // Scalable alternative to the flat combo: a searchable, scrollable list with
+  // per-row load/delete. Session names are user text, so rows are built with
+  // textContent and the delete-confirm body is pre-escaped (openConfirmModal
+  // injects its body via innerHTML).
+  async function showManageSessionsModal() {
+    if (modalOpen) return;
+    modalOpen = true;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'session-modal-backdrop';
+    const modal = document.createElement('div');
+    modal.className = 'session-modal sessions-manager';
+    modal.innerHTML = `
+      <h3>${t('session.modalManageTitle')}</h3>
+      <input type="text" class="sessions-manager-search" id="sessions-manager-search" placeholder="${escapeHtml(t('session.searchPlaceholder'))}" autocomplete="off">
+      <div class="sessions-manager-list" id="sessions-manager-list"></div>
+      <button class="session-modal-close" id="sessions-manager-close" title="${escapeHtml(t('common.cancel'))}">&times;</button>
+    `;
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    const listEl = modal.querySelector('#sessions-manager-list');
+    const searchEl = modal.querySelector('#sessions-manager-search');
+    let sessions = [];
+
+    function renderList() {
+      const term = searchEl.value.trim().toLowerCase();
+      const filtered = term ? sessions.filter((s) => s.name.toLowerCase().includes(term)) : sessions;
+      listEl.innerHTML = '';
+
+      if (filtered.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'sessions-manager-empty';
+        empty.textContent = sessions.length === 0 ? t('session.emptyList') : t('session.emptySearch');
+        listEl.appendChild(empty);
+        return;
+      }
+
+      for (const s of filtered) {
+        const row = document.createElement('div');
+        row.className = 'sessions-manager-row';
+
+        const info = document.createElement('div');
+        info.className = 'sessions-manager-info';
+        const nameEl = document.createElement('span');
+        nameEl.className = 'sessions-manager-name';
+        nameEl.textContent = s.name;
+        const metaEl = document.createElement('span');
+        metaEl.className = 'sessions-manager-meta';
+        const date = formatSessionDate(s.updatedAt || s.createdAt);
+        metaEl.textContent = t('session.padCount', { count: s.padCount || 0 }) + (date ? ` · ${date}` : '');
+        info.append(nameEl, metaEl);
+
+        const actions = document.createElement('div');
+        actions.className = 'sessions-manager-actions';
+        const loadBtn = document.createElement('button');
+        loadBtn.type = 'button';
+        loadBtn.className = 'btn';
+        loadBtn.textContent = t('session.load');
+        loadBtn.addEventListener('click', () => {
+          cleanup();
+          load(s.name);
+        });
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn-danger';
+        delBtn.textContent = t('session.delete');
+        delBtn.addEventListener('click', () => requestDelete(s.name));
+        actions.append(loadBtn, delBtn);
+
+        row.append(info, actions);
+        listEl.appendChild(row);
+      }
+    }
+
+    async function performDelete(name) {
+      try {
+        await api.deleteSession(name);
+        showToast(t('toast.sessionDeleted', { name }), 'success');
+        sessions = await refreshList();
+        renderList();
+      } catch (err) {
+        showToast(t('toast.sessionDeleteFailed', { message: err.message }), 'error');
+      }
+    }
+
+    function requestDelete(name) {
+      if (openConfirmModal) {
+        openConfirmModal({
+          title: t('session.deleteConfirmTitle'),
+          body: t('session.deleteConfirmBody', { name: escapeHtml(name) }),
+          confirmLabel: t('session.deleteConfirmButton'),
+          onConfirm: () => performDelete(name),
+        });
+      } else if (window.confirm(t('session.deleteConfirmBody', { name }))) {
+        performDelete(name);
+      }
+    }
+
+    function cleanup() {
+      closeModal(modal, backdrop);
+      window.removeEventListener('keydown', escHandler);
+    }
+    function escHandler(e) {
+      if (e.key === 'Escape') cleanup();
+    }
+
+    searchEl.addEventListener('input', renderList);
+    modal.querySelector('#sessions-manager-close').addEventListener('click', cleanup);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) cleanup();
+    });
+    window.addEventListener('keydown', escHandler);
+
+    sessions = await refreshList();
+    renderList();
+    searchEl.focus();
+  }
+
   saveBtn.addEventListener('click', () => {
     if (options.onSaveRequest) options.onSaveRequest();
   });
 
   newBtn.addEventListener('click', newSession);
+  if (manageBtn) manageBtn.addEventListener('click', showManageSessionsModal);
 
   select.addEventListener('change', (e) => {
     if (e.target.value) {
@@ -329,6 +457,7 @@ export function createSessionManager(options = {}) {
     save,
     load,
     newSession,
+    showManageSessionsModal,
     refreshList,
     importFromZip,
     getCurrent: () => currentSession,
