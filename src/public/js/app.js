@@ -751,6 +751,27 @@ function initPadsSidenav() {
   });
 }
 
+// Header dropdown menus (kebab + locale) register a close callback here so
+// they can be dismissed together when the header collapses or the window
+// resizes — events that move/hide their trigger button without a click, which
+// would otherwise leave a fixed-positioned menu floating detached.
+const headerMenuClosers = [];
+function closeHeaderMenus() {
+  headerMenuClosers.forEach((fn) => fn());
+}
+window.addEventListener('resize', closeHeaderMenus);
+
+// Places a fixed-positioned dropdown just under its trigger button, right-
+// aligned to the button and clamped inside the viewport. Called after the menu
+// is unhidden so offsetWidth reflects real layout; kept synchronous so there's
+// no frame painted at a stale position.
+function positionMenu(menu, btn) {
+  const r = btn.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.style.left = `${Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8))}px`;
+}
+
 // Header collapse is persisted (unlike the sidenavs, which always reopen on
 // reload) — precedent is STOP_KEY_STORAGE/MASTER_FX_STORAGE, not
 // initLibrarySidenav. The grip stays visible either way so reloading with a
@@ -768,6 +789,7 @@ function initHeaderToggle() {
     setCollapsed: (collapsed) => {
       app.classList.toggle('header-hidden', collapsed);
       localStorage.setItem(HEADER_HIDDEN_STORAGE, String(collapsed));
+      closeHeaderMenus();
     },
     expandTitleKey: 'header.showTitle',
     collapseTitleKey: 'header.hideTitle',
@@ -2015,7 +2037,10 @@ function initLocaleSwitcher() {
   function setOpen(open) {
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', String(open));
+    if (open) positionMenu(menu, btn);
   }
+
+  headerMenuClosers.push(() => setOpen(false));
 
   paint(getLocale());
 
@@ -2062,7 +2087,10 @@ function initHeaderMoreMenu() {
   function setOpen(open) {
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', String(open));
+    if (open) positionMenu(menu, btn);
   }
+
+  headerMenuClosers.push(() => setOpen(false));
 
   btn.addEventListener('click', () => setOpen(menu.hidden));
 

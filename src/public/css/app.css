@@ -169,14 +169,17 @@ body {
 }
 
 .locale-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  /* Fixed for the same reason as .header-more-menu — escapes the header's
+     overflow:hidden. JS positions it from the locale button's rect on open. */
+  position: fixed;
   z-index: 1000;
   list-style: none;
   margin: 0;
   padding: 6px;
   min-width: 100px;
+  max-width: calc(100vw - 16px);
+  max-height: 70vh;
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -221,14 +224,19 @@ body {
 }
 
 .header-more-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  /* Fixed (not absolute) so the dropdown escapes #header-collapse-inner's
+     overflow:hidden, which would otherwise clip it. JS sets top/left from the
+     trigger button's rect on open. No header ancestor uses transform, so fixed
+     resolves against the viewport. */
+  position: fixed;
   z-index: 1000;
   list-style: none;
   margin: 0;
   padding: 6px;
   min-width: 150px;
+  max-width: calc(100vw - 16px);
+  max-height: 70vh;
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
