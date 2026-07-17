@@ -545,7 +545,8 @@ button.is-proxied {
   display: flex;
   overflow: hidden;
   background: var(--surface);
-  border: 1px solid var(--border);
+  /* No outer border — reads flat/line-free like the video panel and navbar. */
+  border: none;
   border-radius: var(--radius);
   transition: width 0.25s ease, height 0.25s ease;
 }
@@ -613,10 +614,6 @@ button.is-proxied {
 
 .pads-sidenav.expanded .pads-sidenav-body {
   opacity: 1;
-}
-
-.pads-sidenav:not(.expanded) .resize-handle {
-  display: none;
 }
 
 .right-panel {
@@ -690,10 +687,37 @@ button.is-proxied {
 .library-sidenav-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   flex-shrink: 0;
   margin-bottom: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Swap-places icon button in the PADS / Video Library headers. */
+.panel-swap-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: var(--transition);
+}
+
+.panel-swap-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.panel-swap-btn .material-symbols-outlined {
+  font-size: 1.1rem;
 }
 
 /* .pads-sidenav-body centers its children (align-items: center), so the
@@ -796,6 +820,19 @@ button.is-proxied {
   justify-content: center;
 }
 
+/* PAD FX labels/values one step smaller than the General strip. Scoped to
+   .pad-fx-strip because .master-label/.master-value are shared with it. */
+.pad-fx-strip .master-label,
+.pad-fx-strip .master-value {
+  font-size: 0.62rem;
+}
+
+/* Reserve room for a 2-line label so a longer localized label can't shift one
+   knob column out of alignment with the others. */
+.pad-fx-strip .master-label-row {
+  min-height: 2.4em;
+}
+
 .master-group {
   display: flex;
   flex-direction: column;
@@ -829,10 +866,10 @@ button.is-proxied {
   margin: 0 4px;
 }
 
-/* Composite flex item bundling the P.SHIFT/STRETCH switches and the Speed
-   knob so the pair wraps as a single unit — the FX knob sequence after it
-   never splits mid-row on narrow viewports (see app.js initPadFxControls). */
-.stretch-group {
+/* P.SHIFT/STRETCH switches, grouped at the far left of the PAD FX row.
+   justify-content:center vertically centers the two switches against the
+   knob controls in the stretched row. */
+.pad-fx-switch-group {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -900,7 +937,7 @@ button.is-proxied {
 }
 
 .mini-switch-label {
-  font-size: 0.55rem;
+  font-size: 0.5rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1305,6 +1342,12 @@ button.is-proxied {
   flex-direction: column;
 }
 
+/* PAD EDITOR reads flat/line-free like PADS and the video panel — drop the
+   outer box border (id override so any future .panel reuse keeps its border). */
+#pad-editor-panel {
+  border: none;
+}
+
 /* Shared toggle mechanics (no sizing opinions) for anything that collapses
    via the panel-header/panel-content grid-row pattern — the real PAD Editor
    panel and the two mini knob strips below it. */
@@ -1428,8 +1471,10 @@ button.is-proxied {
   cursor: ns-resize;
 }
 
-.library-sidenav:not(.expanded) .resize-handle,
-.collapsible-box.collapsed .resize-handle {
+/* Only the mini control strips hide their handle when collapsed (they have
+   none anyway). PADS / VIDEOS / PAD EDITOR keep a grabbable handle while
+   collapsed so dragging the edge re-expands and resizes them. */
+.collapsible-strip.collapsed .resize-handle {
   display: none;
 }
 
@@ -1676,7 +1721,11 @@ button.is-proxied {
   color: var(--text);
 }
 
-.help-icon::after {
+/* Shared fixed-position tooltip bubble (never clipped by overflow ancestors).
+   Positioned from --tip-x/--tip-y set in initTooltipPositioning. Used by the
+   help-icon "?" badges and by video-item info blocks (.has-tip). */
+.help-icon::after,
+.has-tip::after {
   content: attr(data-tooltip);
   position: fixed;
   top: var(--tip-y, 0px);
@@ -1692,8 +1741,6 @@ button.is-proxied {
   text-transform: none;
   line-height: 1.5;
   white-space: pre-line;
-  min-width: 220px;
-  max-width: 280px;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.15s ease;
@@ -1701,11 +1748,25 @@ button.is-proxied {
   box-shadow: var(--shadow);
 }
 
-.help-icon:hover::after {
+.help-icon::after {
+  text-align: center;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.has-tip::after {
+  text-align: left;
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.help-icon:hover::after,
+.has-tip:hover::after {
   opacity: 1;
 }
 
-.help-icon.tip-below::after {
+.help-icon.tip-below::after,
+.has-tip.tip-below::after {
   transform: translate(-50%, 0);
 }
 
@@ -2167,6 +2228,15 @@ button.is-proxied {
     font-size: 0.65rem;
   }
 
+  .pad-fx-strip .master-label,
+  .pad-fx-strip .master-value {
+    font-size: 0.58rem;
+  }
+
+  .pad-fx-strip .master-divider {
+    display: none;
+  }
+
   .right-panel {
     flex: 0 0 auto;
     height: auto;
@@ -2290,6 +2360,11 @@ button.is-proxied {
   .master-label,
   .master-value {
     font-size: 0.6rem;
+  }
+
+  .pad-fx-strip .master-label,
+  .pad-fx-strip .master-value {
+    font-size: 0.54rem;
   }
 }
 
@@ -2435,6 +2510,74 @@ button.is-proxied {
   text-align: center;
   font-weight: 700;
   color: var(--text);
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.settings-toggle-row .settings-label {
+  margin-bottom: 0;
+}
+
+.settings-autosave-options {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-autosave-interval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-autosave-interval .settings-label {
+  margin-bottom: 0;
+}
+
+.settings-autosave-interval input {
+  width: 80px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  outline: none;
+}
+
+/* Auto-save status indicator (beside the Save button) */
+.autosave-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  background: var(--surface-light);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.autosave-status .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.autosave-status.saving {
+  color: var(--accent);
+}
+
+.autosave-status.saving .material-symbols-outlined {
+  animation: autosave-spin 1s linear infinite;
+}
+
+@keyframes autosave-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Sessions manager modal */

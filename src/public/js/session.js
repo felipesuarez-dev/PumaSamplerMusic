@@ -107,6 +107,9 @@ export function createSessionManager(options = {}) {
         option.textContent = session.name;
         select.appendChild(option);
       }
+      // Reflect the active session as the selected option (no-op if it isn't
+      // in the list). currentSession drives selection everywhere.
+      select.value = currentSession ? currentSession.name : '';
       if (onSessionListChange) onSessionListChange(sessions);
       return sessions;
     } catch (err) {
@@ -115,21 +118,21 @@ export function createSessionManager(options = {}) {
     }
   }
 
-  async function save(sessionData) {
+  async function save(sessionData, { silent = false } = {}) {
     const name = (sessionData.name || '').trim();
     if (!name) {
-      showToast(t('toast.enterSessionName'), 'warning');
+      if (!silent) showToast(t('toast.enterSessionName'), 'warning');
       return;
     }
 
     try {
       const saved = await api.saveSession({ ...sessionData, name });
       currentSession = saved;
-      showToast(t('toast.sessionSaved', { name: saved.name }), 'success');
+      if (!silent) showToast(t('toast.sessionSaved', { name: saved.name }), 'success');
       await refreshList();
       return saved;
     } catch (err) {
-      showToast(t('toast.sessionSaveFailed', { message: err.message }), 'error');
+      if (!silent) showToast(t('toast.sessionSaveFailed', { message: err.message }), 'error');
       throw err;
     }
   }
@@ -168,7 +171,7 @@ export function createSessionManager(options = {}) {
     try {
       const session = await api.loadSession(name);
       currentSession = session;
-      select.value = '';
+      select.value = session.name;
       select.blur();
       showToast(t('toast.sessionLoaded', { name: session.name }), 'success');
       if (onSessionLoad) onSessionLoad(session);
@@ -194,9 +197,8 @@ export function createSessionManager(options = {}) {
 
       const saved = await api.saveSession(session);
       currentSession = saved;
-      select.value = '';
       showToast(t('toast.sessionImported', { name: saved.name }), 'success');
-      await refreshList();
+      await refreshList(); // sets select.value from currentSession
       if (onSessionLoad) onSessionLoad(saved);
       await reconcileSessionVideos(saved);
 

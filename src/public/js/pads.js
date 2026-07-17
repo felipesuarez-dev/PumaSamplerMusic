@@ -1,7 +1,12 @@
 import { buildKeyCombo, formatTime } from './state.js';
 
 export function createPads(container, options = {}, initialCount = 9) {
-  const { onSelect, onTrigger, onRelease, onBeforeChange, onAfterSwap, onContextMenu } = options;
+  const { onSelect, onTrigger, onRelease, onBeforeChange, onAfterSwap, onContextMenu, onChange } = options;
+  // Fired after any pad-data mutation (edit/resize/swap/move/copy/clear) so the
+  // app can react (e.g. auto-save). NOT fired by setAll (that's a session load).
+  function emitChange() {
+    if (onChange) onChange();
+  }
   const pads = new Map(); // position -> pad element
   const state = new Map(); // position -> pad data
   let selectedPosition = null;
@@ -92,11 +97,13 @@ export function createPads(container, options = {}, initialCount = 9) {
     if (selectedPosition) {
       render(selectedPosition);
     }
+    emitChange();
   }
 
   function update(position, data) {
     state.set(position, data);
     render(position);
+    emitChange();
   }
 
   function render(position) {
@@ -202,6 +209,7 @@ export function createPads(container, options = {}, initialCount = 9) {
     render(to);
     resyncSelection([from, to]);
     if (onAfterSwap) onAfterSwap(from, to, Boolean(dataTo));
+    emitChange();
   }
 
   // Copies every setting except the key: server validation requires a unique,
@@ -215,6 +223,7 @@ export function createPads(container, options = {}, initialCount = 9) {
     state.set(to, copy);
     render(to);
     resyncSelection([to]);
+    emitChange();
     return copy;
   }
 
@@ -224,6 +233,7 @@ export function createPads(container, options = {}, initialCount = 9) {
     state.set(position, null);
     render(position);
     resyncSelection([position]);
+    emitChange();
   }
 
   // --- Organize-mode pointer gesture (drag to swap/move, long-press for menu) ---

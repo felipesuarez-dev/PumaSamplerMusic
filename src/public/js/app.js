@@ -48,6 +48,13 @@ const FONT_SCALE_STORAGE = 'puma-font-scale';
 const FONT_SCALE_DEFAULT = 16;
 const FONT_SCALE_MIN = 12;
 const FONT_SCALE_MAX = 22;
+const AUTOSAVE_ENABLED_STORAGE = 'puma-autosave-enabled';
+const AUTOSAVE_MODE_STORAGE = 'puma-autosave-mode'; // 'change' | 'interval'
+const AUTOSAVE_INTERVAL_STORAGE = 'puma-autosave-interval'; // seconds
+const AUTOSAVE_INTERVAL_DEFAULT = 30;
+const AUTOSAVE_INTERVAL_MIN = 5;
+const AUTOSAVE_INTERVAL_MAX = 600;
+const PADS_VIDEOS_SWAP_STORAGE = 'puma-pads-videos-swapped';
 let stopKey = localStorage.getItem(STOP_KEY_STORAGE) || 'escape';
 const savedPreviewVolume = parseFloat(localStorage.getItem(PREVIEW_VOLUME_STORAGE));
 let previewVolume = Number.isNaN(savedPreviewVolume) ? 0.30 : savedPreviewVolume;
@@ -239,6 +246,89 @@ function applyFontScale(px) {
   return clamped;
 }
 
+// --- Auto-save -------------------------------------------------------------
+// Saves the active session automatically. Mode 'change' debounces ~1s after
+// the last edit (a knob drag = one save); mode 'interval' saves every N s when
+// something changed. Silent (no toasts) and a no-op until a named session
+// exists. A Word-style indicator beside Save reflects saving/saved.
+let sessionDirty = false;
+let autosaveDebounceTimer = null;
+let autosaveIntervalTimer = null;
+let autosaveSavedResetTimer = null;
+
+function isAutosaveEnabled() {
+  return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) === 'true';
+}
+function getAutosaveMode() {
+  return localStorage.getItem(AUTOSAVE_MODE_STORAGE) === 'interval' ? 'interval' : 'change';
+}
+function getAutosaveInterval() {
+  const stored = parseInt(localStorage.getItem(AUTOSAVE_INTERVAL_STORAGE), 10);
+  if (Number.isNaN(stored)) return AUTOSAVE_INTERVAL_DEFAULT;
+  return Math.min(AUTOSAVE_INTERVAL_MAX, Math.max(AUTOSAVE_INTERVAL_MIN, stored));
+}
+
+function setAutosaveStatus(state) {
+  const el = document.getElementById('autosave-status');
+  if (!el) return;
+  el.hidden = !isAutosaveEnabled();
+  if (!isAutosaveEnabled()) return;
+  const icon = el.querySelector('.material-symbols-outlined');
+  const label = el.querySelector('.autosave-status-label');
+  el.classList.toggle('saving', state === 'saving');
+  if (state === 'saving') {
+    if (icon) icon.textContent = 'sync';
+    if (label) label.textContent = t('autosave.saving');
+  } else if (state === 'saved') {
+    if (icon) icon.textContent = 'check_circle';
+    if (label) label.textContent = t('autosave.saved');
+  } else {
+    if (icon) icon.textContent = 'cloud_done';
+    if (label) label.textContent = t('autosave.idle');
+  }
+}
+
+async function runAutosave() {
+  if (!isAutosaveEnabled()) return;
+  const current = sessionManager.getCurrent();
+  if (!current?.name) return; // nothing to autosave into yet
+  const data = collectSessionData();
+  if (!data) return; // a guard aborted (e.g. pad missing key) — skip silently
+  setAutosaveStatus('saving');
+  try {
+    await sessionManager.save({ ...data, name: current.name }, { silent: true });
+    sessionDirty = false;
+    setAutosaveStatus('saved');
+    clearTimeout(autosaveSavedResetTimer);
+    autosaveSavedResetTimer = setTimeout(() => setAutosaveStatus('idle'), 2000);
+  } catch {
+    setAutosaveStatus('idle'); // save() already logged; stay quiet
+  }
+}
+
+function markDirty() {
+  sessionDirty = true;
+  if (!isAutosaveEnabled() || getAutosaveMode() !== 'change') return;
+  clearTimeout(autosaveDebounceTimer);
+  autosaveDebounceTimer = setTimeout(runAutosave, 1000);
+}
+
+function restartAutosaveInterval() {
+  clearInterval(autosaveIntervalTimer);
+  autosaveIntervalTimer = null;
+  if (isAutosaveEnabled() && getAutosaveMode() === 'interval') {
+    autosaveIntervalTimer = setInterval(() => {
+      if (sessionDirty) runAutosave();
+    }, getAutosaveInterval() * 1000);
+  }
+}
+
+// Called when autosave settings change: refresh indicator + interval timer.
+function refreshAutosave() {
+  setAutosaveStatus('idle');
+  restartAutosaveInterval();
+}
+
 // --- Settings modal --------------------------------------------------------
 function openSettingsModal() {
   const backdrop = document.createElement('div');
@@ -261,12 +351,62 @@ function openSettingsModal() {
         <button class="btn btn-secondary" id="settings-font-reset">${t('settings.fontReset')}</button>
       </div>
     </div>
+    <div class="settings-section">
+      <label class="settings-toggle-row">
+        <input type="checkbox" id="settings-autosave-enabled">
+        <span class="settings-label">${t('settings.autosaveLabel')}</span>
+      </label>
+      <div class="settings-autosave-options" id="settings-autosave-options">
+        <select id="settings-autosave-mode" class="session-modal-select">
+          <option value="change">${t('settings.autosaveModeChange')}</option>
+          <option value="interval">${t('settings.autosaveModeInterval')}</option>
+        </select>
+        <div class="settings-autosave-interval" id="settings-autosave-interval-row">
+          <label class="settings-label" for="settings-autosave-interval">${t('settings.autosaveIntervalLabel')}</label>
+          <input type="number" id="settings-autosave-interval" min="${AUTOSAVE_INTERVAL_MIN}" max="${AUTOSAVE_INTERVAL_MAX}" step="1">
+        </div>
+      </div>
+    </div>
     <button class="session-modal-close" id="settings-close" title="${t('common.cancel')}">&times;</button>
   `;
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
 
   initStopKeyCapture(modal.querySelector('#settings-stop-key'));
+
+  // Auto-save controls
+  const autosaveEnabledEl = modal.querySelector('#settings-autosave-enabled');
+  const autosaveModeEl = modal.querySelector('#settings-autosave-mode');
+  const autosaveOptionsEl = modal.querySelector('#settings-autosave-options');
+  const autosaveIntervalRow = modal.querySelector('#settings-autosave-interval-row');
+  const autosaveIntervalEl = modal.querySelector('#settings-autosave-interval');
+
+  function paintAutosaveControls() {
+    const enabled = isAutosaveEnabled();
+    autosaveEnabledEl.checked = enabled;
+    autosaveModeEl.value = getAutosaveMode();
+    autosaveIntervalEl.value = String(getAutosaveInterval());
+    autosaveOptionsEl.hidden = !enabled;
+    autosaveIntervalRow.hidden = getAutosaveMode() !== 'interval';
+  }
+  paintAutosaveControls();
+
+  autosaveEnabledEl.addEventListener('change', () => {
+    localStorage.setItem(AUTOSAVE_ENABLED_STORAGE, String(autosaveEnabledEl.checked));
+    paintAutosaveControls();
+    refreshAutosave();
+  });
+  autosaveModeEl.addEventListener('change', () => {
+    localStorage.setItem(AUTOSAVE_MODE_STORAGE, autosaveModeEl.value);
+    paintAutosaveControls();
+    refreshAutosave();
+  });
+  autosaveIntervalEl.addEventListener('change', () => {
+    const n = Math.min(AUTOSAVE_INTERVAL_MAX, Math.max(AUTOSAVE_INTERVAL_MIN, parseInt(autosaveIntervalEl.value, 10) || AUTOSAVE_INTERVAL_DEFAULT));
+    localStorage.setItem(AUTOSAVE_INTERVAL_STORAGE, String(n));
+    autosaveIntervalEl.value = String(n);
+    refreshAutosave();
+  });
 
   const valueEl = modal.querySelector('#settings-font-value');
   function paintFont(px) {
@@ -632,6 +772,15 @@ function createCollapsibleToggle(toggleEl, {
     sync();
   }
 
+  // Symmetric force-expand — used when dragging a collapsed panel's resize
+  // handle re-opens it before resizing.
+  function expand() {
+    if (!isCollapsed()) return;
+    setCollapsed(false);
+    sync();
+    if (typeof onExpand === 'function') onExpand();
+  }
+
   sync();
   toggleEl.addEventListener('click', () => {
     const next = !isCollapsed();
@@ -640,7 +789,7 @@ function createCollapsibleToggle(toggleEl, {
     if (!next && typeof onExpand === 'function') onExpand();
   });
 
-  return { collapse, sync };
+  return { collapse, expand, isCollapsed, sync };
 }
 
 function syncAllToggles() {
@@ -654,17 +803,20 @@ function syncAllToggles() {
 // horizontal position so the bubble never runs off the viewport edge.
 function initTooltipPositioning() {
   document.body.addEventListener('mouseover', (e) => {
-    const icon = e.target.closest('.help-icon');
+    const icon = e.target.closest('.help-icon, .has-tip');
     if (!icon) return;
     const rect = icon.getBoundingClientRect();
-    const halfTip = 140; // ~half of .help-icon::after's max-width, for clamping
+    // The video (.has-tip) bubble is wider/taller than the help-icon one, so it
+    // needs a larger clamp margin and a bigger top-flip threshold.
+    const isWide = icon.classList.contains('has-tip');
+    const halfTip = isWide ? 170 : 140;
     const x = Math.min(
       Math.max(rect.left + rect.width / 2, halfTip + 8),
       window.innerWidth - halfTip - 8
     );
     // Si no hay espacio arriba (ej. el ícono de STOP, muy cerca del borde
     // superior de la página), abrir el tooltip hacia abajo en vez de arriba.
-    const estimatedTipHeight = 90;
+    const estimatedTipHeight = isWide ? 140 : 90;
     const openBelow = rect.top < estimatedTipHeight + 16;
     icon.style.setProperty('--tip-x', `${x}px`);
     icon.style.setProperty('--tip-y', `${openBelow ? rect.bottom + 8 : rect.top - 8}px`);
@@ -676,15 +828,30 @@ function initTooltipPositioning() {
 // Pad Editor panel (height, via flex-basis — .right-panel is a column flex
 // container so the panel's flex-basis controls its vertical extent, not its
 // width). Resets to the CSS default on every reload; not persisted.
-function makeResizable(el, { edge, dimension, min, max, onResizeEnd, collapseBelow, onCollapse } = {}) {
+function makeResizable(el, { edge, dimension, min, max, onResizeEnd, collapseBelow, onCollapse, isCollapsed, onExpand } = {}) {
   const handle = document.createElement('div');
-  handle.className = `resize-handle resize-handle-${edge}`;
   el.appendChild(handle);
 
-  const sign = (edge === 'right' || edge === 'bottom') ? -1 : 1;
+  // Edge is mutable so a PADS/VIDEOS swap can flip which side the handle sits
+  // on (the center-facing edge). Positioning is pure CSS via the edge class;
+  // only the drag sign depends on it, so a class swap is enough.
+  let currentEdge;
+  let sign;
+  function applyEdge(newEdge) {
+    currentEdge = newEdge;
+    sign = (currentEdge === 'right' || currentEdge === 'bottom') ? -1 : 1;
+    handle.className = `resize-handle resize-handle-${currentEdge}`;
+  }
+  applyEdge(edge);
 
   handle.addEventListener('mousedown', (e) => {
     e.preventDefault();
+    // Dragging a collapsed panel's handle re-expands it first, then resizes
+    // from the freshly-expanded size (offsetWidth read below is synchronous
+    // after the class change, so it reflects the expanded layout).
+    if (typeof isCollapsed === 'function' && isCollapsed() && typeof onExpand === 'function') {
+      onExpand();
+    }
     const startPos = dimension === 'width' ? e.clientX : e.clientY;
     const startSize = dimension === 'width' ? el.offsetWidth : el.offsetHeight;
     handle.classList.add('resizing');
@@ -721,6 +888,12 @@ function makeResizable(el, { edge, dimension, min, max, onResizeEnd, collapseBel
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   });
+
+  return {
+    setEdge(newEdge) {
+      if (newEdge !== currentEdge) applyEdge(newEdge);
+    },
+  };
 }
 
 function initLibrarySidenav() {
@@ -861,6 +1034,9 @@ const pads = createPads(document.getElementById('pad-grid'), {
   onContextMenu(position, x, y) {
     openPadContextMenu(position, x, y);
   },
+  onChange() {
+    markDirty();
+  },
   }, 9);
 
 function autoCommitPad(position, updates) {
@@ -977,6 +1153,7 @@ function initMasterControls() {
       ctrl.apply(v);
       state[ctrl.key] = v;
       saveMasterFx(state);
+      markDirty();
     });
   }
 
@@ -1381,6 +1558,16 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Human-readable file size. Individual videos are tens/hundreds of MB, so KB/MB
+// read better than the aggregate GB used for total cache usage.
+function formatBytes(bytes) {
+  if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
 }
 
 function initEditorListeners(position) {
@@ -1788,6 +1975,19 @@ function renderVideoList() {
       <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
     `;
 
+    // Full-detail tooltip on the info block (never clipped — fixed-positioned).
+    // Set via the DOM API, NOT string interpolation: the title is attacker-
+    // controlled (any uploader can name a video) and escapeHtml doesn't escape
+    // quotes, so building the attribute as a string would be injectable.
+    const infoEl = li.querySelector('.video-item-info');
+    if (infoEl) {
+      infoEl.classList.add('has-tip');
+      const detail = [video.title || video.videoId, formatTime(video.duration || 0)];
+      if (video.sizeBytes) detail.push(formatBytes(video.sizeBytes));
+      detail.push(video.videoId);
+      infoEl.dataset.tooltip = detail.join('\n');
+    }
+
     const retryBtn = li.querySelector('[data-retry-cta]');
     if (retryBtn) {
       retryBtn.addEventListener('click', async () => {
@@ -2176,6 +2376,7 @@ initLocaleSwitcher();
 initHeaderMoreMenu();
 initTooltipPositioning();
 applyFontScale(getFontScale());
+refreshAutosave();
 
 // Toggles whose title/aria-expanded depend on collapsed state, not just the
 // static data-i18n-title attribute. applyTranslations() resets el.title from
@@ -2189,27 +2390,34 @@ syncableToggles = [
   ...panelToggleControllers.map((c) => c.ctrl),
 ].filter(Boolean);
 
+let librarySidenavResize = null;
+let padsSidenavResize = null;
+
 const librarySidenavEl = document.getElementById('library-sidenav');
 if (librarySidenavEl && librarySidenavToggle) {
-  makeResizable(librarySidenavEl, {
+  librarySidenavResize = makeResizable(librarySidenavEl, {
     edge: 'left',
     dimension: 'width',
     min: 220,
     max: () => Math.min(500, window.innerWidth * 0.9),
     collapseBelow: 286,
     onCollapse: () => librarySidenavToggle.collapse(),
+    isCollapsed: librarySidenavToggle.isCollapsed,
+    onExpand: () => librarySidenavToggle.expand(),
   });
 }
 
 const padsSidenavEl = document.getElementById('pads-sidenav');
 if (padsSidenavEl && padsSidenavToggle) {
-  makeResizable(padsSidenavEl, {
+  padsSidenavResize = makeResizable(padsSidenavEl, {
     edge: 'right',
     dimension: 'width',
     min: 300,
     max: () => Math.min(720, window.innerWidth * 0.6),
     collapseBelow: 360,
     onCollapse: () => padsSidenavToggle.collapse(),
+    isCollapsed: padsSidenavToggle.isCollapsed,
+    onExpand: () => padsSidenavToggle.expand(),
   });
 }
 
@@ -2223,6 +2431,8 @@ if (padEditorPanelEl && padEditorToggle) {
     max: 600,
     collapseBelow: 332,
     onCollapse: () => padEditorToggle.collapse(),
+    isCollapsed: padEditorToggle.isCollapsed,
+    onExpand: () => padEditorToggle.expand(),
     onResizeEnd: () => {
       if (editorWaveform) {
         editorWaveform.resize();
@@ -2231,6 +2441,35 @@ if (padEditorPanelEl && padEditorToggle) {
     },
   });
 }
+
+// PADS ⇄ VIDEOS swap. Physical DOM reorder (keeps DOM=visual=tab order) that
+// never touches .right-panel (holds the live <video>; reparenting it would
+// reload playback). After a swap, each panel's resize handle must flip to the
+// new center-facing edge.
+function applyPadsVideosSwap(swapped) {
+  const main = document.querySelector('.main');
+  const pads = document.getElementById('pads-sidenav');
+  const library = document.getElementById('library-sidenav');
+  if (!main || !pads || !library) return;
+  const [first, second] = swapped ? [library, pads] : [pads, library];
+  main.insertBefore(first, main.firstElementChild);
+  main.appendChild(second); // .right-panel is forced to the middle, never moved
+  padsSidenavResize?.setEdge(swapped ? 'left' : 'right');
+  librarySidenavResize?.setEdge(swapped ? 'right' : 'left');
+}
+
+function initPadsVideosSwap() {
+  let swapped = localStorage.getItem(PADS_VIDEOS_SWAP_STORAGE) === 'true';
+  applyPadsVideosSwap(swapped);
+  function toggle() {
+    swapped = !swapped;
+    localStorage.setItem(PADS_VIDEOS_SWAP_STORAGE, String(swapped));
+    applyPadsVideosSwap(swapped);
+  }
+  document.getElementById('pads-swap-btn')?.addEventListener('click', toggle);
+  document.getElementById('library-swap-btn')?.addEventListener('click', toggle);
+}
+initPadsVideosSwap();
 
 applyTranslations(document);
 syncAllToggles();
