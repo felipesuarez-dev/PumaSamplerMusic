@@ -51,6 +51,17 @@ const DEFAULT_MASTER_FX = {
   delayFeedback: 0,
 };
 
+const PAD_FX_DEFAULTS = {
+  pitch: 0,
+  cutoff: 100,
+  resonance: 0.1,
+  reverbSend: 0,
+  delaySend: 0,
+  pitchShiftOn: true,
+  stretchOn: false,
+  speed: 100,
+};
+
 export async function load(name) {
   const path = getSessionPath(name);
   try {
@@ -61,6 +72,8 @@ export async function load(name) {
     if (!session.masterFx || (session.schemaVersion || 1) < 2) {
       session.masterFx = { ...DEFAULT_MASTER_FX, ...session.masterFx };
     }
+
+    session.pads = (session.pads || []).map((pad) => ({ ...PAD_FX_DEFAULTS, ...pad }));
 
     return session;
   } catch (err) {

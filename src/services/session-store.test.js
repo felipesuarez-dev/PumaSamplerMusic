@@ -38,7 +38,10 @@ test('save/load round-trip preserves pads and stamps schemaVersion 2', async () 
   assert.equal(saved.schemaVersion, 2);
 
   const loaded = await sessionStore.load('roundtrip-session');
-  assert.deepEqual(loaded.pads, pads);
+  assert.deepEqual(loaded.pads, pads.map((p) => ({
+    pitch: 0, cutoff: 100, resonance: 0.1, reverbSend: 0, delaySend: 0,
+    pitchShiftOn: true, stretchOn: false, speed: 100, ...p,
+  })));
   assert.equal(loaded.schemaVersion, 2);
 });
 
@@ -64,4 +67,80 @@ test('load migrates a schemaVersion 1 session with no masterFx to a full default
     delayTime: 250,
     delayFeedback: 0,
   });
+});
+
+test('load fills PAD_FX_DEFAULTS on a legacy pad with no FX fields', async () => {
+  const legacyPath = join(config.sessionsDir, 'legacy-pad-session.json');
+  const legacySession = {
+    name: 'legacy-pad-session',
+    pads: [{ position: 1, videoId: 'abc12345678', start: 0, end: 1 }],
+    schemaVersion: 2,
+  };
+  await writeFile(legacyPath, JSON.stringify(legacySession), 'utf8');
+
+  const loaded = await sessionStore.load('legacy-pad-session');
+
+  assert.deepEqual(loaded.pads[0], {
+    position: 1,
+    videoId: 'abc12345678',
+    start: 0,
+    end: 1,
+    pitch: 0,
+    cutoff: 100,
+    resonance: 0.1,
+    reverbSend: 0,
+    delaySend: 0,
+    pitchShiftOn: true,
+    stretchOn: false,
+    speed: 100,
+  });
+});
+
+test('load preserves an already-saved per-pad FX value instead of overwriting it', async () => {
+  const path = join(config.sessionsDir, 'pad-fx-saved-session.json');
+  const session = {
+    name: 'pad-fx-saved-session',
+    pads: [{ position: 1, videoId: 'abc12345678', start: 0, end: 1, pitch: 5 }],
+    schemaVersion: 2,
+  };
+  await writeFile(path, JSON.stringify(session), 'utf8');
+
+  const loaded = await sessionStore.load('pad-fx-saved-session');
+
+  assert.equal(loaded.pads[0].pitch, 5);
+});
+
+test('load fills pitchShiftOn/stretchOn/speed defaults on a legacy pad with no stretch fields', async () => {
+  const legacyPath = join(config.sessionsDir, 'legacy-stretch-session.json');
+  const legacySession = {
+    name: 'legacy-stretch-session',
+    pads: [{ position: 1, videoId: 'abc12345678', start: 0, end: 1 }],
+    schemaVersion: 2,
+  };
+  await writeFile(legacyPath, JSON.stringify(legacySession), 'utf8');
+
+  const loaded = await sessionStore.load('legacy-stretch-session');
+
+  assert.equal(loaded.pads[0].pitchShiftOn, true);
+  assert.equal(loaded.pads[0].stretchOn, false);
+  assert.equal(loaded.pads[0].speed, 100);
+});
+
+test('load preserves already-saved pitchShiftOn/stretchOn/speed values instead of overwriting them', async () => {
+  const path = join(config.sessionsDir, 'stretch-saved-session.json');
+  const session = {
+    name: 'stretch-saved-session',
+    pads: [{
+      position: 1, videoId: 'abc12345678', start: 0, end: 1,
+      pitchShiftOn: false, stretchOn: true, speed: 150,
+    }],
+    schemaVersion: 2,
+  };
+  await writeFile(path, JSON.stringify(session), 'utf8');
+
+  const loaded = await sessionStore.load('stretch-saved-session');
+
+  assert.equal(loaded.pads[0].pitchShiftOn, false);
+  assert.equal(loaded.pads[0].stretchOn, true);
+  assert.equal(loaded.pads[0].speed, 150);
 });

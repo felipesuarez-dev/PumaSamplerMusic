@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSliceTimes } from './audio-engine.js';
+import { computeSliceTimes, semitonesToRatio } from './audio-engine.js';
 
 const MIN_DURATION = 0.01;
 
@@ -26,4 +26,16 @@ test('computeSliceTimes: start > end never produces a negative duration (respect
 test('computeSliceTimes: normal case start=1, end=3, duration=5', () => {
   const result = computeSliceTimes(1, 3, 5);
   assert.deepEqual(result, { startTime: 1, endTime: 3, duration: 2 });
+});
+
+test('semitonesToRatio: 0 semitones is unchanged ratio', () => {
+  assert.equal(semitonesToRatio(0), 1);
+});
+
+test('semitonesToRatio: +12 semitones doubles the ratio (one octave up)', () => {
+  assert.equal(semitonesToRatio(12), 2);
+});
+
+test('semitonesToRatio: -12 semitones halves the ratio (one octave down)', () => {
+  assert.equal(semitonesToRatio(-12), 0.5);
 });
