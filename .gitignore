@@ -6,3 +6,4 @@ backups/
 .env
 .env.local
 config/sessions/
+.atl/

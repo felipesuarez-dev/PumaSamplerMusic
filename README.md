@@ -31,8 +31,12 @@ PumaSamplerMusic resuelve esto en una sola ventana del navegador: pega una URL d
 - **Hasta 27 PADs asignables** — cada PAD puede vincularse a cualquier tecla del teclado (o combinación como `shift+a`).
 - **Editor de fragmentos de tiempo** — visualización de forma de onda con controladores de arrastre, más controles de transporte (reproducir, marcar entrada, marcar salida) para fijar el segmento exacto mientras el video se reproduce.
 - **Persistencia de sesiones** — guarda/carga la disposición de PADs como un archivo JSON, o inicia una sesión nueva a partir de una plantilla copiada de una sesión existente.
-- **PADs configurables** — de 9 a 27 PADs con color, volumen, tecla, modo de disparo y loop por PAD.
+- **PADs configurables** — de 9 a 27 PADs con color, volumen, tecla, modo de disparo y loop por PAD; se disparan con teclado, mouse o toque.
 - **Cadena de FX maestra** — volumen maestro, filtro pasabajos (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena.
+- **FX por PAD** — Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD, más los switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, cambia la velocidad conservando el tono); ajustar los controles mientras el PAD suena lo deforma (warp) en tiempo real.
+- **Knobs rotativos** — todos los controles de FX maestros y por PAD son knobs giratorios (arrastre vertical, rueda del mouse, Shift para ajuste fino), navegables por teclado.
+- **Espacio de trabajo colapsable** — los paneles PADS, VIDEOS, editor de PAD y las tiras de FX general y por PAD se colapsan y son redimensionables por arrastre.
+- **Resiliencia ante el bot-check de YouTube** — un contenedor auxiliar genera PO tokens para que `yt-dlp` pase la verificación "Sign in to confirm you're not a bot" sin necesidad de cookies; si aun así aparece, se puede pegar un cookies.txt exportado del navegador.
 - **Corre en Docker** — un solo contenedor, un puerto, sin necesidad de Node.js o Python local.
 
 ## Inicio rápido
@@ -84,7 +88,7 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 
 1. **Agregar un video** — pega una URL de YouTube en la pestaña **Video Library** y haz clic en **Add Video**.
 2. **Esperar la descarga** — el backend descarga el video completo y extrae el audio.
-3. **Editar un PAD** — haz clic en uno de los PADs. Elige el video, asigna una tecla y fija el segmento de tiempo. Cada cambio (inicio/fin, color, volumen, tecla, video, modo de disparo, loop) se guarda automáticamente en el PAD a medida que se hace — no hay un botón de guardado por PAD.
+3. **Editar un PAD** — haz clic en uno de los PADs. Elige el video, asigna una tecla y fija el segmento de tiempo. Ajusta los knobs de FX por PAD (Tune, Cut, Res, Rev, Dly, y los switches P.SHIFT/STRETCH con su knob de Speed) para dar forma al sonido de ese PAD. Cada cambio (inicio/fin, color, volumen, tecla, video, modo de disparo, loop, FX) se guarda automáticamente en el PAD a medida que se hace — no hay un botón de guardado por PAD.
 4. **Usar el transporte** — haz clic en **Play Preview** para ver el video, luego en **Set In** y **Set Out** para marcar el fragmento. O arrastra los controladores de la forma de onda directamente. Usa `Ctrl` + rueda del mouse para hacer zoom en la forma de onda y arrastra para desplazarte (pan), útil para hacer cortes precisos en muestras largas.
 5. **Reproducir** — presiona la tecla asignada. El audio se reproduce a través del motor Web Audio (pasando por la cadena de FX maestra — filtro, reverb, delay) y el video aparece en el visualizador.
 6. **Guardar la sesión** — asígnale un nombre y cárgala después. Al iniciar una sesión nueva se abre un modal de plantilla: empezar desde una disposición en blanco, o copiar los PADs de una sesión existente como punto de partida.
@@ -94,13 +98,17 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 | Área | Qué hace |
 |---|---|
 | **Video Library** | Agregar URLs de YouTube, ver progreso de descarga, eliminar videos en caché, ver título + duración |
-| **Grilla de PADs** | Clic para editar, presionar la tecla asignada para disparar, LED de actividad cuando un PAD está sonando |
+| **Grilla de PADs** | Clic, mouse o toque para disparar y editar; presionar la tecla asignada también dispara; LED de actividad cuando un PAD está sonando |
 | **Editor de PAD** | Etiqueta, tecla, volumen, color, modo de disparo (one-shot / gate), loop, editor de segmento de forma de onda; cada edición se guarda automáticamente, sin botón de guardado por PAD |
+| **FX por PAD** | Knobs de Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD; switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, time-stretch); ajustar en vivo mientras el PAD hace loop lo deforma en tiempo real |
+| **Knobs rotativos** | Controles de FX maestros y por PAD como knobs giratorios: arrastre vertical, rueda del mouse, Shift para ajuste fino, navegables por teclado |
 | **Zoom/Pan de forma de onda** | `Ctrl` + rueda del mouse para zoom, arrastrar para pan, más botones de zoom in/out/reset para cortes precisos en muestras largas |
 | **Transporte** | Reproducir previsualización, marcar entrada, marcar salida, detener; playhead sincronizado con la posición del video; íconos Material Symbols en vez de glifos Unicode planos |
 | **Gestor de sesiones** | Guardar/cargar/eliminar archivos JSON de sesión; modal de sesión nueva para empezar de cero o copiar PADs de una sesión existente como plantilla |
 | **FX maestros** | Volumen maestro, filtro (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena |
+| **Espacio de trabajo colapsable** | Paneles PADS, VIDEOS, editor de PAD y tiras de FX general/por PAD se colapsan desde su cabecera/pestaña y son redimensionables por arrastre |
 | **Detención global** | El botón STOP o la tecla **Escape** silencia todos los PADs y pausa el video |
+| **Resiliencia YouTube** | Contenedor `bgutil-provider` genera PO tokens para sortear el bot-check de YouTube; panel de cookies en Video Library como respaldo |
 | **Docker** | Un solo comando para compilar, ejecutar, respaldar y actualizar |
 
 ## Arquitectura
@@ -113,7 +121,8 @@ flowchart TD
         Pads --> AudioEngine[Motor Web Audio]
         Editor --> Waveform[Canvas de forma de onda con zoom y pan]
         Editor --> VideoPreview[Video de previsualizacion oculto]
-        AudioEngine --> MasterFX[Cadena de FX maestra filtro reverb delay]
+        AudioEngine --> PitchShifter[AudioWorklet pitch shifter granular]
+        PitchShifter --> MasterFX[Cadena de FX maestra filtro reverb delay]
         MasterFX --> MainGain[Ganancia maestra]
         MainGain --> Speakers[Parlantes]
     end
@@ -134,6 +143,12 @@ flowchart TD
         API --> StaticFiles
         Downloader --> Ffmpeg
     end
+
+    subgraph BotCheck["Contenedor sidecar"]
+        PotProvider[bgutil provider PO tokens]
+    end
+
+    Downloader -.->|PO token| PotProvider
 
     subgraph Data["Datos Persistentes"]
         Videos[Videos y audio descargados]
@@ -157,11 +172,11 @@ Regla: el frontend solo descarga buffers de audio por HTTP; el backend maneja to
 | Frontend | Backend | DevOps |
 |---|---|---|
 | Módulos ES de JS vanilla | Node.js 22 | Docker + docker-compose |
-| Web Audio API (cadena de filtro, reverb, delay) | Express | Wrapper `manage.sh` |
+| Web Audio API (cadena de filtro, reverb, delay) + AudioWorklet (pitch-shifter granular) | Express | Wrapper `manage.sh` |
 | `<video>` de HTML5 | Librería `ws` | HEALTHCHECK |
 | Forma de onda en canvas con zoom/pan | yt-dlp | bind-mount de `./data` |
 | CSS Grid + propiedades personalizadas | ffmpeg | usuario node (uid 1000) |
-| Material Symbols (Google Fonts) | | |
+| Material Symbols (Google Fonts) | | bgutil-ytdlp-pot-provider (sidecar) |
 
 ## Desarrollo
 
@@ -192,6 +207,8 @@ Edita `docker-compose.yml`:
 | `MAX_CONCURRENT_DOWNLOADS` | 2 | Descargas en paralelo |
 | `TZ` | America/Santiago | Zona horaria |
 | `PORT` | 4070 | Puerto interno + externo |
+| `COOKIES_FILE` | `/data/cookies.txt` | Ruta del archivo de cookies para yt-dlp |
+| `POT_PROVIDER_URL` | `http://bgutil-provider:4416` | URL del proveedor de PO tokens |
 
 ## Estructura de datos
 
@@ -206,6 +223,7 @@ Edita `docker-compose.yml`:
 - La primera reproducción de un video puede tener una breve carga mientras el navegador decodifica el buffer de audio.
 - El modo one-shot reproduce el segmento completo al presionar la tecla; el modo gate reproduce mientras la tecla se mantiene presionada.
 - El caché de video usa disco, no RAM, porque los videos 1080p completos exceden los límites prácticos de tmpfs.
+- Si YouTube muestra el error de bot-check a pesar del proveedor de PO tokens, pega un cookies.txt exportado del navegador en el panel de cookies de YouTube en Video Library.
 
 ## Autor
 

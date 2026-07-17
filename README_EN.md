@@ -31,8 +31,12 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a 
 - **Up to 27 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
 - **Time-slice editor** — waveform display with drag handles, plus transport controls (play, mark in, mark out) to set the exact segment while the video is playing.
 - **Session persistence** — save/load your pad layout as a JSON file, or start a new session from a template copied from an existing one.
-- **Configurable pads** — 9 to 27 pads with per-pad color, volume, key, trigger mode, and loop.
+- **Configurable pads** — 9 to 27 pads with per-pad color, volume, key, trigger mode, and loop; trigger by keyboard, mouse, or touch.
 - **Master FX chain** — master volume, low-pass filter (cutoff/resonance), reverb, and delay (time/feedback) applied to everything that plays.
+- **Per-pad FX** — Tune (±12 semitones), Cut, Res, Reverb send, and Delay send per pad, plus the P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH with a Speed knob (50–200%, changes speed while keeping pitch); tweaking these while a pad loops warps it live.
+- **Rotary knobs** — every master and per-pad FX control is a rotary knob (vertical drag, mouse wheel, Shift for fine adjustment), keyboard accessible.
+- **Collapsible workspace** — the PADS, VIDEOS, pad editor, and General/Pad FX strip panels each collapse and are drag-resizable.
+- **YouTube bot-check resiliency** — a sidecar container generates PO tokens so `yt-dlp` passes the "Sign in to confirm you're not a bot" check without cookies; if it still appears, paste a browser-exported cookies.txt as a fallback.
 - **Runs in Docker** — single container, one port, no local Node.js or Python required.
 
 ## Quick Start
@@ -84,7 +88,7 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 
 1. **Add a video** — paste a YouTube URL in the **Video Library** tab and click **Add Video**.
 2. **Wait for the download** — the backend downloads the full video and extracts the audio.
-3. **Edit a pad** — click one of the pads. Pick the video, assign a key, and set the time segment. Every change (start/end, color, volume, key, video, trigger mode, loop) is auto-committed to the pad as you make it — there's no per-pad save button.
+3. **Edit a pad** — click one of the pads. Pick the video, assign a key, and set the time segment. Tweak the per-pad FX knobs (Tune, Cut, Res, Rev, Dly, and the P.SHIFT/STRETCH switches with their Speed knob) to shape that pad's sound. Every change (start/end, color, volume, key, video, trigger mode, loop, FX) is auto-committed to the pad as you make it — there's no per-pad save button.
 4. **Use the transport** — click **Play Preview** to watch the video, then **Set In** and **Set Out** to mark the slice. Or drag the waveform handles directly. Use `Ctrl` + mouse wheel to zoom into the waveform and drag to pan for precise slicing on long samples.
 5. **Play** — press the assigned key. The audio plays through the Web Audio engine (through the master FX chain — filter, reverb, delay) and the video appears in the visualizer.
 6. **Save your session** — give it a name and load it later. Starting a new session opens a template modal: start from a blank layout, or copy the pads from an existing session as a starting point.
@@ -94,13 +98,17 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 | Area | What it does |
 |---|---|
 | **Video Library** | Add YouTube URLs, see download progress, remove cached videos, view title + duration |
-| **Pad Grid** | Click to edit, press assigned key to trigger, activity LED when a pad is playing |
+| **Pad Grid** | Click, mouse, or touch to trigger and edit; pressing the assigned key also triggers; activity LED when a pad is playing |
 | **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor; every edit auto-commits, no per-pad save button |
+| **Per-pad FX** | Tune (±12 semitones), Cut, Res, Reverb send, and Delay send knobs per pad; P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH switch with a Speed knob (50–200%, time-stretch); tweaking these live while a pad loops warps it in real time |
+| **Rotary knobs** | Master and per-pad FX controls as rotary knobs: vertical drag, mouse wheel, Shift for fine adjustment, keyboard accessible |
 | **Waveform Zoom/Pan** | `Ctrl` + mouse wheel to zoom, drag to pan, plus zoom in/out/reset buttons for precise slicing on long samples |
 | **Transport** | Play preview, mark in, mark out, stop; playhead synced to the video position; Material Symbols icons instead of plain Unicode glyphs |
 | **Session Manager** | Save/load/delete session JSON files; new-session modal to start fresh or copy pads from an existing session as a template |
 | **Master FX** | Master volume, filter (cutoff/resonance), reverb, and delay (time/feedback) applied to everything that plays |
+| **Collapsible workspace** | PADS, VIDEOS, pad editor, and General/Pad FX strip panels collapse from their header/tab and are drag-resizable |
 | **Global Stop** | STOP button or **Escape** key silences all pads and pauses the video |
+| **YouTube resiliency** | `bgutil-provider` container generates PO tokens to bypass YouTube's bot-check; cookies panel in Video Library as a fallback |
 | **Docker** | One command to build, run, backup, and update |
 
 ## Architecture
@@ -113,7 +121,8 @@ flowchart TD
         Pads --> AudioEngine[Web Audio Engine]
         Editor --> Waveform[Waveform canvas with zoom and pan]
         Editor --> VideoPreview[Hidden preview video]
-        AudioEngine --> MasterFX[Master FX chain filter reverb delay]
+        AudioEngine --> PitchShifter[AudioWorklet granular pitch shifter]
+        PitchShifter --> MasterFX[Master FX chain filter reverb delay]
         MasterFX --> MainGain[Master gain]
         MainGain --> Speakers[Speakers]
     end
@@ -134,6 +143,12 @@ flowchart TD
         API --> StaticFiles
         Downloader --> Ffmpeg
     end
+
+    subgraph BotCheck["Sidecar container"]
+        PotProvider[bgutil provider PO tokens]
+    end
+
+    Downloader -.->|PO token| PotProvider
 
     subgraph Data["Persistent Data"]
         Videos[Downloaded videos and audio]
@@ -157,11 +172,11 @@ Rule: the frontend only downloads audio buffers via HTTP; the backend handles al
 | Frontend | Backend | DevOps |
 |---|---|---|
 | Vanilla JS ES modules | Node.js 22 | Docker + docker-compose |
-| Web Audio API (filter, reverb, delay chain) | Express | `manage.sh` wrapper |
+| Web Audio API (filter, reverb, delay chain) + AudioWorklet (granular pitch-shifter) | Express | `manage.sh` wrapper |
 | HTML5 `<video>` | `ws` library | HEALTHCHECK |
 | Canvas waveform with zoom/pan | yt-dlp | bind-mount `./data` |
 | CSS Grid + custom properties | ffmpeg | node user (uid 1000) |
-| Material Symbols (Google Fonts) | | |
+| Material Symbols (Google Fonts) | | bgutil-ytdlp-pot-provider (sidecar) |
 
 ## Development
 
@@ -192,6 +207,8 @@ Edit `docker-compose.yml`:
 | `MAX_CONCURRENT_DOWNLOADS` | 2 | Parallel downloads |
 | `TZ` | America/Santiago | Timezone |
 | `PORT` | 4070 | Internal + external port |
+| `COOKIES_FILE` | `/data/cookies.txt` | Path to cookies file for yt-dlp |
+| `POT_PROVIDER_URL` | `http://bgutil-provider:4416` | PO token provider URL |
 
 ## Data Layout
 
@@ -206,6 +223,7 @@ Edit `docker-compose.yml`:
 - First playback of a video may have a short load time while the browser decodes the audio buffer.
 - One-shot mode plays the full segment on key press; gate mode plays while the key is held.
 - The video cache uses disk, not RAM, because full 1080p videos exceed practical tmpfs limits.
+- If YouTube shows the bot-check error despite the PO-token provider, paste a browser-exported cookies.txt into the YouTube cookies panel in the Video Library.
 
 ## Author
 
