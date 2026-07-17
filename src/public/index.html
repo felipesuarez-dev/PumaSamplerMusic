@@ -32,10 +32,12 @@
           <select id="session-select">
             <option value="" data-i18n="header.loadSessionOption">Load session...</option>
           </select>
-          <!-- Real action buttons kept in the DOM (permanently hidden) so their
-               handlers stay wired; the kebab menu below proxies clicks to them. -->
-          <button id="btn-manage-sessions" class="btn btn-secondary is-proxied" data-i18n-title="session.manageTitle" title="Manage sessions" data-i18n="session.manageButton">Manage</button>
+          <!-- Real action buttons kept in the DOM; hidden by button.is-proxied
+               unless pinned (see .menu-pin). The kebab menu proxies clicks to
+               them. DOM order matches the menu order so pinned buttons appear
+               in the same order the user sees in the menu. -->
           <button id="btn-new-session" class="btn btn-secondary is-proxied" data-i18n="header.new">New</button>
+          <button id="btn-manage-sessions" class="btn btn-secondary is-proxied" data-i18n-title="session.manageTitle" title="Manage sessions" data-i18n="session.manageButton">Manage</button>
           <button id="btn-export-session" class="btn btn-secondary is-proxied" data-i18n-title="header.exportTitle" title="Export session as ZIP" data-i18n="header.export">Export</button>
           <input type="file" id="import-session-file" accept=".zip" style="display:none">
           <button id="btn-import-session" class="btn btn-secondary is-proxied" data-i18n-title="header.importTitle" title="Import session from ZIP" data-i18n="header.import">Import</button>
@@ -43,11 +45,27 @@
           <div class="header-more" id="header-more">
             <button type="button" class="btn btn-secondary header-more-btn" id="btn-header-more" aria-haspopup="menu" aria-expanded="false" data-i18n-title="header.moreTitle" title="More actions">⋯</button>
             <ul class="header-more-menu" id="header-more-menu" role="menu" hidden>
-              <li role="menuitem" data-proxy="btn-new-session" data-i18n="header.new">New</li>
-              <li role="menuitem" data-proxy="btn-manage-sessions" data-i18n="session.manageButton">Manage</li>
-              <li role="menuitem" data-proxy="btn-export-session" data-i18n="header.export">Export</li>
-              <li role="menuitem" data-proxy="btn-import-session" data-i18n="header.import">Import</li>
-              <li role="menuitem" data-proxy="btn-view-logs" data-i18n="header.logs">Logs</li>
+              <li role="menuitem" class="header-more-item" data-proxy="btn-new-session">
+                <span class="menu-label" data-i18n="header.new">New</span>
+                <button type="button" class="menu-pin" data-pin="btn-new-session" aria-pressed="false" data-i18n-title="header.pinToolbar" title="Pin to toolbar"><span class="material-symbols-outlined">push_pin</span></button>
+              </li>
+              <li role="menuitem" class="header-more-item" data-proxy="btn-manage-sessions">
+                <span class="menu-label" data-i18n="session.manageButton">Manage</span>
+                <button type="button" class="menu-pin" data-pin="btn-manage-sessions" aria-pressed="false" data-i18n-title="header.pinToolbar" title="Pin to toolbar"><span class="material-symbols-outlined">push_pin</span></button>
+              </li>
+              <li role="menuitem" class="header-more-item" data-proxy="btn-export-session">
+                <span class="menu-label" data-i18n="header.export">Export</span>
+                <button type="button" class="menu-pin" data-pin="btn-export-session" aria-pressed="false" data-i18n-title="header.pinToolbar" title="Pin to toolbar"><span class="material-symbols-outlined">push_pin</span></button>
+              </li>
+              <li role="menuitem" class="header-more-item" data-proxy="btn-import-session">
+                <span class="menu-label" data-i18n="header.import">Import</span>
+                <button type="button" class="menu-pin" data-pin="btn-import-session" aria-pressed="false" data-i18n-title="header.pinToolbar" title="Pin to toolbar"><span class="material-symbols-outlined">push_pin</span></button>
+              </li>
+              <li role="menuitem" class="header-more-item" data-proxy="btn-view-logs">
+                <span class="menu-label" data-i18n="header.logs">Logs</span>
+                <button type="button" class="menu-pin" data-pin="btn-view-logs" aria-pressed="false" data-i18n-title="header.pinToolbar" title="Pin to toolbar"><span class="material-symbols-outlined">push_pin</span></button>
+              </li>
+              <!-- Settings is intentionally pin-less (menu-only). -->
               <li role="menuitem" data-action="settings" data-i18n="settings.menuItem">Settings</li>
             </ul>
           </div>

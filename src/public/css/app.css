@@ -203,16 +203,19 @@ body {
   background: var(--surface-hover);
 }
 
-/* Header overflow menu — hidden on wide screens (secondary buttons show
-   inline); revealed by the responsive block below. */
+/* The kebab (⋯) menu is the permanent home for the secondary actions; their
+   real buttons only appear in the navbar when pinned (see .menu-pin). */
 .header-more {
   position: relative;
   display: block;
 }
 
-/* Secondary actions live only in the kebab menu; the real buttons stay in the
-   DOM (hidden) so their handlers and the menu's proxy clicks keep working. */
-.is-proxied {
+/* Unpinned secondary actions are hidden from the navbar and live only in the
+   kebab menu. `button.is-proxied` (0,1,1) intentionally outranks `.btn`
+   (0,1,0, display:inline-flex) so the hide actually wins — a bare .is-proxied
+   would lose the cascade tie to .btn declared later. Pinning removes this
+   class to reveal the button. */
+button.is-proxied {
   display: none;
 }
 
@@ -255,6 +258,48 @@ body {
 
 .header-more-menu li:hover {
   background: var(--surface-hover);
+}
+
+/* Kebab items carrying a pin: label on the left, pin toggle on the right. */
+.header-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.menu-pin {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.menu-pin .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.menu-pin:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+/* Pinned = colored, matching the app's active-toggle treatment
+   (.btn-transport.active). Color/background only — the Material Symbols font is
+   loaded as a fixed FILL@0 instance, so a fill swap would render nothing. */
+.menu-pin[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-dim);
+  opacity: 1;
 }
 
 /* Header collapse: same grid 1fr->0fr pattern as .panel-content (below),

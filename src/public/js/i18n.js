@@ -26,6 +26,7 @@ const dictionaries = {
     'header.showTitle': 'Show header',
     'header.more': 'More',
     'header.moreTitle': 'More actions',
+    'header.pinToolbar': 'Pin to toolbar',
 
     'settings.menuItem': 'Settings',
     'settings.title': 'Settings',
@@ -267,6 +268,7 @@ const dictionaries = {
     'header.showTitle': 'Mostrar barra superior',
     'header.more': 'Más',
     'header.moreTitle': 'Más acciones',
+    'header.pinToolbar': 'Anclar a la barra',
 
     'settings.menuItem': 'Configuración',
     'settings.title': 'Configuración',

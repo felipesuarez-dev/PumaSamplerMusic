@@ -2078,6 +2078,25 @@ function initLocaleSwitcher() {
 // stay in the DOM (hidden via .is-proxied) so their handlers keep working; a
 // data-proxy item just clicks its button, so behavior has a single source. A
 // data-action item runs an inline action (e.g. opening the Settings modal).
+const PINNED_ACTIONS_STORAGE = 'puma-pinned-actions';
+const PINNABLE_IDS = [
+  'btn-new-session',
+  'btn-manage-sessions',
+  'btn-export-session',
+  'btn-import-session',
+  'btn-view-logs',
+];
+
+function getPinnedActions() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINNED_ACTIONS_STORAGE));
+    if (Array.isArray(raw)) return raw.filter((id) => PINNABLE_IDS.includes(id));
+  } catch {
+    // ignore malformed storage — fall through to default
+  }
+  return [];
+}
+
 function initHeaderMoreMenu() {
   const wrap = document.getElementById('header-more');
   const btn = document.getElementById('btn-header-more');
@@ -2090,11 +2109,43 @@ function initHeaderMoreMenu() {
     if (open) positionMenu(menu, btn);
   }
 
+  // Pinned actions also appear as navbar buttons. The 5 target buttons live in
+  // .session-controls (document-scoped lookup), while their pin toggles live
+  // inside this menu (menu-scoped).
+  function applyPinnedState() {
+    const pinned = getPinnedActions();
+    for (const id of PINNABLE_IDS) {
+      const isPinned = pinned.includes(id);
+      const targetBtn = document.getElementById(id);
+      if (targetBtn) targetBtn.classList.toggle('is-proxied', !isPinned);
+      const pinEl = menu.querySelector(`.menu-pin[data-pin="${id}"]`);
+      if (pinEl) pinEl.setAttribute('aria-pressed', String(isPinned));
+    }
+  }
+
+  function togglePin(id) {
+    if (!PINNABLE_IDS.includes(id)) return;
+    const pinned = getPinnedActions();
+    const idx = pinned.indexOf(id);
+    if (idx >= 0) pinned.splice(idx, 1);
+    else pinned.push(id);
+    localStorage.setItem(PINNED_ACTIONS_STORAGE, JSON.stringify(pinned));
+    applyPinnedState();
+  }
+
   headerMenuClosers.push(() => setOpen(false));
 
   btn.addEventListener('click', () => setOpen(menu.hidden));
 
   menu.addEventListener('click', (e) => {
+    // Pin clicks toggle navbar visibility and keep the menu open. The pin's
+    // icon span has pointer-events:none (app.css), so clicks on it resolve to
+    // the .menu-pin button and this guard catches them before the action below.
+    const pin = e.target.closest('.menu-pin');
+    if (pin) {
+      togglePin(pin.dataset.pin);
+      return;
+    }
     const item = e.target.closest('[data-proxy], [data-action]');
     if (!item) return;
     setOpen(false);
@@ -2112,6 +2163,8 @@ function initHeaderMoreMenu() {
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setOpen(false);
   });
+
+  applyPinnedState();
 }
 
 // Initial load
