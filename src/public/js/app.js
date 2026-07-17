@@ -36,9 +36,14 @@ let editorWaveform = null;
 let isCapturingKey = false;
 let masterFxControls = null;
 let padFxControls = null;
+// Populated once all collapsible toggles exist (see "Initial load" below);
+// referenced by syncAllToggles(), which is called after every
+// applyTranslations(document) to fix stale state-aware titles.
+let syncableToggles = [];
 
 const STOP_KEY_STORAGE = 'puma-stop-key';
 const PREVIEW_VOLUME_STORAGE = 'puma-preview-volume';
+const HEADER_HIDDEN_STORAGE = 'puma-header-hidden';
 let stopKey = localStorage.getItem(STOP_KEY_STORAGE) || 'escape';
 const savedPreviewVolume = parseFloat(localStorage.getItem(PREVIEW_VOLUME_STORAGE));
 let previewVolume = Number.isNaN(savedPreviewVolume) ? 0.30 : savedPreviewVolume;
@@ -116,75 +121,6 @@ function openWaveformHelpModal() {
     if (e.target === backdrop) cleanup();
   });
   window.addEventListener('keydown', onKeydown);
-}
-
-// Cloned from openWaveformHelpModal()'s pattern (same backdrop/modal classes,
-// Escape/close handling) — walks the user through exporting a cookies.txt,
-// the only manual step the bot-check call-to-action can't do for them.
-function openCookiesGuideModal() {
-  const backdrop = document.createElement('div');
-  backdrop.className = 'session-modal-backdrop';
-
-  const modal = document.createElement('div');
-  modal.className = 'session-modal cookies-guide-modal';
-  modal.innerHTML = `
-    <h3>${t('cookies.guideTitle')}</h3>
-    <p class="session-modal-hint">${t('cookies.guideIntro')}</p>
-    <section><p>1. ${t('cookies.guideStep1')}</p></section>
-    <section><p>2. ${t('cookies.guideStep2')}</p></section>
-    <section><p>3. ${t('cookies.guideStep3')}</p></section>
-    <section><p>4. ${t('cookies.guideStep4')}</p></section>
-    <section><p>5. ${t('cookies.guideStep5')}</p></section>
-    <p class="session-modal-hint">${t('cookies.guideNote')}</p>
-    <button class="session-modal-close" id="cookies-guide-close" title="${t('common.cancel')}">&times;</button>
-  `;
-
-  backdrop.appendChild(modal);
-  document.body.appendChild(backdrop);
-
-  function cleanup() {
-    if (modal.parentNode) modal.parentNode.removeChild(modal);
-    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-    window.removeEventListener('keydown', onKeydown);
-  }
-  function onKeydown(e) {
-    if (e.key === 'Escape') cleanup();
-  }
-
-  modal.querySelector('#cookies-guide-close').addEventListener('click', cleanup);
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) cleanup();
-  });
-  window.addEventListener('keydown', onKeydown);
-}
-
-// Bot-check call-to-action target: expands the Video Library sidenav (if
-// collapsed), opens the cookies <details> panel, scrolls it into view, and
-// opens the guided export steps — the full path from "download failed" to
-// "here's exactly what to do".
-function openCookiesPanel() {
-  const sidenav = document.getElementById('library-sidenav');
-  const toggle = document.getElementById('library-sidenav-toggle');
-  if (sidenav && !sidenav.classList.contains('expanded')) {
-    // Same classList/aria mechanism as createCollapsibleToggle's setCollapsed
-    // + sync(): librarySidenavToggle only exposes collapse(), not expand().
-    sidenav.style.width = '';
-    sidenav.classList.add('expanded');
-    if (toggle) {
-      toggle.setAttribute('aria-expanded', 'true');
-      const title = t('panel.collapseTitle');
-      toggle.title = title;
-      toggle.setAttribute('aria-label', title);
-    }
-  }
-
-  const details = document.getElementById('cookies-settings');
-  if (details) {
-    details.open = true;
-    details.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
-  openCookiesGuideModal();
 }
 
 // Log viewer modal — same modal/backdrop pattern as the others in this app.
@@ -347,6 +283,26 @@ window.addEventListener('keydown', (e) => {
   stopAll();
 }, true);
 
+// Header visibility shortcut (Ctrl/Cmd+Shift+H). Checked directly via
+// e.shiftKey instead of buildKeyCombo, which discards Shift for
+// single-character keys and would never match this combo.
+window.addEventListener('keydown', (e) => {
+  if (isCapturingKey) return;
+  if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== 'h') return;
+
+  const active = document.activeElement;
+  const isInput = active && (
+    active.tagName === 'INPUT' ||
+    active.tagName === 'TEXTAREA' ||
+    active.tagName === 'SELECT' ||
+    active.classList.contains('key-capture')
+  );
+  if (isInput) return;
+
+  e.preventDefault();
+  document.getElementById('header-toggle')?.click();
+});
+
 // Waveform shortcuts (I/O for in/out, Space for preview when editor active)
 window.addEventListener('keydown', (e) => {
   if (isCapturingKey) return;
@@ -403,13 +359,19 @@ window.addEventListener('keydown', (e) => {
 // the Video Library sidenav) so they present the same visual/interaction
 // language even though their underlying CSS state class differs (one
 // collapses height, the other collapses width) and neither needed to change.
-function createCollapsibleToggle(toggleEl, { isCollapsed, setCollapsed, onExpand } = {}) {
+function createCollapsibleToggle(toggleEl, {
+  isCollapsed,
+  setCollapsed,
+  onExpand,
+  expandTitleKey = 'panel.expandTitle',
+  collapseTitleKey = 'panel.collapseTitle',
+} = {}) {
   if (!toggleEl) return null;
 
   function sync() {
     const collapsed = isCollapsed();
     toggleEl.setAttribute('aria-expanded', String(!collapsed));
-    const title = collapsed ? t('panel.expandTitle') : t('panel.collapseTitle');
+    const title = collapsed ? t(expandTitleKey) : t(collapseTitleKey);
     toggleEl.title = title;
     toggleEl.setAttribute('aria-label', title);
   }
@@ -431,7 +393,11 @@ function createCollapsibleToggle(toggleEl, { isCollapsed, setCollapsed, onExpand
     if (!next && typeof onExpand === 'function') onExpand();
   });
 
-  return { collapse };
+  return { collapse, sync };
+}
+
+function syncAllToggles() {
+  syncableToggles.forEach((ctrl) => ctrl.sync());
 }
 
 // help-icon tooltips use position:fixed (see app.css) so ancestors with
@@ -535,6 +501,29 @@ function initPadsSidenav() {
       sidenav.style.width = '';
       sidenav.classList.toggle('expanded', !collapsed);
     },
+  });
+}
+
+// Header collapse is persisted (unlike the sidenavs, which always reopen on
+// reload) — precedent is STOP_KEY_STORAGE/MASTER_FX_STORAGE, not
+// initLibrarySidenav. The grip stays visible either way so reloading with a
+// hidden header is discoverable, not surprising.
+function initHeaderToggle() {
+  const app = document.querySelector('.app');
+  const toggle = document.getElementById('header-toggle');
+  if (!app || !toggle) return null;
+
+  const persistedHidden = localStorage.getItem(HEADER_HIDDEN_STORAGE) === 'true';
+  app.classList.toggle('header-hidden', persistedHidden);
+
+  return createCollapsibleToggle(toggle, {
+    isCollapsed: () => app.classList.contains('header-hidden'),
+    setCollapsed: (collapsed) => {
+      app.classList.toggle('header-hidden', collapsed);
+      localStorage.setItem(HEADER_HIDDEN_STORAGE, String(collapsed));
+    },
+    expandTitleKey: 'header.showTitle',
+    collapseTitleKey: 'header.hideTitle',
   });
 }
 
@@ -1410,30 +1399,51 @@ function statusLabel(status) {
   return t(`video.status.${status}`) || status;
 }
 
-// Same bot-check signature the server itself matches when deciding whether a
-// failure is retryable (src/services/downloader.js) — used here purely to
-// pick which localized message to show, not to make any retry decision.
-// DRM included: label/music videos withhold real formats without an
-// authenticated session, so cookies are the remedy for both failure modes.
+// The server (src/services/downloader.js) prefers exposing a machine-readable
+// `code` (RATE_LIMIT/BLOCKED/UNAVAILABLE) on both active-download entries and
+// the download:error payload. These regexes are only a fallback for payloads
+// that carry a raw message without a `code` field.
 const BOT_CHECK_PATTERN = /Sign in to confirm|bot-check|DRM protected/i;
-// Rotated/expired cookies: same CTA (the guide), but a message that says
-// "re-export" rather than implying cookies were never configured.
-const STALE_COOKIES_PATTERN = /cookies are no longer valid|cookies expired/i;
+const RATE_LIMIT_PATTERN = /429|Too Many Requests/i;
+const UNAVAILABLE_PATTERN = /Private video|video is private|Video unavailable|has been removed|account (has been )?terminated|not available in your country|blocked it in your country|members-only|join this channel|This live (event|stream) will begin|Premieres in|confirm your age|age-restricted/i;
+
+// Order matches the server's classifyError: unavailable first, then
+// rate_limit, then the bot-check/DRM ("blocked") fallback — a 429 can drag
+// incidental format-related tokens into its message, so checking rate_limit
+// before blocked avoids misreading a throttle as a client-gated failure.
+function classifyErrorBucket({ code, error } = {}) {
+  if (code === 'RATE_LIMIT') return 'rateLimit';
+  if (code === 'BLOCKED') return 'blocked';
+  if (code === 'UNAVAILABLE') return 'unavailable';
+  const message = error || '';
+  if (UNAVAILABLE_PATTERN.test(message)) return 'unavailable';
+  if (RATE_LIMIT_PATTERN.test(message)) return 'rateLimit';
+  if (BOT_CHECK_PATTERN.test(message)) return 'blocked';
+  return null;
+}
 
 function renderVideoList() {
   const list = document.getElementById('video-list');
   const { videos, activeDownloads } = store.get();
   list.innerHTML = '';
 
+  // The store already carries completed downloads once they're saved, but
+  // activeDownloads keeps a 'ready' entry around for a 30s cleanup window
+  // (see downloader.js). Without this dedupe, that entry would render as a
+  // ghost second row (videoId as title) until the window closes.
+  const readyIds = new Set(videos.map((v) => v.videoId));
+
   const all = [
     ...videos.map((v) => ({ ...v, status: 'ready' })),
-    ...activeDownloads.map((a) => ({
+    ...activeDownloads.filter((a) => !readyIds.has(a.videoId)).map((a) => ({
       videoId: a.videoId,
       title: a.videoId,
       duration: 0,
       status: a.status,
       progress: a.progress,
       error: a.error,
+      code: a.code,
+      url: a.url,
       retryAttempt: a.retryAttempt,
       retryMax: a.retryMax,
     })),
@@ -1450,6 +1460,10 @@ function renderVideoList() {
     let statusHtml;
     if (video.status === 'downloading') {
       statusHtml = `<span class="status downloading"><span class="loading-spinner"></span>${Math.round(video.progress || 0)}%</span>`;
+    } else if (video.status === 'extracting') {
+      // Same spinner treatment as downloading/retrying — this is a normal
+      // in-progress phase (local audio extraction), not a failure.
+      statusHtml = `<span class="status extracting"><span class="loading-spinner"></span>${t('video.status.extracting')}</span>`;
     } else if (video.status === 'retrying') {
       // Same spinner as 'downloading' — this reads as self-healing in
       // progress, not as a failure, so it deliberately avoids the error look.
@@ -1457,24 +1471,23 @@ function renderVideoList() {
       statusHtml = `<span class="status retrying"><span class="loading-spinner"></span>${label}</span>`;
     } else if (video.status === 'error') {
       const fullError = video.error || '';
-      if (STALE_COOKIES_PATTERN.test(fullError)) {
-        statusHtml = `
-          <div class="video-item-status-wrap">
-            <span class="status error" title="${escapeHtml(fullError)}">${t('video.errorStaleCookies')}</span>
-            <button type="button" class="link-btn" data-cookies-cta>${t('video.configureCookies')}</button>
-          </div>
-        `;
-      } else if (BOT_CHECK_PATTERN.test(fullError)) {
-        statusHtml = `
-          <div class="video-item-status-wrap">
-            <span class="status error" title="${escapeHtml(fullError)}">${t('video.errorBotCheck')}</span>
-            <button type="button" class="link-btn" data-cookies-cta>${t('video.configureCookies')}</button>
-          </div>
-        `;
-      } else {
-        const label = fullError || statusLabel('error');
-        statusHtml = `<span class="status error" title="${escapeHtml(fullError)}">${escapeHtml(label)}</span>`;
-      }
+      const bucket = classifyErrorBucket(video);
+      const label = bucket === 'rateLimit' ? t('video.errorRateLimit')
+        : bucket === 'blocked' ? t('video.errorBlocked')
+        : bucket === 'unavailable' ? t('video.errorUnavailable')
+        : t('video.errorGeneric');
+      // Retry doesn't apply to UNAVAILABLE — that bucket is a terminal
+      // classification (private/removed/region-locked), retrying it just
+      // re-runs the same failure.
+      const retryBtn = bucket === 'unavailable'
+        ? ''
+        : `<button type="button" class="link-btn" data-retry-cta>${t('common.retry')}</button>`;
+      statusHtml = `
+        <div class="video-item-status-wrap">
+          <span class="status error" title="${escapeHtml(fullError)}">${label}</span>
+          ${retryBtn}
+        </div>
+      `;
     } else {
       statusHtml = `<span class="status ${video.status}">${statusLabel(video.status)}</span>`;
     }
@@ -1488,9 +1501,25 @@ function renderVideoList() {
       <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
     `;
 
-    const ctaBtn = li.querySelector('[data-cookies-cta]');
-    if (ctaBtn) {
-      ctaBtn.addEventListener('click', () => openCookiesPanel());
+    const retryBtn = li.querySelector('[data-retry-cta]');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', async () => {
+        // Disable synchronously, before any await, to prevent a double-click
+        // from firing two overlapping retry requests for the same video.
+        retryBtn.disabled = true;
+        // Delete first so the server's dedupe in queueDownload doesn't turn
+        // the re-add into a silent no-op — an errored entry is never
+        // auto-removed, so without this the retry would do nothing.
+        await api.deleteVideo(video.videoId).catch(() => {});
+        try {
+          await api.addVideo(video.url);
+          showToast(t('toast.retryQueued'), 'success');
+          await refreshVideos();
+        } catch (err) {
+          retryBtn.disabled = false;
+          showToast(t('toast.addFailed', { message: err.message }), 'error');
+        }
+      });
     }
 
     li.querySelector('button[data-id]').addEventListener('click', async () => {
@@ -1595,11 +1624,11 @@ ws.on('download:ready', refreshVideos);
 ws.on('download:error', (payload) => {
   const message = payload && payload.error;
   if (message) {
-    const toastMessage = STALE_COOKIES_PATTERN.test(message)
-      ? t('toast.staleCookiesDetected')
-      : BOT_CHECK_PATTERN.test(message)
-        ? t('toast.botCheckDetected')
-        : message;
+    const bucket = classifyErrorBucket(payload);
+    const toastMessage = bucket === 'rateLimit' ? t('toast.rateLimitDetected')
+      : bucket === 'blocked' ? t('toast.blockedDetected')
+      : bucket === 'unavailable' ? t('toast.unavailableDetected')
+      : message;
     showToast(toastMessage, 'error');
   }
   refreshVideos();
@@ -1608,6 +1637,9 @@ ws.on('download:error', (payload) => {
 // rendering already shows the 'retrying' spinner/label, so this just keeps
 // the active-downloads state fresh; no toast (would spam on every attempt).
 ws.on('download:retrying', refreshVideos);
+// Local ffmpeg audio extraction phase — same rationale as 'retrying' above:
+// keeps the list's 'extracting' spinner/label fresh, no toast needed.
+ws.on('download:extracting', refreshVideos);
 ws.on('video:removed', refreshVideos);
 
 // Session Manager
@@ -1684,72 +1716,6 @@ if (clearCacheBtn) {
   });
 }
 
-// YouTube cookies (fallback auth for downloads the PO-token provider alone
-// can't get past) — a Save/Clear pair plus a quiet status dot; the server
-// never returns the cookie contents back, only { configured }.
-function initCookiesSettings() {
-  const dot = document.getElementById('cookies-status-dot');
-  const statusText = document.getElementById('cookies-status-text');
-  const textarea = document.getElementById('cookies-input');
-  const saveBtn = document.getElementById('btn-cookies-save');
-  const clearBtn = document.getElementById('btn-cookies-clear');
-  const helpBtn = document.getElementById('cookies-help-btn');
-  if (!dot || !textarea || !saveBtn || !clearBtn) return;
-
-  async function refreshStatus() {
-    try {
-      const { configured } = await api.getCookiesStatus();
-      dot.classList.toggle('on', !!configured);
-      const label = configured ? t('cookies.statusOn') : t('cookies.statusOff');
-      dot.title = label;
-      if (statusText) statusText.textContent = label;
-    } catch (err) {
-      console.error('Failed to load cookies status:', err);
-    }
-  }
-
-  saveBtn.addEventListener('click', async () => {
-    const content = textarea.value.trim();
-    if (!content) {
-      showToast(t('toast.cookiesEmpty'), 'error');
-      return;
-    }
-
-    try {
-      await api.saveCookies(content);
-      textarea.value = '';
-      showToast(t('toast.cookiesSavedRetry'), 'success');
-      await refreshStatus();
-      await refreshVideos();
-    } catch (err) {
-      showToast(t('toast.cookiesSaveFailed', { message: err.message }), 'error');
-    }
-  });
-
-  clearBtn.addEventListener('click', async () => {
-    try {
-      await api.clearCookies();
-      textarea.value = '';
-      showToast(t('toast.cookiesCleared'), 'success');
-      await refreshStatus();
-    } catch (err) {
-      showToast(t('toast.cookiesSaveFailed', { message: err.message }), 'error');
-    }
-  });
-
-  if (helpBtn) {
-    // Clicking inside a <summary> toggles the parent <details> — stop that
-    // so the guide modal can open without also flipping the panel open/shut.
-    helpBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openCookiesGuideModal();
-    });
-  }
-
-  refreshStatus();
-}
-
 // Locale switcher — a custom button+popover instead of a native <select>,
 // since <option> can't embed the SVG flag icon (plain text only), which made
 // the flag emoji unreliable across platforms/fonts.
@@ -1783,6 +1749,7 @@ function initLocaleSwitcher() {
 
     setLocale(option.dataset.locale);
     applyTranslations(document);
+    syncAllToggles();
     paint(option.dataset.locale);
     setOpen(false);
 
@@ -1808,8 +1775,21 @@ function initLocaleSwitcher() {
 const panelToggleControllers = initPanelToggle();
 const librarySidenavToggle = initLibrarySidenav();
 const padsSidenavToggle = initPadsSidenav();
+const headerToggle = initHeaderToggle();
 initLocaleSwitcher();
 initTooltipPositioning();
+
+// Toggles whose title/aria-expanded depend on collapsed state, not just the
+// static data-i18n-title attribute. applyTranslations() resets el.title from
+// that attribute on every locale switch, which would stomp the state-aware
+// title these toggles compute — see syncAllToggles() calls after each
+// applyTranslations(document) below.
+syncableToggles = [
+  headerToggle,
+  librarySidenavToggle,
+  padsSidenavToggle,
+  ...panelToggleControllers.map((c) => c.ctrl),
+].filter(Boolean);
 
 const librarySidenavEl = document.getElementById('library-sidenav');
 if (librarySidenavEl && librarySidenavToggle) {
@@ -1855,9 +1835,9 @@ if (padEditorPanelEl && padEditorToggle) {
 }
 
 applyTranslations(document);
+syncAllToggles();
 masterFxControls = initMasterControls();
 padFxControls = initPadFxControls();
-initCookiesSettings();
 enhanceKnobs(document);
 refreshVideos();
 setInterval(refreshVideos, 2000);

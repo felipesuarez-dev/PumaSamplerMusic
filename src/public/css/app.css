@@ -47,15 +47,17 @@ body {
   justify-content: space-between;
   padding: 12px 20px;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   gap: 20px;
+  flex-wrap: wrap;
+  row-gap: 12px;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .logo {
@@ -70,6 +72,10 @@ body {
   font-size: 1.25rem;
   letter-spacing: -0.5px;
   font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .version {
@@ -87,12 +93,17 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
+  row-gap: 10px;
+  justify-content: flex-end;
 }
 
 .session-controls {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 
 .session-controls input,
@@ -187,6 +198,59 @@ body {
 
 .locale-menu li:hover {
   background: var(--surface-hover);
+}
+
+/* Header collapse: same grid 1fr->0fr pattern as .panel-content (below),
+   animating the header's own height rather than a max-height ceiling. .app
+   is flex column and .main is flex:1, so main reclaims the space
+   automatically once the header collapses — no calc() needed anywhere. */
+.header-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+  flex-shrink: 0;
+}
+
+.app.header-hidden .header-collapse {
+  grid-template-rows: 0fr;
+}
+
+.header-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Thin grip, always visible between header and main so both states
+   (chevron up = hide, chevron down = show) stay discoverable. Carries the
+   hairline that used to live on .header's border-bottom, so there's never a
+   doubled 1px line when the header is visible. */
+.header-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 20px;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.header-grip:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.header-grip .chev {
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.header-grip[aria-expanded='true'] .chev {
+  transform: rotate(180deg);
 }
 
 /* Buttons */
@@ -1583,86 +1647,6 @@ body {
   justify-content: center;
 }
 
-/* YouTube cookies disclosure — quiet/muted by design, only the status dot
-   uses --accent (when configured); everything else stays on muted tokens. */
-.cookies-settings {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.cookies-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-weight: 700;
-  color: var(--text-muted);
-  list-style: none;
-}
-
-.cookies-summary::-webkit-details-marker {
-  display: none;
-}
-
-/* The help icon is a real <button> here (needs to be focusable/clickable),
-   unlike the hover-only <span> tooltips used elsewhere — keep its look but
-   swap the inherited help cursor for a pointer. */
-.cookies-summary .help-icon {
-  cursor: pointer;
-}
-
-.cookies-status-text {
-  font-size: 0.7rem;
-  font-weight: 400;
-  color: var(--text-muted);
-}
-
-.cookies-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--border);
-  flex-shrink: 0;
-}
-
-.cookies-status-dot.on {
-  background: var(--accent);
-}
-
-.cookies-hint {
-  margin: 8px 0;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.cookies-textarea {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  font-size: 0.75rem;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  outline: none;
-  resize: vertical;
-  transition: var(--transition);
-}
-
-.cookies-textarea:focus {
-  border-color: var(--accent);
-}
-
-.cookies-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .video-item {
   display: flex;
   justify-content: space-between;
@@ -1718,6 +1702,7 @@ body {
 }
 
 .video-item .status.downloading,
+.video-item .status.extracting,
 .video-item .status.retrying {
   background: rgba(251, 191, 36, 0.12);
   color: var(--warning);
@@ -1828,6 +1813,49 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Compact single-row header: the flex-wrap rules above already prevent hard
+   cutoff at any width, but a wrapped header on a 1366px external monitor
+   looks cramped rather than broken. Tighten paddings/gaps so the header
+   still fits in one row down to 901px, where the stacked @900 layout below
+   takes over. */
+@media (min-width: 901px) and (max-width: 1400px) {
+  .header {
+    padding: 12px 16px;
+    gap: 14px;
+  }
+
+  .header-actions {
+    gap: 10px;
+  }
+
+  .stop-group {
+    gap: 6px;
+  }
+
+  .session-controls {
+    gap: 6px;
+  }
+
+  .session-controls input,
+  .session-controls select {
+    padding: 7px 10px;
+    font-size: 0.85rem;
+  }
+
+  #session-name {
+    width: 130px;
+  }
+
+  .btn {
+    padding: 7px 12px;
+    font-size: 0.85rem;
+  }
+
+  .btn-stop {
+    padding: 7px 12px;
+  }
 }
 
 /* Responsive */
@@ -2123,8 +2151,7 @@ body {
   color: var(--text);
 }
 
-.waveform-help-modal,
-.cookies-guide-modal {
+.waveform-help-modal {
   max-width: min(480px, 90vw);
 }
 
@@ -2170,13 +2197,11 @@ body {
   color: var(--danger);
 }
 
-.waveform-help-modal section,
-.cookies-guide-modal section {
+.waveform-help-modal section {
   margin-top: 16px;
 }
 
-.waveform-help-modal section:first-of-type,
-.cookies-guide-modal section:first-of-type {
+.waveform-help-modal section:first-of-type {
   margin-top: 8px;
 }
 
@@ -2188,8 +2213,7 @@ body {
   letter-spacing: 0.04em;
 }
 
-.waveform-help-modal p,
-.cookies-guide-modal p {
+.waveform-help-modal p {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;

@@ -10,6 +10,8 @@
 </head>
 <body>
   <div class="app">
+    <div class="header-collapse">
+      <div class="header-collapse-inner" id="header-collapse-inner">
     <header class="header">
       <div class="brand">
         <img src="/logo.png" alt="PumaSamplerMusic" class="logo">
@@ -72,6 +74,11 @@
         </div>
       </div>
     </header>
+      </div>
+    </div>
+    <button type="button" class="header-grip" id="header-toggle" aria-controls="header-collapse-inner" aria-expanded="true">
+      <span class="chev">▾</span>
+    </button>
 
     <main class="main">
       <aside class="pads-sidenav expanded" id="pads-sidenav">
@@ -292,20 +299,6 @@
               <span class="cache-usage" id="cache-usage"></span>
               <button type="button" class="btn btn-secondary btn-clear-cache" id="btn-clear-cache" data-i18n="video.clearCache">Clear cache</button>
             </div>
-            <details class="cookies-settings" id="cookies-settings">
-              <summary class="cookies-summary">
-                <span data-i18n="cookies.title">YouTube cookies</span>
-                <button type="button" class="help-icon" id="cookies-help-btn" data-i18n-tooltip="cookies.guideTitle" data-tooltip="How to get your cookies">?</button>
-                <span class="cookies-status-text" id="cookies-status-text"></span>
-                <span class="cookies-status-dot" id="cookies-status-dot"></span>
-              </summary>
-              <p class="cookies-hint" data-i18n="cookies.hint">Paste the content of a cookies.txt exported from your browser to authenticate downloads.</p>
-              <textarea id="cookies-input" rows="4" class="cookies-textarea" placeholder="# Netscape HTTP Cookie File…"></textarea>
-              <div class="cookies-actions">
-                <button type="button" class="btn btn-secondary" id="btn-cookies-save" data-i18n="cookies.save">Save</button>
-                <button type="button" class="btn btn-secondary" id="btn-cookies-clear" data-i18n="cookies.clear">Clear</button>
-              </div>
-            </details>
           </div>
         </div>
       </aside>

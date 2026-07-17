@@ -77,19 +77,4 @@ export const api = {
   getLogs() {
     return request('/api/logs');
   },
-
-  getCookiesStatus() {
-    return request('/api/settings/cookies');
-  },
-
-  saveCookies(content) {
-    return request('/api/settings/cookies', {
-      method: 'POST',
-      body: JSON.stringify({ content }),
-    });
-  },
-
-  clearCookies() {
-    return request('/api/settings/cookies', { method: 'DELETE' });
-  },
 };
