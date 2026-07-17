@@ -1,12 +1,20 @@
 import { buildKeyCombo, formatTime } from './state.js';
 
 export function createPads(container, options = {}, initialCount = 9) {
-  const { onSelect, onTrigger, onRelease } = options;
+  const { onSelect, onTrigger, onRelease, onBeforeChange, onAfterSwap, onContextMenu } = options;
   const pads = new Map(); // position -> pad element
   const state = new Map(); // position -> pad data
   let selectedPosition = null;
   let padCount = 0;
   let capturingKey = false;
+
+  // Organize mode swaps the grid from "play" to "manage": pointer gestures
+  // drag pads around instead of triggering audio, and right-click / long-press
+  // opens a management menu. Only one gesture can be active at a time.
+  let organizeMode = false;
+  let gesture = null;
+  const DRAG_THRESHOLD_PX = 8;
+  const LONG_PRESS_MS = 500;
 
   function createPadElement(position) {
     const el = document.createElement('div');
@@ -26,11 +34,29 @@ export function createPads(container, options = {}, initialCount = 9) {
       if (e.button > 0) return;
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
+      if (organizeMode) {
+        startGesture(position, el, e);
+        return;
+      }
       select(position);
       trigger(position);
     });
-    el.addEventListener('pointerup', () => release(position));
-    el.addEventListener('pointercancel', () => release(position));
+    el.addEventListener('pointermove', (e) => {
+      if (organizeMode) updateGesture(el, e);
+    });
+    el.addEventListener('pointerup', (e) => {
+      if (organizeMode) endGesture(position, e);
+      else release(position);
+    });
+    el.addEventListener('pointercancel', () => {
+      if (organizeMode) cancelGesture();
+      else release(position);
+    });
+    el.addEventListener('contextmenu', (e) => {
+      if (!organizeMode) return;
+      e.preventDefault();
+      if (onContextMenu) onContextMenu(position, e.clientX, e.clientY);
+    });
 
     return el;
   }
@@ -140,6 +166,193 @@ export function createPads(container, options = {}, initialCount = 9) {
     }
     for (const pos of pads.keys()) {
       render(pos);
+    }
+  }
+
+  function setOrganizeMode(enabled) {
+    organizeMode = Boolean(enabled);
+    container.classList.toggle('organize-mode', organizeMode);
+    if (!organizeMode) cancelGesture(); // leaving mid-drag cleans up any ghost/highlight
+  }
+
+  function isOrganizeMode() {
+    return organizeMode;
+  }
+
+  // If a touched position is the currently-selected one, re-fire onSelect so
+  // the editor panel and PAD FX strip refresh with the new data instead of
+  // showing what used to be there (mirrors resize()'s selection refresh).
+  function resyncSelection(positions) {
+    if (selectedPosition !== null && positions.includes(selectedPosition) && onSelect) {
+      onSelect(selectedPosition, state.get(selectedPosition));
+    }
+  }
+
+  // Occupied -> occupied swaps the two pads; occupied -> empty moves the source
+  // pad to the target and empties the source.
+  function swap(from, to) {
+    if (from === to) return;
+    const dataFrom = state.get(from);
+    if (!dataFrom) return;
+    const dataTo = state.get(to);
+    if (onBeforeChange) onBeforeChange([from, to]);
+    state.set(to, { ...dataFrom, position: to });
+    state.set(from, dataTo ? { ...dataTo, position: from } : null);
+    render(from);
+    render(to);
+    resyncSelection([from, to]);
+    if (onAfterSwap) onAfterSwap(from, to, Boolean(dataTo));
+  }
+
+  // Copies every setting except the key: server validation requires a unique,
+  // non-empty key per pad, so the copy starts keyless and the caller routes the
+  // user to assign one before the pad can play or be saved.
+  function copyPad(from, to) {
+    const src = state.get(from);
+    if (!src || from === to) return null;
+    if (onBeforeChange) onBeforeChange([to]);
+    const copy = { ...src, position: to, key: '' };
+    state.set(to, copy);
+    render(to);
+    resyncSelection([to]);
+    return copy;
+  }
+
+  function clear(position) {
+    if (!state.get(position)) return;
+    if (onBeforeChange) onBeforeChange([position]);
+    state.set(position, null);
+    render(position);
+    resyncSelection([position]);
+  }
+
+  // --- Organize-mode pointer gesture (drag to swap/move, long-press for menu) ---
+
+  function startGesture(position, el, e) {
+    cancelGesture();
+    gesture = {
+      position,
+      sourceEl: el,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      dragging: false,
+      longPressFired: false,
+      longPressTimer: null,
+      ghostEl: null,
+      targetPosition: null,
+      onEscape: null,
+    };
+    // Touch has no right-click, so a stationary long-press opens the menu.
+    if (e.pointerType === 'touch' && state.get(position) && onContextMenu) {
+      gesture.longPressTimer = setTimeout(() => {
+        if (!gesture || gesture.dragging) return;
+        gesture.longPressFired = true;
+        const rect = el.getBoundingClientRect();
+        onContextMenu(position, rect.left + rect.width / 2, rect.top + rect.height / 2);
+      }, LONG_PRESS_MS);
+    }
+  }
+
+  function updateGesture(el, e) {
+    if (!gesture) return;
+    if (!gesture.dragging) {
+      if (gesture.longPressFired) return;
+      const dx = e.clientX - gesture.startX;
+      const dy = e.clientY - gesture.startY;
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      clearLongPress();
+      if (!state.get(gesture.position)) return; // nothing to drag from an empty pad
+      beginDrag();
+    }
+    moveGhost(e.clientX, e.clientY);
+    updateDropTarget(e.clientX, e.clientY);
+  }
+
+  function beginDrag() {
+    gesture.dragging = true;
+    gesture.sourceEl.classList.add('dragging');
+    gesture.ghostEl = createGhost(gesture.position);
+    gesture.onEscape = (ev) => {
+      if (ev.key === 'Escape') cancelGesture();
+    };
+    window.addEventListener('keydown', gesture.onEscape);
+  }
+
+  function endGesture(position, e) {
+    if (!gesture) return;
+    if (gesture.dragging) {
+      const target = gesture.targetPosition;
+      cleanupGesture();
+      if (target !== null && target !== position) swap(position, target);
+      return;
+    }
+    const wasLongPress = gesture.longPressFired;
+    cleanupGesture();
+    if (!wasLongPress) select(position); // a plain tap still opens the editor
+  }
+
+  function cancelGesture() {
+    if (!gesture) return;
+    cleanupGesture();
+  }
+
+  function cleanupGesture() {
+    if (!gesture) return;
+    clearLongPress();
+    if (gesture.ghostEl && gesture.ghostEl.parentNode) {
+      gesture.ghostEl.parentNode.removeChild(gesture.ghostEl);
+    }
+    if (gesture.sourceEl) gesture.sourceEl.classList.remove('dragging');
+    if (gesture.onEscape) window.removeEventListener('keydown', gesture.onEscape);
+    clearDropTargets();
+    gesture = null;
+  }
+
+  function clearLongPress() {
+    if (gesture && gesture.longPressTimer) {
+      clearTimeout(gesture.longPressTimer);
+      gesture.longPressTimer = null;
+    }
+  }
+
+  function createGhost(position) {
+    const data = state.get(position);
+    const ghost = document.createElement('div');
+    ghost.className = 'pad-drag-ghost';
+    ghost.textContent = (data && data.label) || `PAD ${position}`;
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+
+  function moveGhost(x, y) {
+    if (!gesture || !gesture.ghostEl) return;
+    gesture.ghostEl.style.left = `${x}px`;
+    gesture.ghostEl.style.top = `${y}px`;
+  }
+
+  function updateDropTarget(x, y) {
+    clearDropTargets();
+    // The ghost has pointer-events:none, so elementFromPoint reports the pad
+    // underneath it rather than the ghost itself.
+    const under = document.elementFromPoint(x, y);
+    const padEl = under && under.closest('.pad[data-position]');
+    if (!padEl || !container.contains(padEl)) {
+      gesture.targetPosition = null;
+      return;
+    }
+    const targetPosition = Number(padEl.dataset.position);
+    if (targetPosition === gesture.position) {
+      gesture.targetPosition = null;
+      return;
+    }
+    gesture.targetPosition = targetPosition;
+    padEl.classList.add(state.get(targetPosition) ? 'drop-target-swap' : 'drop-target-move');
+  }
+
+  function clearDropTargets() {
+    for (const el of pads.values()) {
+      el.classList.remove('drop-target-swap', 'drop-target-move');
     }
   }
 
@@ -274,6 +487,11 @@ export function createPads(container, options = {}, initialCount = 9) {
     release,
     setPlaying,
     setKeyCapturing,
+    setOrganizeMode,
+    isOrganizeMode,
+    swap,
+    copyPad,
+    clear,
   };
 }
 

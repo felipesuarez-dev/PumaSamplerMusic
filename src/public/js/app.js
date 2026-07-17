@@ -224,6 +224,168 @@ function openConfirmModal({ title, body, confirmLabel, onConfirm }) {
   window.addEventListener('keydown', onKeydown);
 }
 
+// --- Organize mode: context menu, clear confirm, copy modal, save guard ---
+
+let padContextMenu = null;
+
+function closePadContextMenu() {
+  if (!padContextMenu) return;
+  const { el, onDismiss } = padContextMenu;
+  if (el.parentNode) el.parentNode.removeChild(el);
+  document.removeEventListener('pointerdown', onDismiss, true);
+  window.removeEventListener('keydown', onDismiss);
+  padContextMenu = null;
+}
+
+function openPadContextMenu(position, x, y) {
+  closePadContextMenu();
+  if (!pads.getData(position)) return; // nothing to manage on an empty pad
+
+  const menu = document.createElement('div');
+  menu.className = 'pad-context-menu';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.textContent = t('organize.contextCopy');
+  copyBtn.addEventListener('click', () => {
+    closePadContextMenu();
+    openCopyPadModal(position);
+  });
+
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.className = 'danger';
+  clearBtn.textContent = t('organize.contextClear');
+  clearBtn.addEventListener('click', () => {
+    closePadContextMenu();
+    confirmClearPad(position);
+  });
+
+  menu.append(copyBtn, clearBtn);
+  document.body.appendChild(menu);
+
+  // Clamp inside the viewport (long-press near an edge can pass coords that
+  // would otherwise push the menu off-screen).
+  const rect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+
+  const onDismiss = (e) => {
+    if (e.type === 'keydown') {
+      if (e.key === 'Escape') closePadContextMenu();
+      return;
+    }
+    if (!menu.contains(e.target)) closePadContextMenu();
+  };
+  document.addEventListener('pointerdown', onDismiss, true);
+  window.addEventListener('keydown', onDismiss);
+  padContextMenu = { el: menu, onDismiss };
+}
+
+function confirmClearPad(position) {
+  if (!pads.getData(position)) return;
+  // Body references the pad by position only — openConfirmModal injects it via
+  // innerHTML and t() does not escape, so a user-set label must never reach it.
+  openConfirmModal({
+    title: t('organize.clearConfirmTitle', { position }),
+    body: t('organize.clearConfirmBody', { position }),
+    confirmLabel: t('organize.clearConfirmButton'),
+    onConfirm: () => {
+      pads.clear(position);
+      showToast(t('toast.padCleared', { position }), 'info');
+    },
+  });
+}
+
+function openCopyPadModal(sourcePosition) {
+  if (!pads.getData(sourcePosition)) return;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'session-modal';
+  modal.innerHTML = `
+    <h3>${t('organize.copyModalTitle', { position: sourcePosition })}</h3>
+    <p class="session-modal-hint">${t('organize.copyModalHint')}</p>
+    <div class="session-modal-actions">
+      <select id="copy-pad-select" class="session-modal-select"></select>
+      <button class="btn" id="copy-pad-confirm">${t('organize.copyButton')}</button>
+    </div>
+    <button class="session-modal-close" id="copy-pad-cancel" title="${t('common.cancel')}">&times;</button>
+  `;
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  // Options are built as DOM nodes with textContent (never innerHTML), so a
+  // pad label could never inject markup even if labels are shown here later.
+  const select = modal.querySelector('#copy-pad-select');
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = t('organize.copySelectTargetFirst');
+  select.appendChild(placeholder);
+  const count = pads.getCount();
+  for (let p = 1; p <= count; p++) {
+    if (p === sourcePosition) continue;
+    const opt = document.createElement('option');
+    opt.value = String(p);
+    opt.textContent = t(
+      pads.getData(p) ? 'organize.copyTargetOccupied' : 'organize.copyTargetEmpty',
+      { position: p },
+    );
+    select.appendChild(opt);
+  }
+
+  let escHandler = null;
+  function cleanup() {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    if (escHandler) window.removeEventListener('keydown', escHandler);
+  }
+
+  function doCopy(targetPosition) {
+    pads.copyPad(sourcePosition, targetPosition);
+    pads.select(targetPosition); // opens the editor on the "assign a key" state
+    showToast(t('organize.copyNeedsKey', { position: targetPosition }), 'info');
+  }
+
+  modal.querySelector('#copy-pad-confirm').addEventListener('click', () => {
+    const targetPosition = parseInt(select.value, 10);
+    if (!targetPosition) {
+      showToast(t('organize.copySelectTargetFirst'), 'warning');
+      return;
+    }
+    cleanup();
+    if (pads.getData(targetPosition)) {
+      openConfirmModal({
+        title: t('organize.overwriteConfirmTitle', { position: targetPosition }),
+        body: t('organize.overwriteConfirmBody', { position: targetPosition }),
+        confirmLabel: t('organize.overwriteConfirmButton'),
+        onConfirm: () => doCopy(targetPosition),
+      });
+    } else {
+      doCopy(targetPosition);
+    }
+  });
+
+  modal.querySelector('#copy-pad-cancel').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  escHandler = (e) => {
+    if (e.key === 'Escape') cleanup();
+  };
+  window.addEventListener('keydown', escHandler);
+}
+
+// Copies leave a pad keyless (see pads.copyPad); block save/export until it's
+// assigned, since server validation rejects a session with any keyless pad and
+// the generic error wouldn't say which one.
+function findPadMissingKey() {
+  return pads.getAll().find((p) => !p.key);
+}
+
 // Global stop
 function stopAll() {
   audio.stopAll();
@@ -235,6 +397,17 @@ function stopAll() {
 const stopBtn = document.getElementById('btn-stop-all');
 if (stopBtn) {
   stopBtn.addEventListener('click', stopAll);
+}
+
+// Organize mode toggle
+const organizeBtn = document.getElementById('btn-organize-mode');
+if (organizeBtn) {
+  organizeBtn.addEventListener('click', () => {
+    const next = !pads.isOrganizeMode();
+    pads.setOrganizeMode(next);
+    organizeBtn.setAttribute('aria-pressed', String(next));
+    closePadContextMenu();
+  });
 }
 
 // Configurable stop key
@@ -573,6 +746,24 @@ const pads = createPads(document.getElementById('pad-grid'), {
       }
     }
     ws.send('pad:release', { position, videoId: data?.videoId });
+  },
+  // Organize mode: stop the voices of any pads about to be mutated so a
+  // swapped/moved/cleared pad never leaves an orphaned voice keyed to its old
+  // position (activeSources is keyed by position in audio-engine.js).
+  onBeforeChange(positions) {
+    positions.forEach((p) => audio.stop(p));
+    if (audio.getActivePositions().length === 0) {
+      videoDisplay.stop();
+    }
+  },
+  onAfterSwap(from, to, targetWasOccupied) {
+    showToast(
+      t(targetWasOccupied ? 'toast.padSwapped' : 'toast.padMoved', { a: from, b: to }),
+      'info',
+    );
+  },
+  onContextMenu(position, x, y) {
+    openPadContextMenu(position, x, y);
   },
   }, 9);
 
@@ -1645,7 +1836,14 @@ ws.on('video:removed', refreshVideos);
 // Session Manager
 const sessionManager = createSessionManager({
   showToast,
+  openConfirmModal,
   onSaveRequest() {
+    const incomplete = findPadMissingKey();
+    if (incomplete) {
+      showToast(t('organize.saveBlockedMissingKey', { position: incomplete.position }), 'warning');
+      pads.select(incomplete.position);
+      return;
+    }
     const sessionData = {
       name: document.getElementById('session-name').value.trim(),
       pads: pads.getAll(),
@@ -1679,6 +1877,12 @@ if (exportBtn) {
     const name = document.getElementById('session-name').value.trim();
     if (!name) {
       showToast(t('toast.saveOrLoadBeforeExport'), 'error');
+      return;
+    }
+    const incomplete = findPadMissingKey();
+    if (incomplete) {
+      showToast(t('organize.saveBlockedMissingKey', { position: incomplete.position }), 'warning');
+      pads.select(incomplete.position);
       return;
     }
     // Save first so the export reflects live/auto-committed pad edits, not
@@ -1771,12 +1975,45 @@ function initLocaleSwitcher() {
   });
 }
 
+// Overflow menu for the header's secondary actions. The real Export/Import/Logs
+// buttons stay in the DOM (CSS hides them on narrow screens); each menu item
+// just proxies a click to its button, so behavior has a single source.
+function initHeaderMoreMenu() {
+  const wrap = document.getElementById('header-more');
+  const btn = document.getElementById('btn-header-more');
+  const menu = document.getElementById('header-more-menu');
+  if (!wrap || !btn || !menu) return;
+
+  function setOpen(open) {
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', String(open));
+  }
+
+  btn.addEventListener('click', () => setOpen(menu.hidden));
+
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-proxy]');
+    if (!item) return;
+    setOpen(false);
+    const target = document.getElementById(item.dataset.proxy);
+    if (target) target.click();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  });
+}
+
 // Initial load
 const panelToggleControllers = initPanelToggle();
 const librarySidenavToggle = initLibrarySidenav();
 const padsSidenavToggle = initPadsSidenav();
 const headerToggle = initHeaderToggle();
 initLocaleSwitcher();
+initHeaderMoreMenu();
 initTooltipPositioning();
 
 // Toggles whose title/aria-expanded depend on collapsed state, not just the

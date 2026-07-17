@@ -200,6 +200,67 @@ body {
   background: var(--surface-hover);
 }
 
+/* Header overflow menu — hidden on wide screens (secondary buttons show
+   inline); revealed by the responsive block below. */
+.header-more {
+  position: relative;
+  display: none;
+}
+
+.header-more-btn {
+  padding: 8px 12px;
+  line-height: 1;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.header-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1000;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  min-width: 150px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.header-more-menu li {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.header-more-menu li:hover {
+  background: var(--surface-hover);
+}
+
+/* Below this width the secondary session actions fold into the "⋯" menu so
+   the header stays a single tidy row instead of wrapping downward. Placed
+   before the ≤900px mobile block so that block still wins for shared props. */
+@media (max-width: 1100px) {
+  #btn-export-session,
+  #btn-import-session,
+  #btn-view-logs {
+    display: none;
+  }
+  .header-more {
+    display: block;
+  }
+  .header-actions,
+  .session-controls {
+    flex-wrap: nowrap;
+  }
+}
+
 /* Header collapse: same grid 1fr->0fr pattern as .panel-content (below),
    animating the header's own height rather than a max-height ceiling. .app
    is flex column and .main is flex:1, so main reclaims the space
@@ -251,6 +312,36 @@ body {
 
 .header-grip[aria-expanded='true'] .chev {
   transform: rotate(180deg);
+}
+
+.grip-brand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.grip-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+/* When the header is collapsed, surface a compact logo + version in the grip
+   strip so the app stays identifiable; the full brand returns when expanded. */
+.app.header-hidden .header-grip {
+  justify-content: space-between;
+  padding: 0 12px;
+  height: auto;
+  min-height: 28px;
+}
+
+.app.header-hidden .grip-brand {
+  display: flex;
+}
+
+.app.header-hidden .grip-brand .version {
+  margin-left: 0;
 }
 
 /* Buttons */
@@ -928,6 +1019,111 @@ body {
 
 .pad.empty:hover {
   opacity: 0.85;
+}
+
+/* Organize mode: pads are managed, not played, so drop the "about to trigger"
+   hover affordance and signal draggability instead. */
+.pad-grid.organize-mode .pad {
+  cursor: grab;
+}
+
+.pad-grid.organize-mode .pad:hover {
+  transform: none;
+  border-color: var(--warning);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.pad-grid.organize-mode .pad.empty:hover {
+  border-color: var(--border);
+}
+
+.pad.dragging {
+  opacity: 0.35;
+  cursor: grabbing;
+}
+
+.pad.drop-target-swap {
+  outline: 3px solid var(--warning);
+  outline-offset: 2px;
+}
+
+.pad.drop-target-move {
+  outline: 3px solid var(--success);
+  outline-offset: 2px;
+}
+
+.pad-drag-ghost {
+  position: fixed;
+  z-index: 3000;
+  width: var(--pad-size);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: var(--radius);
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  opacity: 0.85;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 8px;
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* Organize toggle sits inside .grid-controls, to the right of the PADS
+   selector — a small left margin sets it apart from the help icon. */
+.grid-controls .btn-organize {
+  margin-left: 4px;
+}
+
+.btn-organize[aria-pressed='true'] {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: #0a0c10;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.4);
+}
+
+/* Pad context menu (organize mode: right-click / long-press) */
+.pad-context-menu {
+  position: fixed;
+  z-index: 2500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pad-context-menu button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.pad-context-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.pad-context-menu button.danger {
+  color: var(--danger);
+}
+
+.pad-context-menu button.danger:hover {
+  background: var(--danger-dim);
 }
 
 .pad-key {
@@ -2149,6 +2345,86 @@ body {
 .session-modal-close:hover {
   background: var(--surface-hover);
   color: var(--text);
+}
+
+/* Sessions manager modal */
+.sessions-manager {
+  width: min(560px, 90vw);
+}
+
+.sessions-manager-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  margin-bottom: 12px;
+}
+
+.sessions-manager-search:focus {
+  border-color: var(--accent);
+}
+
+.sessions-manager-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sessions-manager-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sessions-manager-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sessions-manager-name {
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessions-manager-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sessions-manager-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sessions-manager-actions .btn {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+
+.sessions-manager-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 24px 0;
+  margin: 0;
 }
 
 .waveform-help-modal {

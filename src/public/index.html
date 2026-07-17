@@ -36,11 +36,20 @@
           <select id="session-select">
             <option value="" data-i18n="header.loadSessionOption">Load session...</option>
           </select>
+          <button id="btn-manage-sessions" class="btn btn-secondary" data-i18n-title="session.manageTitle" title="Manage sessions" data-i18n="session.manageButton">Manage</button>
           <button id="btn-new-session" class="btn btn-secondary" data-i18n="header.new">New</button>
           <button id="btn-export-session" class="btn btn-secondary" data-i18n-title="header.exportTitle" title="Export session as ZIP" data-i18n="header.export">Export</button>
           <input type="file" id="import-session-file" accept=".zip" style="display:none">
           <button id="btn-import-session" class="btn btn-secondary" data-i18n-title="header.importTitle" title="Import session from ZIP" data-i18n="header.import">Import</button>
           <button id="btn-view-logs" class="btn btn-secondary" data-i18n-title="header.logsTitle" title="View logs" data-i18n="header.logs">Logs</button>
+          <div class="header-more" id="header-more">
+            <button type="button" class="btn btn-secondary header-more-btn" id="btn-header-more" aria-haspopup="menu" aria-expanded="false" data-i18n-title="header.moreTitle" title="More actions">⋯</button>
+            <ul class="header-more-menu" id="header-more-menu" role="menu" hidden>
+              <li role="menuitem" data-proxy="btn-export-session" data-i18n="header.export">Export</li>
+              <li role="menuitem" data-proxy="btn-import-session" data-i18n="header.import">Import</li>
+              <li role="menuitem" data-proxy="btn-view-logs" data-i18n="header.logs">Logs</li>
+            </ul>
+          </div>
         </div>
         <div class="locale-switcher" id="locale-switcher">
           <button type="button" class="locale-btn" id="locale-btn" aria-haspopup="listbox" aria-expanded="false" data-i18n-title="header.localeSelectTitle" title="Language">
@@ -77,6 +86,10 @@
       </div>
     </div>
     <button type="button" class="header-grip" id="header-toggle" aria-controls="header-collapse-inner" aria-expanded="true">
+      <span class="grip-brand">
+        <img src="/logo.png" alt="" class="grip-logo">
+        <span class="version">v1.0</span>
+      </span>
       <span class="chev">▾</span>
     </button>
 
@@ -234,6 +247,9 @@
                   <option value="27">3×9 (27)</option>
                 </select>
                 <span class="help-icon" data-i18n-tooltip="tip.gridSize" data-tooltip="Shrinking the grid discards any extra PADs that no longer fit.">?</span>
+                <button id="btn-organize-mode" type="button" class="btn btn-secondary btn-organize"
+                        aria-pressed="false" data-i18n="organize.toggleButton"
+                        data-i18n-title="organize.toggleTitle" title="Organize mode">Organize</button>
               </div>
             </div>
             <div class="pad-grid" id="pad-grid">
