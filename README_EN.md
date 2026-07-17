@@ -30,7 +30,10 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a 
 - **Full video download** — `yt-dlp` downloads the complete video; `ffmpeg` extracts the audio track.
 - **Up to 27 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
 - **Time-slice editor** — waveform display with drag handles, plus transport controls (play, mark in, mark out) to set the exact segment while the video is playing.
-- **Session persistence** — save/load your pad layout as a JSON file, or start a new session from a template copied from an existing one.
+- **Session persistence** — save/load your pad layout as a JSON file, or start a new session from a template copied from an existing one. The session manager adds search and per-session delete.
+- **Organize mode** — rearrange the grid without triggering audio: drag to swap or move pads, copy one pad to another, or clear it with a confirmation modal; a context menu (right-click / long-press) offers the same.
+- **Compact header** — secondary actions (New, Manage, Export, Import, Logs, Settings) live in a three-dots (⋯) menu; each of the five actions can be pinned to the toolbar as a button. The STOP button shows only its icon and the configured key.
+- **Settings** — a modal with the configurable stop key and the app text size; both preferences persist across sessions.
 - **Configurable pads** — 9 to 27 pads with per-pad color, volume, key, trigger mode, and loop; trigger by keyboard, mouse, or touch.
 - **Master FX chain** — master volume, low-pass filter (cutoff/resonance), reverb, and delay (time/feedback) applied to everything that plays.
 - **Per-pad FX** — Tune (±12 semitones), Cut, Res, Reverb send, and Delay send per pad, plus the P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH with a Speed knob (50–200%, changes speed while keeping pitch); tweaking these while a pad loops warps it live.
@@ -92,7 +95,8 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 3. **Edit a pad** — click one of the pads. Pick the video, assign a key, and set the time segment. Tweak the per-pad FX knobs (Tune, Cut, Res, Rev, Dly, and the P.SHIFT/STRETCH switches with their Speed knob) to shape that pad's sound. Every change (start/end, color, volume, key, video, trigger mode, loop, FX) is auto-committed to the pad as you make it — there's no per-pad save button.
 4. **Use the transport** — click **Play Preview** to watch the video, then **Set In** and **Set Out** to mark the slice. Or drag the waveform handles directly. Use `Ctrl` + mouse wheel to zoom into the waveform and drag to pan for precise slicing on long samples.
 5. **Play** — press the assigned key. The audio plays through the Web Audio engine (through the master FX chain — filter, reverb, delay) and the video appears in the visualizer.
-6. **Save your session** — give it a name and load it later. Starting a new session opens a template modal: start from a blank layout, or copy the pads from an existing session as a starting point.
+6. **Save your session** — the **Save** button opens a modal to name it; load it later from the combo or the **Manage** modal (with search and per-session delete). Starting a new session opens a template modal: start from a blank layout, or copy the pads from an existing session as a starting point.
+7. **Organize the grid** — toggle **Organize** (next to the PADS selector) to drag and swap/move pads, copy one to another, or clear it; pads don't trigger audio while it's active.
 
 ## Features
 
@@ -100,12 +104,15 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 |---|---|
 | **Video Library** | Add YouTube URLs, see download progress, remove cached videos, view title + duration |
 | **Pad Grid** | Click, mouse, or touch to trigger and edit; pressing the assigned key also triggers; activity LED when a pad is playing |
+| **Organize Mode** | Button next to the PADS selector: drag to swap or move, context menu (right-click / long-press), copy to another pad, clear with confirmation; doesn't trigger audio while active |
 | **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor; every edit auto-commits, no per-pad save button |
 | **Per-pad FX** | Tune (±12 semitones), Cut, Res, Reverb send, and Delay send knobs per pad; P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH switch with a Speed knob (50–200%, time-stretch); tweaking these live while a pad loops warps it in real time |
 | **Rotary knobs** | Master and per-pad FX controls as rotary knobs: vertical drag, mouse wheel, Shift for fine adjustment, keyboard accessible |
 | **Waveform Zoom/Pan** | `Ctrl` + mouse wheel to zoom, drag to pan, plus zoom in/out/reset buttons for precise slicing on long samples |
 | **Transport** | Play preview, mark in, mark out, stop; playhead synced to the video position; Material Symbols icons instead of plain Unicode glyphs |
-| **Session Manager** | Save/load/delete session JSON files; new-session modal to start fresh or copy pads from an existing session as a template |
+| **Session Manager** | Save (name modal)/load/delete sessions; Manage modal with search and per-row delete; new-session modal to start fresh or copy pads from an existing session as a template |
+| **Compact header / ⋯ menu** | Secondary actions in a three-dots menu; each can be pinned to the toolbar as a button (remembered); STOP shows only icon + key |
+| **Settings** | Modal with configurable stop key and app text size; both preferences persist |
 | **Master FX** | Master volume, filter (cutoff/resonance), reverb, and delay (time/feedback) applied to everything that plays |
 | **Collapsible workspace** | PADS, VIDEOS, pad editor, and General/Pad FX strip panels collapse from their header/tab and are drag-resizable |
 | **Global Stop** | STOP button or **Escape** key silences all pads and pauses the video |

@@ -30,7 +30,10 @@ PumaSamplerMusic resuelve esto en una sola ventana del navegador: pega una URL d
 - **Descarga completa de video** — `yt-dlp` descarga el video completo; `ffmpeg` extrae la pista de audio.
 - **Hasta 27 PADs asignables** — cada PAD puede vincularse a cualquier tecla del teclado (o combinación como `shift+a`).
 - **Editor de fragmentos de tiempo** — visualización de forma de onda con controladores de arrastre, más controles de transporte (reproducir, marcar entrada, marcar salida) para fijar el segmento exacto mientras el video se reproduce.
-- **Persistencia de sesiones** — guarda/carga la disposición de PADs como un archivo JSON, o inicia una sesión nueva a partir de una plantilla copiada de una sesión existente.
+- **Persistencia de sesiones** — guarda/carga la disposición de PADs como un archivo JSON, o inicia una sesión nueva a partir de una plantilla copiada de una sesión existente. El gestor de sesiones ofrece búsqueda y eliminación por sesión.
+- **Modo Organizar** — reorganiza la grilla sin disparar audio: arrastra para intercambiar o mover PADs, copia un PAD a otro, o límpialo con un modal de confirmación; también hay un menú contextual (clic derecho / mantener presionado).
+- **Barra superior compacta** — las acciones secundarias (Nueva, Gestionar, Exportar, Importar, Logs, Configuración) viven en un menú de tres puntos (⋯); cada una de las cinco acciones puede anclarse (pin) a la barra como botón. El botón STOP muestra solo el ícono y la tecla configurada.
+- **Configuración** — un modal con la tecla de stop configurable y el tamaño de texto de la aplicación; ambas preferencias se recuerdan entre sesiones.
 - **PADs configurables** — de 9 a 27 PADs con color, volumen, tecla, modo de disparo y loop por PAD; se disparan con teclado, mouse o toque.
 - **Cadena de FX maestra** — volumen maestro, filtro pasabajos (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena.
 - **FX por PAD** — Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD, más los switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, cambia la velocidad conservando el tono); ajustar los controles mientras el PAD suena lo deforma (warp) en tiempo real.
@@ -92,7 +95,8 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 3. **Editar un PAD** — haz clic en uno de los PADs. Elige el video, asigna una tecla y fija el segmento de tiempo. Ajusta los knobs de FX por PAD (Tune, Cut, Res, Rev, Dly, y los switches P.SHIFT/STRETCH con su knob de Speed) para dar forma al sonido de ese PAD. Cada cambio (inicio/fin, color, volumen, tecla, video, modo de disparo, loop, FX) se guarda automáticamente en el PAD a medida que se hace — no hay un botón de guardado por PAD.
 4. **Usar el transporte** — haz clic en **Play Preview** para ver el video, luego en **Set In** y **Set Out** para marcar el fragmento. O arrastra los controladores de la forma de onda directamente. Usa `Ctrl` + rueda del mouse para hacer zoom en la forma de onda y arrastra para desplazarte (pan), útil para hacer cortes precisos en muestras largas.
 5. **Reproducir** — presiona la tecla asignada. El audio se reproduce a través del motor Web Audio (pasando por la cadena de FX maestra — filtro, reverb, delay) y el video aparece en el visualizador.
-6. **Guardar la sesión** — asígnale un nombre y cárgala después. Al iniciar una sesión nueva se abre un modal de plantilla: empezar desde una disposición en blanco, o copiar los PADs de una sesión existente como punto de partida.
+6. **Guardar la sesión** — el botón **Save** abre un modal para nombrarla; cárgala después desde el combo o desde el modal **Gestionar** (con búsqueda y eliminación por sesión). Al iniciar una sesión nueva se abre un modal de plantilla: empezar desde una disposición en blanco, o copiar los PADs de una sesión existente como punto de partida.
+7. **Organizar la grilla** — activa **Organizar** (junto al selector de PADS) para arrastrar e intercambiar/mover PADs, copiar uno a otro o limpiarlo; mientras está activo los PADs no disparan audio.
 
 ## Características
 
@@ -100,12 +104,15 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 |---|---|
 | **Video Library** | Agregar URLs de YouTube, ver progreso de descarga, eliminar videos en caché, ver título + duración |
 | **Grilla de PADs** | Clic, mouse o toque para disparar y editar; presionar la tecla asignada también dispara; LED de actividad cuando un PAD está sonando |
+| **Modo Organizar** | Botón junto al selector de PADS: arrastra para intercambiar o mover, menú contextual (clic derecho / mantener presionado), copiar a otro PAD, limpiar con confirmación; no dispara audio mientras está activo |
 | **Editor de PAD** | Etiqueta, tecla, volumen, color, modo de disparo (one-shot / gate), loop, editor de segmento de forma de onda; cada edición se guarda automáticamente, sin botón de guardado por PAD |
 | **FX por PAD** | Knobs de Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD; switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, time-stretch); ajustar en vivo mientras el PAD hace loop lo deforma en tiempo real |
 | **Knobs rotativos** | Controles de FX maestros y por PAD como knobs giratorios: arrastre vertical, rueda del mouse, Shift para ajuste fino, navegables por teclado |
 | **Zoom/Pan de forma de onda** | `Ctrl` + rueda del mouse para zoom, arrastrar para pan, más botones de zoom in/out/reset para cortes precisos en muestras largas |
 | **Transporte** | Reproducir previsualización, marcar entrada, marcar salida, detener; playhead sincronizado con la posición del video; íconos Material Symbols en vez de glifos Unicode planos |
-| **Gestor de sesiones** | Guardar/cargar/eliminar archivos JSON de sesión; modal de sesión nueva para empezar de cero o copiar PADs de una sesión existente como plantilla |
+| **Gestor de sesiones** | Guardar (modal con nombre)/cargar/eliminar sesiones; modal Gestionar con búsqueda y eliminación por fila; modal de sesión nueva para empezar de cero o copiar PADs de una sesión existente como plantilla |
+| **Barra compacta / menú ⋯** | Acciones secundarias en un menú de tres puntos; cada una puede anclarse (pin) a la barra como botón (se recuerda); STOP muestra solo ícono + tecla |
+| **Configuración** | Modal con tecla de stop configurable y tamaño de texto de la app; ambas preferencias persistentes |
 | **FX maestros** | Volumen maestro, filtro (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena |
 | **Espacio de trabajo colapsable** | Paneles PADS, VIDEOS, editor de PAD y tiras de FX general/por PAD se colapsan desde su cabecera/pestaña y son redimensionables por arrastre |
 | **Detención global** | El botón STOP o la tecla **Escape** silencia todos los PADs y pausa el video |
