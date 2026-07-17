@@ -9,9 +9,13 @@ const STATUS = {
   QUEUED: 'queued',
   DOWNLOADING: 'downloading',
   EXTRACTING: 'extracting',
+  RETRYING: 'retrying',
   READY: 'ready',
   ERROR: 'error',
 };
+
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 60_000;
 
 const activeDownloads = new Map();
 const queue = [];
@@ -35,6 +39,15 @@ export function cancelDownload(videoId) {
   const queuedIndex = queue.findIndex((item) => item.videoId === videoId);
   if (queuedIndex !== -1) {
     queue.splice(queuedIndex, 1);
+  }
+
+  if (state.retryTimer) {
+    clearTimeout(state.retryTimer);
+  }
+  if (state.retryResolve) {
+    // Settle the pending backoff sleep so runDownload can observe the
+    // deletion and exit, freeing its concurrency slot.
+    state.retryResolve();
   }
 
   if (state.currentProcess && state.currentProcess.exitCode === null) {
@@ -105,62 +118,118 @@ async function runDownload({ videoId, url, callbacks }) {
   const tempDir = videoStore.getTempDirectory(videoId);
 
   try {
-    await mkdir(tempDir, { recursive: true });
+    for (let attempt = 0; ; attempt++) {
+      if (attempt > 0) {
+        // Retries re-enter DOWNLOADING; the RETRYING -> DOWNLOADING transition
+        // is communicated via the progress notifications below, not a fresh
+        // download:start (that event fires once per queued item).
+        state.status = STATUS.DOWNLOADING;
+        state.progress = 0;
+      }
 
-    // Step 1: Download video to temp directory (mapped to the lower half of the
-    // overall progress range so it doesn't visually jump from 100% back to 0%
-    // when the audio extraction phase starts)
-    await runYtDlp(url, tempDir, (progress) => {
-      state.progress = Math.round(progress / 2);
-      notify(callbacks, 'download:progress', { videoId, progress: state.progress });
-    }, state);
+      try {
+        await mkdir(tempDir, { recursive: true });
 
-    const videoFile = await videoStore.findTempVideoFile(videoId);
-    if (!videoFile) {
-      throw new Error('Downloaded video file not found');
+        // Step 1: Download video to temp directory (mapped to the lower half of the
+        // overall progress range so it doesn't visually jump from 100% back to 0%
+        // when the audio extraction phase starts)
+        await runYtDlp(url, tempDir, (progress) => {
+          state.progress = Math.round(progress / 2);
+          notify(callbacks, 'download:progress', { videoId, progress: state.progress });
+        }, state);
+
+        const videoFile = await videoStore.findTempVideoFile(videoId);
+        if (!videoFile) {
+          throw new Error('Downloaded video file not found');
+        }
+
+        state.status = STATUS.EXTRACTING;
+        notify(callbacks, 'download:extracting', { videoId });
+
+        // Step 2: Extract audio (mapped to the upper half of the overall progress range
+        // so it doesn't visually jump from 100% back to 0% after the video phase)
+        await runYtDlpAudio(url, tempDir, (progress) => {
+          state.progress = 50 + Math.round(progress / 2);
+          notify(callbacks, 'download:progress', { videoId, progress: state.progress });
+        }, state);
+        const tempAudio = await videoStore.getTempAudioPath(videoId);
+
+        // Step 3: Extract metadata from info.json sidecar
+        const metadata = await extractMetadata(videoId);
+
+        // Step 4: Move files to final location
+        await videoStore.finalizeVideo(videoId, videoFile, tempAudio);
+
+        // Step 5: Save metadata
+        const audioStats = await stat(videoStore.getAudioFilePath(videoId));
+        const info = {
+          videoId,
+          url,
+          title: metadata.title,
+          duration: metadata.duration,
+          sizeBytes: audioStats.size,
+          ready: true,
+          updatedAt: Date.now(),
+        };
+        await videoStore.saveInfo(videoId, info);
+
+        state.status = STATUS.READY;
+        state.progress = 100;
+        notify(callbacks, 'download:ready', { videoId, info });
+        return;
+      } catch (err) {
+        const retryable = /429|Too Many Requests|Sign in to confirm/i.test(err.message);
+
+        if (!retryable || attempt >= MAX_RETRIES) {
+          // Rotated/expired cookies get their own hint: the remedy is
+          // re-exporting, not configuring from scratch.
+          const errorMessage = /cookies are no longer valid/i.test(err.message)
+            ? `YouTube cookies expired. Re-export them via the Videos panel guide. Original: ${err.message}`
+            : /Sign in to confirm|DRM protected/.test(err.message)
+              ? `YouTube bot-check triggered. Configure YouTube cookies in the Videos panel settings. Original: ${err.message}`
+              : err.message;
+          state.status = STATUS.ERROR;
+          state.error = errorMessage;
+          console.error(`Download failed for ${videoId}:`, err.message);
+          notify(callbacks, 'download:error', { videoId, error: errorMessage });
+          return;
+        }
+
+        const delay = Math.min(
+          Math.round(RETRY_BASE_MS * 3 ** attempt * (0.75 + Math.random() * 0.5)),
+          300_000,
+        );
+        state.status = STATUS.RETRYING;
+        state.progress = 0;
+        state.retryAttempt = attempt + 1;
+        state.retryMax = MAX_RETRIES;
+        notify(callbacks, 'download:retrying', {
+          videoId, attempt: attempt + 1, max: MAX_RETRIES, delayMs: delay,
+        });
+        console.warn(
+          `Retrying download for ${videoId} (attempt ${attempt + 1}/${MAX_RETRIES}) in ${delay}ms`,
+        );
+
+        await new Promise((resolve) => {
+          // Non-enumerable, same rationale as currentProcess: keeps state
+          // JSON-serializable for GET /api/videos while remaining cancellable.
+          // retryResolve lets cancelDownload settle this promise — clearing
+          // the timer alone would leave it pending forever, hanging
+          // runDownload and leaking its concurrency slot (runningCount is
+          // only decremented via processQueue's .finally()).
+          const timer = setTimeout(resolve, delay);
+          Object.defineProperty(state, 'retryTimer', {
+            value: timer, writable: true, configurable: true, enumerable: false,
+          });
+          Object.defineProperty(state, 'retryResolve', {
+            value: resolve, writable: true, configurable: true, enumerable: false,
+          });
+        });
+
+        // cancelDownload() may have removed this videoId while we slept.
+        if (!activeDownloads.has(videoId)) return;
+      }
     }
-
-    state.status = STATUS.EXTRACTING;
-    notify(callbacks, 'download:extracting', { videoId });
-
-    // Step 2: Extract audio (mapped to the upper half of the overall progress range
-    // so it doesn't visually jump from 100% back to 0% after the video phase)
-    await runYtDlpAudio(url, tempDir, (progress) => {
-      state.progress = 50 + Math.round(progress / 2);
-      notify(callbacks, 'download:progress', { videoId, progress: state.progress });
-    }, state);
-    const tempAudio = await videoStore.getTempAudioPath(videoId);
-
-    // Step 3: Extract metadata from info.json sidecar
-    const metadata = await extractMetadata(videoId);
-
-    // Step 4: Move files to final location
-    await videoStore.finalizeVideo(videoId, videoFile, tempAudio);
-
-    // Step 5: Save metadata
-    const audioStats = await stat(videoStore.getAudioFilePath(videoId));
-    const info = {
-      videoId,
-      url,
-      title: metadata.title,
-      duration: metadata.duration,
-      sizeBytes: audioStats.size,
-      ready: true,
-      updatedAt: Date.now(),
-    };
-    await videoStore.saveInfo(videoId, info);
-
-    state.status = STATUS.READY;
-    state.progress = 100;
-    notify(callbacks, 'download:ready', { videoId, info });
-  } catch (err) {
-    const errorMessage = err.message.includes('Sign in to confirm')
-      ? `YouTube bot-check triggered. Configure YouTube cookies in the Videos panel settings. Original: ${err.message}`
-      : err.message;
-    state.status = STATUS.ERROR;
-    state.error = errorMessage;
-    console.error(`Download failed for ${videoId}:`, err.message);
-    notify(callbacks, 'download:error', { videoId, error: errorMessage });
   } finally {
     // Keep state around briefly so UI can read status, then clean up
     setTimeout(() => {
@@ -193,11 +262,17 @@ function runYtDlp(url, tempDir, onProgress, state) {
   return new Promise((resolve, reject) => {
     const args = [
       '--no-playlist',
-      '--no-warnings',
       ...cookiesArgs(),
       ...providerArgs(),
+      '--js-runtimes', 'node',
+      // yt-dlp 2026+ ships its JS signature/nsig challenge solver as an
+      // opt-in remote component; without it every real A/V format is
+      // silently dropped (storyboards only) regardless of client/cookies.
+      '--remote-components', 'ejs:github',
+      '--sleep-requests', '1.5',
+      '--extractor-args', 'youtube:player_client=tv,web',
       '--write-info-json',
-      '-f', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[height<=1080]',
+      '-f', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
       '--merge-output-format', 'mp4',
       '-o', 'video.%(ext)s',
       '-P', tempDir,
@@ -252,9 +327,13 @@ function runYtDlpAudio(url, tempDir, onProgress, state) {
       '--audio-format', 'opus',
       '--audio-quality', '160K',
       '--no-playlist',
-      '--no-warnings',
       ...cookiesArgs(),
       ...providerArgs(),
+      '--js-runtimes', 'node',
+      // See runYtDlp: required for signature solving on yt-dlp 2026+.
+      '--remote-components', 'ejs:github',
+      '--sleep-requests', '1.5',
+      '--extractor-args', 'youtube:player_client=tv,web',
       '-o', 'audio.%(ext)s',
       '-P', tempDir,
       url,
