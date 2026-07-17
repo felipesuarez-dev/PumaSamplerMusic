@@ -44,6 +44,10 @@ let syncableToggles = [];
 const STOP_KEY_STORAGE = 'puma-stop-key';
 const PREVIEW_VOLUME_STORAGE = 'puma-preview-volume';
 const HEADER_HIDDEN_STORAGE = 'puma-header-hidden';
+const FONT_SCALE_STORAGE = 'puma-font-scale';
+const FONT_SCALE_DEFAULT = 16;
+const FONT_SCALE_MIN = 12;
+const FONT_SCALE_MAX = 22;
 let stopKey = localStorage.getItem(STOP_KEY_STORAGE) || 'escape';
 const savedPreviewVolume = parseFloat(localStorage.getItem(PREVIEW_VOLUME_STORAGE));
 let previewVolume = Number.isNaN(savedPreviewVolume) ? 0.30 : savedPreviewVolume;
@@ -59,11 +63,6 @@ function formatKeyLabel(key) {
 function updateStopKeyLabel() {
   const label = document.getElementById('stop-key-label');
   if (label) label.textContent = `[${formatKeyLabel(stopKey)}]`;
-  const capture = document.getElementById('stop-key-capture');
-  if (capture) {
-    capture.textContent = formatKeyLabel(stopKey);
-    capture.dataset.key = stopKey;
-  }
 }
 
 function saveStopKey(key) {
@@ -218,6 +217,75 @@ function openConfirmModal({ title, body, confirmLabel, onConfirm }) {
     onConfirm();
   });
   modal.querySelector('#confirm-modal-cancel').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', onKeydown);
+}
+
+// --- App text size ---------------------------------------------------------
+// Every font-size in the stylesheet is in rem, so scaling the root font-size
+// scales all text uniformly; --pad-size is px/vw, so pads are unaffected.
+function getFontScale() {
+  const stored = parseFloat(localStorage.getItem(FONT_SCALE_STORAGE));
+  if (Number.isNaN(stored)) return FONT_SCALE_DEFAULT;
+  return Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, stored));
+}
+
+function applyFontScale(px) {
+  const clamped = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, px));
+  document.documentElement.style.fontSize = `${clamped}px`;
+  localStorage.setItem(FONT_SCALE_STORAGE, String(clamped));
+  return clamped;
+}
+
+// --- Settings modal --------------------------------------------------------
+function openSettingsModal() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+  const modal = document.createElement('div');
+  modal.className = 'session-modal settings-modal';
+  modal.innerHTML = `
+    <h3>${t('settings.title')}</h3>
+    <div class="settings-section">
+      <label class="settings-label">${t('settings.stopKeyLabel')}</label>
+      <div class="key-capture" id="settings-stop-key" title="${t('settings.stopKeyHint')}"></div>
+      <p class="session-modal-hint">${t('settings.stopKeyHint')}</p>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label">${t('settings.fontSizeLabel')}</label>
+      <div class="settings-font-row">
+        <button class="btn btn-secondary" id="settings-font-dec" title="${t('settings.fontDecrease')}">A−</button>
+        <span class="settings-font-value" id="settings-font-value"></span>
+        <button class="btn btn-secondary" id="settings-font-inc" title="${t('settings.fontIncrease')}">A+</button>
+        <button class="btn btn-secondary" id="settings-font-reset">${t('settings.fontReset')}</button>
+      </div>
+    </div>
+    <button class="session-modal-close" id="settings-close" title="${t('common.cancel')}">&times;</button>
+  `;
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  initStopKeyCapture(modal.querySelector('#settings-stop-key'));
+
+  const valueEl = modal.querySelector('#settings-font-value');
+  function paintFont(px) {
+    valueEl.textContent = `${px}px`;
+  }
+  paintFont(getFontScale());
+  modal.querySelector('#settings-font-dec').addEventListener('click', () => paintFont(applyFontScale(getFontScale() - 1)));
+  modal.querySelector('#settings-font-inc').addEventListener('click', () => paintFont(applyFontScale(getFontScale() + 1)));
+  modal.querySelector('#settings-font-reset').addEventListener('click', () => paintFont(applyFontScale(FONT_SCALE_DEFAULT)));
+
+  function cleanup() {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    window.removeEventListener('keydown', onKeydown);
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape' && !isCapturingKey) cleanup();
+  }
+  modal.querySelector('#settings-close').addEventListener('click', cleanup);
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop) cleanup();
   });
@@ -410,12 +478,16 @@ if (organizeBtn) {
   });
 }
 
-// Configurable stop key
-const stopKeyCapture = document.getElementById('stop-key-capture');
-if (stopKeyCapture) {
-  stopKeyCapture.addEventListener('click', () => {
-    stopKeyCapture.classList.add('listening');
-    stopKeyCapture.textContent = t('common.pressKey');
+// Wires a click-to-capture control for the global stop key. Used by the
+// Settings modal (the control used to live in the navbar). The element shows
+// the current key and, on click, listens for the next keypress to rebind it.
+function initStopKeyCapture(el) {
+  if (!el) return;
+  el.textContent = formatKeyLabel(stopKey);
+  el.dataset.key = stopKey;
+  el.addEventListener('click', () => {
+    el.classList.add('listening');
+    el.textContent = t('common.pressKey');
     isCapturingKey = true;
     pads.setKeyCapturing(true);
 
@@ -424,7 +496,9 @@ if (stopKeyCapture) {
       e.stopPropagation();
       const combo = buildKeyCombo(e);
       saveStopKey(combo);
-      stopKeyCapture.classList.remove('listening');
+      el.classList.remove('listening');
+      el.textContent = formatKeyLabel(combo);
+      el.dataset.key = combo;
       isCapturingKey = false;
       pads.setKeyCapturing(false);
       window.removeEventListener('keydown', handler);
@@ -1837,22 +1911,21 @@ ws.on('video:removed', refreshVideos);
 const sessionManager = createSessionManager({
   showToast,
   openConfirmModal,
-  onSaveRequest() {
+  // Gathers the save payload and runs the pre-save guard; returning null aborts
+  // before the Save modal opens (the pad-key guard selects the offender).
+  collectSessionData() {
     const incomplete = findPadMissingKey();
     if (incomplete) {
       showToast(t('organize.saveBlockedMissingKey', { position: incomplete.position }), 'warning');
       pads.select(incomplete.position);
-      return;
+      return null;
     }
-    const sessionData = {
-      name: document.getElementById('session-name').value.trim(),
+    return {
       pads: pads.getAll(),
       masterFx: masterFxControls ? masterFxControls.getState() : undefined,
     };
-    sessionManager.save(sessionData);
   },
   onSessionLoad(session) {
-    document.getElementById('session-name').value = session.name || '';
     const padsArray = session.pads || [];
     const maxPosition = padsArray.reduce((max, p) => Math.max(max, p.position || 0), 0);
     const newCount = Math.max(9, Math.min(MAX_PADS, maxPosition));
@@ -1874,8 +1947,8 @@ const sessionManager = createSessionManager({
 const exportBtn = document.getElementById('btn-export-session');
 if (exportBtn) {
   exportBtn.addEventListener('click', async () => {
-    const name = document.getElementById('session-name').value.trim();
-    if (!name) {
+    const current = sessionManager.getCurrent();
+    if (!current?.name) {
       showToast(t('toast.saveOrLoadBeforeExport'), 'error');
       return;
     }
@@ -1889,6 +1962,7 @@ if (exportBtn) {
     // whatever was last written to disk.
     try {
       const saved = await sessionManager.save({
+        name: current.name,
         pads: pads.getAll(),
         masterFx: masterFxControls ? masterFxControls.getState() : undefined,
       });
@@ -1975,9 +2049,10 @@ function initLocaleSwitcher() {
   });
 }
 
-// Overflow menu for the header's secondary actions. The real Export/Import/Logs
-// buttons stay in the DOM (CSS hides them on narrow screens); each menu item
-// just proxies a click to its button, so behavior has a single source.
+// Permanent kebab menu for the header's secondary actions. The real buttons
+// stay in the DOM (hidden via .is-proxied) so their handlers keep working; a
+// data-proxy item just clicks its button, so behavior has a single source. A
+// data-action item runs an inline action (e.g. opening the Settings modal).
 function initHeaderMoreMenu() {
   const wrap = document.getElementById('header-more');
   const btn = document.getElementById('btn-header-more');
@@ -1992,9 +2067,13 @@ function initHeaderMoreMenu() {
   btn.addEventListener('click', () => setOpen(menu.hidden));
 
   menu.addEventListener('click', (e) => {
-    const item = e.target.closest('[data-proxy]');
+    const item = e.target.closest('[data-proxy], [data-action]');
     if (!item) return;
     setOpen(false);
+    if (item.dataset.action === 'settings') {
+      openSettingsModal();
+      return;
+    }
     const target = document.getElementById(item.dataset.proxy);
     if (target) target.click();
   });
@@ -2015,6 +2094,7 @@ const headerToggle = initHeaderToggle();
 initLocaleSwitcher();
 initHeaderMoreMenu();
 initTooltipPositioning();
+applyFontScale(getFontScale());
 
 // Toggles whose title/aria-expanded depend on collapsed state, not just the
 // static data-i18n-title attribute. applyTranslations() resets el.title from

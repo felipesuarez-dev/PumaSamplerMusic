@@ -204,6 +204,12 @@ body {
    inline); revealed by the responsive block below. */
 .header-more {
   position: relative;
+  display: block;
+}
+
+/* Secondary actions live only in the kebab menu; the real buttons stay in the
+   DOM (hidden) so their handlers and the menu's proxy clicks keep working. */
+.is-proxied {
   display: none;
 }
 
@@ -241,24 +247,6 @@ body {
 
 .header-more-menu li:hover {
   background: var(--surface-hover);
-}
-
-/* Below this width the secondary session actions fold into the "⋯" menu so
-   the header stays a single tidy row instead of wrapping downward. Placed
-   before the ≤900px mobile block so that block still wins for shared props. */
-@media (max-width: 1100px) {
-  #btn-export-session,
-  #btn-import-session,
-  #btn-view-logs {
-    display: none;
-  }
-  .header-more {
-    display: block;
-  }
-  .header-actions,
-  .session-controls {
-    flex-wrap: nowrap;
-  }
 }
 
 /* Header collapse: same grid 1fr->0fr pattern as .panel-content (below),
@@ -418,7 +406,6 @@ body {
 .btn-stop .key-label {
   font-size: 0.75rem;
   opacity: 0.8;
-  margin-left: 2px;
   font-weight: 700;
   text-transform: none;
   letter-spacing: 0;
@@ -2344,6 +2331,56 @@ body {
 
 .session-modal-close:hover {
   background: var(--surface-hover);
+  color: var(--text);
+}
+
+.session-modal-input {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.session-modal-input:focus {
+  border-color: var(--accent);
+}
+
+/* Settings modal */
+.settings-modal {
+  width: min(440px, 90vw);
+}
+
+.settings-section {
+  margin-bottom: 20px;
+}
+
+.settings-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.settings-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.settings-font-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-font-value {
+  min-width: 52px;
+  text-align: center;
+  font-weight: 700;
   color: var(--text);
 }
 

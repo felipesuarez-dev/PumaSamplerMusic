@@ -24,30 +24,31 @@
             <svg class="stop-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
               <rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/>
             </svg>
-            <span data-i18n="header.stopAllButton">STOP</span>
             <span class="key-label" id="stop-key-label">[ESC]</span>
           </button>
-          <div class="key-capture" id="stop-key-capture" data-i18n-title="header.stopKeyCaptureTitle" title="Click to set stop key" data-key="escape">ESC</div>
-          <span class="help-icon" data-i18n-tooltip="tip.stopKeyCapture" data-tooltip="Click, then press a key to set it as the global stop shortcut.">?</span>
         </div>
         <div class="session-controls">
-          <input type="text" id="session-name" data-i18n-placeholder="header.sessionNamePlaceholder" placeholder="session name" autocomplete="off">
           <button id="btn-save-session" class="btn" data-i18n="header.save">Save</button>
           <select id="session-select">
             <option value="" data-i18n="header.loadSessionOption">Load session...</option>
           </select>
-          <button id="btn-manage-sessions" class="btn btn-secondary" data-i18n-title="session.manageTitle" title="Manage sessions" data-i18n="session.manageButton">Manage</button>
-          <button id="btn-new-session" class="btn btn-secondary" data-i18n="header.new">New</button>
-          <button id="btn-export-session" class="btn btn-secondary" data-i18n-title="header.exportTitle" title="Export session as ZIP" data-i18n="header.export">Export</button>
+          <!-- Real action buttons kept in the DOM (permanently hidden) so their
+               handlers stay wired; the kebab menu below proxies clicks to them. -->
+          <button id="btn-manage-sessions" class="btn btn-secondary is-proxied" data-i18n-title="session.manageTitle" title="Manage sessions" data-i18n="session.manageButton">Manage</button>
+          <button id="btn-new-session" class="btn btn-secondary is-proxied" data-i18n="header.new">New</button>
+          <button id="btn-export-session" class="btn btn-secondary is-proxied" data-i18n-title="header.exportTitle" title="Export session as ZIP" data-i18n="header.export">Export</button>
           <input type="file" id="import-session-file" accept=".zip" style="display:none">
-          <button id="btn-import-session" class="btn btn-secondary" data-i18n-title="header.importTitle" title="Import session from ZIP" data-i18n="header.import">Import</button>
-          <button id="btn-view-logs" class="btn btn-secondary" data-i18n-title="header.logsTitle" title="View logs" data-i18n="header.logs">Logs</button>
+          <button id="btn-import-session" class="btn btn-secondary is-proxied" data-i18n-title="header.importTitle" title="Import session from ZIP" data-i18n="header.import">Import</button>
+          <button id="btn-view-logs" class="btn btn-secondary is-proxied" data-i18n-title="header.logsTitle" title="View logs" data-i18n="header.logs">Logs</button>
           <div class="header-more" id="header-more">
             <button type="button" class="btn btn-secondary header-more-btn" id="btn-header-more" aria-haspopup="menu" aria-expanded="false" data-i18n-title="header.moreTitle" title="More actions">⋯</button>
             <ul class="header-more-menu" id="header-more-menu" role="menu" hidden>
+              <li role="menuitem" data-proxy="btn-new-session" data-i18n="header.new">New</li>
+              <li role="menuitem" data-proxy="btn-manage-sessions" data-i18n="session.manageButton">Manage</li>
               <li role="menuitem" data-proxy="btn-export-session" data-i18n="header.export">Export</li>
               <li role="menuitem" data-proxy="btn-import-session" data-i18n="header.import">Import</li>
               <li role="menuitem" data-proxy="btn-view-logs" data-i18n="header.logs">Logs</li>
+              <li role="menuitem" data-action="settings" data-i18n="settings.menuItem">Settings</li>
             </ul>
           </div>
         </div>

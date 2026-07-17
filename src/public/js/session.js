@@ -88,8 +88,7 @@ async function readZipEntryText(file, entryName) {
 }
 
 export function createSessionManager(options = {}) {
-  const { onSessionLoad, onSessionListChange, showToast, openConfirmModal } = options;
-  const nameInput = document.getElementById('session-name');
+  const { onSessionLoad, onSessionListChange, showToast, openConfirmModal, collectSessionData } = options;
   const saveBtn = document.getElementById('btn-save-session');
   const newBtn = document.getElementById('btn-new-session');
   const manageBtn = document.getElementById('btn-manage-sessions');
@@ -117,7 +116,7 @@ export function createSessionManager(options = {}) {
   }
 
   async function save(sessionData) {
-    const name = nameInput.value.trim();
+    const name = (sessionData.name || '').trim();
     if (!name) {
       showToast(t('toast.enterSessionName'), 'warning');
       return;
@@ -126,7 +125,6 @@ export function createSessionManager(options = {}) {
     try {
       const saved = await api.saveSession({ ...sessionData, name });
       currentSession = saved;
-      nameInput.value = saved.name;
       showToast(t('toast.sessionSaved', { name: saved.name }), 'success');
       await refreshList();
       return saved;
@@ -170,7 +168,6 @@ export function createSessionManager(options = {}) {
     try {
       const session = await api.loadSession(name);
       currentSession = session;
-      nameInput.value = session.name;
       select.value = '';
       select.blur();
       showToast(t('toast.sessionLoaded', { name: session.name }), 'success');
@@ -197,7 +194,6 @@ export function createSessionManager(options = {}) {
 
       const saved = await api.saveSession(session);
       currentSession = saved;
-      nameInput.value = saved.name;
       select.value = '';
       showToast(t('toast.sessionImported', { name: saved.name }), 'success');
       await refreshList();
@@ -213,7 +209,6 @@ export function createSessionManager(options = {}) {
 
   function clearWorkspace() {
     currentSession = null;
-    nameInput.value = '';
     select.value = '';
     if (onSessionLoad) onSessionLoad({ name: '', pads: [] });
   }
@@ -283,7 +278,7 @@ export function createSessionManager(options = {}) {
         }
         cleanup();
         await load(name);
-        nameInput.value = '';
+        currentSession = null; // next Save opens empty, so the copy saves as new
         showToast(t('toast.sessionCopied'), 'info');
       });
     }
@@ -438,9 +433,65 @@ export function createSessionManager(options = {}) {
     searchEl.focus();
   }
 
-  saveBtn.addEventListener('click', () => {
-    if (options.onSaveRequest) options.onSaveRequest();
-  });
+  // Save opens a modal that collects the name (prefilled from the active
+  // session; empty for a fresh or copied one). collectSessionData gathers the
+  // pads/fx payload and runs any pre-save guards, returning null to abort.
+  function showSaveModal() {
+    if (modalOpen) return;
+    const data = collectSessionData ? collectSessionData() : { pads: [] };
+    if (data == null) return; // a guard (e.g. missing pad key) aborted
+    modalOpen = true;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'session-modal-backdrop';
+    const modal = document.createElement('div');
+    modal.className = 'session-modal';
+    modal.innerHTML = `
+      <h3>${t('session.saveModalTitle')}</h3>
+      <div class="session-modal-actions">
+        <input type="text" class="session-modal-input" id="save-modal-name" placeholder="${escapeHtml(t('header.sessionNamePlaceholder'))}" autocomplete="off">
+        <button class="btn" id="save-modal-confirm">${escapeHtml(t('header.save'))}</button>
+      </div>
+      <button class="session-modal-close" id="save-modal-cancel" title="${escapeHtml(t('common.cancel'))}">&times;</button>
+    `;
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    const nameField = modal.querySelector('#save-modal-name');
+    nameField.value = currentSession?.name || '';
+
+    let escHandler = null;
+    function cleanup() {
+      closeModal(modal, backdrop);
+      if (escHandler) window.removeEventListener('keydown', escHandler);
+    }
+    async function confirm() {
+      const name = nameField.value.trim();
+      if (!name) {
+        showToast(t('toast.enterSessionName'), 'warning');
+        nameField.focus();
+        return;
+      }
+      cleanup();
+      await save({ ...data, name });
+    }
+
+    modal.querySelector('#save-modal-confirm').addEventListener('click', confirm);
+    nameField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') confirm();
+    });
+    modal.querySelector('#save-modal-cancel').addEventListener('click', cleanup);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) cleanup();
+    });
+    escHandler = (e) => {
+      if (e.key === 'Escape') cleanup();
+    };
+    window.addEventListener('keydown', escHandler);
+    nameField.focus();
+  }
+
+  saveBtn.addEventListener('click', showSaveModal);
 
   newBtn.addEventListener('click', newSession);
   if (manageBtn) manageBtn.addEventListener('click', showManageSessionsModal);
@@ -461,6 +512,5 @@ export function createSessionManager(options = {}) {
     refreshList,
     importFromZip,
     getCurrent: () => currentSession,
-    setName: (name) => { nameInput.value = name; },
   };
 }
