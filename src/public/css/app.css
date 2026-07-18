@@ -1652,6 +1652,74 @@ button.is-proxied {
   overflow-y: auto;
 }
 
+/* Pad editor tabs */
+.pad-editor-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.pad-editor-tabs-pad {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.pad-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.pad-tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.pad-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.pad-tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pad-tab-panel.active {
+  display: flex;
+}
+
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume-row input[type="range"] {
+  flex: 1;
+}
+
+.vol-number {
+  width: 56px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
 .pad-editor h3 {
   margin: 0;
   font-size: 1.1rem;
@@ -1821,7 +1889,8 @@ button.is-proxied {
    Positioned from --tip-x/--tip-y set in initTooltipPositioning. Used by the
    help-icon "?" badges and by video-item info blocks (.has-tip). */
 .help-icon::after,
-.has-tip::after {
+.has-tip::after,
+.mini-switch-label::after {
   content: attr(data-tooltip);
   position: fixed;
   top: var(--tip-y, 0px);
@@ -1844,7 +1913,8 @@ button.is-proxied {
   box-shadow: var(--shadow);
 }
 
-.help-icon::after {
+.help-icon::after,
+.mini-switch-label::after {
   text-align: center;
   min-width: 220px;
   max-width: 280px;
@@ -1857,12 +1927,14 @@ button.is-proxied {
 }
 
 .help-icon:hover::after,
-.has-tip:hover::after {
+.has-tip:hover::after,
+.mini-switch-label:hover::after {
   opacity: 1;
 }
 
 .help-icon.tip-below::after,
-.has-tip.tip-below::after {
+.has-tip.tip-below::after,
+.mini-switch-label.tip-below::after {
   transform: translate(-50%, 0);
 }
 

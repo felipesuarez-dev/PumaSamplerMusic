@@ -33,6 +33,7 @@ window.addEventListener('audioworkletfallback', () => showToast(t('toast.pitchFa
 const videoDisplay = createVideoDisplay(document.getElementById('video-player'));
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
+let padEditorActiveTab = 'general';
 let isCapturingKey = false;
 let masterFxControls = null;
 let padFxControls = null;
@@ -807,7 +808,7 @@ function syncAllToggles() {
 // horizontal position so the bubble never runs off the viewport edge.
 function initTooltipPositioning() {
   document.body.addEventListener('mouseover', (e) => {
-    const icon = e.target.closest('.help-icon, .has-tip');
+    const icon = e.target.closest('.help-icon, .has-tip, .mini-switch-label');
     if (!icon) return;
     const rect = icon.getBoundingClientRect();
     // The video (.has-tip) bubble is wider/taller than the help-icon one, so it
@@ -1440,86 +1441,110 @@ function renderPadEditor(position, data) {
       .map((v) => `<option value="${v.videoId}" ${data?.videoId === v.videoId ? 'selected' : ''}>${escapeHtml(v.title || v.videoId)}</option>`)
       .join('');
 
+  const previewPct = Math.round(previewVolume * 100);
+  const padPct = Math.round((data?.volume ?? 0.2) / 2 * 100);
   editorEl.innerHTML = `
-    <h3>PAD ${position}</h3>
-    <div class="form-row">
-      <label>${t('editor.labelField')}</label>
-      <input type="text" id="pad-label" value="${escapeHtml(data?.label || '')}" placeholder="${t('editor.labelPlaceholder')}">
+    <div class="pad-editor-tabs">
+      <span class="pad-editor-tabs-pad">PAD ${position}</span>
+      <button type="button" class="pad-tab${padEditorActiveTab === 'general' ? ' active' : ''}" data-tab="general">${t('editor.tabGeneral')}</button>
+      <button type="button" class="pad-tab${padEditorActiveTab === 'volume' ? ' active' : ''}" data-tab="volume">${t('editor.tabVolume')}</button>
+      <button type="button" class="pad-tab${padEditorActiveTab === 'trim' ? ' active' : ''}" data-tab="trim">${t('editor.tabTrim')}</button>
     </div>
-    <div class="form-row">
-      <label>${t('editor.keyField')}</label>
-      <div class="key-capture" id="pad-key-capture" data-key="${escapeHtml(data?.key || '')}">
-        ${data?.key ? t('editor.keyValue', { key: escapeHtml(data.key) }) : t('editor.clickPressKey')}
-      </div>
-    </div>
-    <div class="form-row">
-      <label>${t('editor.videoField')}</label>
-      <select id="pad-video">${videoOptions}</select>
-    </div>
-    <div class="form-row">
-      <label>${t('editor.transportField')}</label>
-      <div class="transport-bar">
-        <button id="btn-preview-play" class="btn btn-transport" title="${t('editor.playTitle')}"><span class="material-symbols-outlined">play_arrow</span></button>
-        <button id="btn-preview-pause" class="btn btn-transport hidden" title="${t('editor.pauseTitle')}"><span class="material-symbols-outlined">pause</span></button>
-        <button id="btn-preview-stop" class="btn btn-transport btn-transport-stop" title="${t('editor.stopTitle')}"><span class="material-symbols-outlined">stop</span></button>
-        <div class="transport-divider"></div>
-        <button id="btn-set-in" class="btn btn-mark" title="${t('editor.setInTitle')}">${t('editor.setIn')}</button>
-        <button id="btn-set-out" class="btn btn-mark" title="${t('editor.setOutTitle')}">${t('editor.setOut')}</button>
-        <div class="transport-time" id="preview-time">00:00.000</div>
-      </div>
-    </div>
-    <div class="form-row waveform-section">
-      <label class="waveform-label-row">
-        <span>${t('waveform.label')}</span>
-        <span class="help-icon" data-tooltip="${t('tip.waveformHelp')}">?</span>
-        <button type="button" class="link-btn" id="btn-waveform-help-more">${t('waveform.seeMore')}</button>
-        <span class="waveform-zoom-controls">
-          <button type="button" class="btn-zoom" id="btn-waveform-zoom-out" title="${t('waveform.zoomOutTitle')}">-</button>
-          <span class="zoom-level" id="waveform-zoom-level">1x</span>
-          <button type="button" class="btn-zoom" id="btn-waveform-zoom-in" title="${t('waveform.zoomInTitle')}">+</button>
-          <button type="button" class="btn-zoom" id="btn-waveform-zoom-reset" title="${t('waveform.zoomResetTitle')}">⟲</button>
-        </span>
-      </label>
-      <div class="waveform-container">
-        <canvas id="waveform-ruler" class="waveform-ruler"></canvas>
-        <canvas id="waveform-canvas"></canvas>
-      </div>
-      <div class="waveform-status" id="waveform-status">${t('waveform.status', { in: '00:00.000', out: '00:00.000', dur: '00:00.000' })}</div>
-    </div>
-    <div class="time-row">
+
+    <div class="pad-tab-panel${padEditorActiveTab === 'general' ? ' active' : ''}" data-tab-panel="general">
       <div class="form-row">
-        <label>${t('editor.startField')}</label>
-        <input type="text" id="pad-start" value="${formatTime(data?.start ?? 0)}">
+        <label>${t('editor.labelField')} <span class="help-icon" data-i18n-tooltip="tip.label" data-tooltip="${t('tip.label')}">?</span></label>
+        <input type="text" id="pad-label" value="${escapeHtml(data?.label || '')}" placeholder="${t('editor.labelPlaceholder')}">
       </div>
       <div class="form-row">
-        <label>${t('editor.endField')}</label>
-        <input type="text" id="pad-end" value="${formatTime(data?.end ?? 0)}">
+        <label>${t('editor.keyField')} <span class="help-icon" data-i18n-tooltip="tip.key" data-tooltip="${t('tip.key')}">?</span></label>
+        <div class="key-capture" id="pad-key-capture" data-key="${escapeHtml(data?.key || '')}">
+          ${data?.key ? t('editor.keyValue', { key: escapeHtml(data.key) }) : t('editor.clickPressKey')}
+        </div>
+      </div>
+      <div class="form-row">
+        <label>${t('editor.videoField')} <span class="help-icon" data-i18n-tooltip="tip.video" data-tooltip="${t('tip.video')}">?</span></label>
+        <select id="pad-video">${videoOptions}</select>
+      </div>
+      <div class="form-row">
+        <label>${t('editor.triggerModeField')} <span class="help-icon" data-i18n-tooltip="tip.triggerMode" data-tooltip="${t('tip.triggerMode')}">?</span></label>
+        <select id="pad-trigger-mode">
+          <option value="oneshot" ${data?.triggerMode === 'oneshot' ? 'selected' : ''}>${t('editor.oneshotOption')}</option>
+          <option value="gate" ${data?.triggerMode === 'gate' ? 'selected' : ''}>${t('editor.gateOption')}</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>${t('editor.colorField')} <span class="help-icon" data-i18n-tooltip="tip.color" data-tooltip="${t('tip.color')}">?</span></label>
+        <input type="color" id="pad-color" value="${data?.color || '#ff9f1c'}">
+      </div>
+      <div class="form-row">
+        <label>
+          <input type="checkbox" id="pad-loop" ${data?.loop ? 'checked' : ''}> ${t('editor.loopField')}
+          <span class="help-icon" data-i18n-tooltip="tip.loop" data-tooltip="${t('tip.loop')}">?</span>
+        </label>
       </div>
     </div>
-    <div class="form-row">
-      <label>${t('editor.previewVolumeField')} <span class="vol-value" id="pad-preview-volume-value">${Math.round(previewVolume * 100)}%</span></label>
-      <input type="range" id="pad-preview-volume" min="0" max="1" step="0.05" value="${previewVolume}">
+
+    <div class="pad-tab-panel${padEditorActiveTab === 'volume' ? ' active' : ''}" data-tab-panel="volume">
+      <div class="form-row">
+        <label>${t('editor.previewVolumeField')} <span class="help-icon" data-i18n-tooltip="tip.previewVolume" data-tooltip="${t('tip.previewVolume')}">?</span></label>
+        <div class="volume-row">
+          <input type="range" id="pad-preview-volume" min="0" max="1" step="0.01" value="${previewVolume}">
+          <input type="number" class="vol-number" id="pad-preview-volume-number" min="0" max="100" step="1" value="${previewPct}">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>${t('editor.padVolumeField')} <span class="help-icon" data-i18n-tooltip="tip.padVolume" data-tooltip="${t('tip.padVolume')}">?</span></label>
+        <div class="volume-row">
+          <input type="range" id="pad-volume" min="0" max="2" step="0.02" value="${data?.volume ?? 0.2}">
+          <input type="number" class="vol-number" id="pad-volume-number" min="0" max="100" step="1" value="${padPct}">
+        </div>
+      </div>
     </div>
-    <div class="form-row">
-      <label>${t('editor.padVolumeField')} <span class="vol-value" id="pad-volume-value">${Math.round((data?.volume ?? 0.2) / 2 * 100)}%</span></label>
-      <input type="range" id="pad-volume" min="0" max="2" step="0.05" value="${data?.volume ?? 0.2}">
+
+    <div class="pad-tab-panel${padEditorActiveTab === 'trim' ? ' active' : ''}" data-tab-panel="trim">
+      <div class="form-row">
+        <label>${t('editor.transportField')} <span class="help-icon" data-i18n-tooltip="tip.transport" data-tooltip="${t('tip.transport')}">?</span></label>
+        <div class="transport-bar">
+          <button id="btn-preview-play" class="btn btn-transport" title="${t('editor.playTitle')}"><span class="material-symbols-outlined">play_arrow</span></button>
+          <button id="btn-preview-pause" class="btn btn-transport hidden" title="${t('editor.pauseTitle')}"><span class="material-symbols-outlined">pause</span></button>
+          <button id="btn-preview-stop" class="btn btn-transport btn-transport-stop" title="${t('editor.stopTitle')}"><span class="material-symbols-outlined">stop</span></button>
+          <div class="transport-divider"></div>
+          <button id="btn-set-in" class="btn btn-mark" title="${t('editor.setInTitle')}">${t('editor.setIn')}</button>
+          <button id="btn-set-out" class="btn btn-mark" title="${t('editor.setOutTitle')}">${t('editor.setOut')}</button>
+          <div class="transport-time" id="preview-time">00:00.000</div>
+        </div>
+      </div>
+      <div class="form-row waveform-section">
+        <label class="waveform-label-row">
+          <span>${t('waveform.label')}</span>
+          <span class="help-icon" data-tooltip="${t('tip.waveformHelp')}">?</span>
+          <button type="button" class="link-btn" id="btn-waveform-help-more">${t('waveform.seeMore')}</button>
+          <span class="waveform-zoom-controls">
+            <button type="button" class="btn-zoom" id="btn-waveform-zoom-out" title="${t('waveform.zoomOutTitle')}">-</button>
+            <span class="zoom-level" id="waveform-zoom-level">1x</span>
+            <button type="button" class="btn-zoom" id="btn-waveform-zoom-in" title="${t('waveform.zoomInTitle')}">+</button>
+            <button type="button" class="btn-zoom" id="btn-waveform-zoom-reset" title="${t('waveform.zoomResetTitle')}">⟲</button>
+          </span>
+        </label>
+        <div class="waveform-container">
+          <canvas id="waveform-ruler" class="waveform-ruler"></canvas>
+          <canvas id="waveform-canvas"></canvas>
+        </div>
+        <div class="waveform-status" id="waveform-status">${t('waveform.status', { in: '00:00.000', out: '00:00.000', dur: '00:00.000' })}</div>
+      </div>
+      <div class="time-row">
+        <div class="form-row">
+          <label>${t('editor.startField')} <span class="help-icon" data-i18n-tooltip="tip.start" data-tooltip="${t('tip.start')}">?</span></label>
+          <input type="text" id="pad-start" value="${formatTime(data?.start ?? 0)}">
+        </div>
+        <div class="form-row">
+          <label>${t('editor.endField')} <span class="help-icon" data-i18n-tooltip="tip.end" data-tooltip="${t('tip.end')}">?</span></label>
+          <input type="text" id="pad-end" value="${formatTime(data?.end ?? 0)}">
+        </div>
+      </div>
     </div>
-    <div class="form-row">
-      <label>${t('editor.triggerModeField')} <span class="help-icon" data-tooltip="${t('tip.triggerMode')}">?</span></label>
-      <select id="pad-trigger-mode">
-        <option value="oneshot" ${data?.triggerMode === 'oneshot' ? 'selected' : ''}>${t('editor.oneshotOption')}</option>
-        <option value="gate" ${data?.triggerMode === 'gate' ? 'selected' : ''}>${t('editor.gateOption')}</option>
-      </select>
-    </div>
-    <div class="form-row">
-      <label>${t('editor.colorField')}</label>
-      <input type="color" id="pad-color" value="${data?.color || '#ff9f1c'}">
-    </div>
-    <div class="form-row">
-      <label>
-        <input type="checkbox" id="pad-loop" ${data?.loop ? 'checked' : ''}> ${t('editor.loopField')}
-      </label>
-    </div>
+
     <button id="pad-save" class="btn">${t('editor.applyButton')}</button>
   `;
 
@@ -1615,6 +1640,30 @@ function formatBytes(bytes) {
 }
 
 function initEditorListeners(position) {
+  // Tab switching. The RECORTE tab holds the waveform canvas; createWaveform
+  // measured it at construction, so if it was built while that tab was hidden
+  // the canvas is stuck at 1×1 — re-resize/draw whenever RECORTE is shown
+  // (after the panel is made visible, so getBoundingClientRect is real).
+  const tabButtons = editorEl.querySelectorAll('.pad-tab');
+  function activateTab(tab) {
+    padEditorActiveTab = tab;
+    tabButtons.forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+    editorEl.querySelectorAll('.pad-tab-panel').forEach((p) => {
+      p.classList.toggle('active', p.dataset.tabPanel === tab);
+    });
+    if (tab === 'trim' && editorWaveform) {
+      editorWaveform.resize();
+      editorWaveform.draw();
+    }
+  }
+  tabButtons.forEach((b) => b.addEventListener('click', () => activateTab(b.dataset.tab)));
+  // If the persisted active tab is RECORTE, the waveform was just built hidden
+  // in some render paths — ensure it's sized now.
+  if (padEditorActiveTab === 'trim' && editorWaveform) {
+    editorWaveform.resize();
+    editorWaveform.draw();
+  }
+
   const keyCapture = document.getElementById('pad-key-capture');
   const videoSelect = document.getElementById('pad-video');
   const startInput = document.getElementById('pad-start');
@@ -1727,24 +1776,49 @@ function initEditorListeners(position) {
   startInput.addEventListener('input', updateSegmentFromInputs);
   endInput.addEventListener('input', updateSegmentFromInputs);
 
+  // Preview volume: range 0–1, number input shows 0–100%. Two-way synced.
+  const previewVolumeNumber = document.getElementById('pad-preview-volume-number');
+  function applyPreviewVolume(vol) {
+    previewVolume = Math.max(0, Math.min(1, vol));
+    localStorage.setItem(PREVIEW_VOLUME_STORAGE, String(previewVolume));
+    const previewVideo = videoDisplay.getVideo();
+    if (previewVideo) previewVideo.volume = previewVolume;
+  }
   if (previewVolumeInput) {
     previewVolumeInput.addEventListener('input', () => {
-      previewVolume = parseFloat(previewVolumeInput.value);
-      localStorage.setItem(PREVIEW_VOLUME_STORAGE, String(previewVolume));
-      const pct = Math.round(previewVolume * 100);
-      const previewVolumeValue = document.getElementById('pad-preview-volume-value');
-      if (previewVolumeValue) previewVolumeValue.textContent = `${pct}%`;
-      const previewVideo = videoDisplay.getVideo();
-      if (previewVideo) previewVideo.volume = previewVolume;
+      applyPreviewVolume(parseFloat(previewVolumeInput.value));
+      if (previewVolumeNumber) previewVolumeNumber.value = String(Math.round(previewVolume * 100));
+    });
+  }
+  if (previewVolumeNumber) {
+    previewVolumeNumber.addEventListener('input', () => {
+      const n = parseInt(previewVolumeNumber.value, 10);
+      if (Number.isNaN(n)) return;
+      const clamped = Math.max(0, Math.min(100, n));
+      previewVolumeNumber.value = String(clamped);
+      applyPreviewVolume(clamped / 100);
+      if (previewVolumeInput) previewVolumeInput.value = String(previewVolume);
     });
   }
 
+  // Pad volume: range 0–2, number input shows 0–100% (=value/2*100). Two-way.
+  const volumeNumber = document.getElementById('pad-volume-number');
   volumeInput.addEventListener('input', () => {
-    const pct = Math.round(volumeInput.value / 2 * 100);
-    const volumeValue = document.getElementById('pad-volume-value');
-    if (volumeValue) volumeValue.textContent = `${pct}%`;
-    autoCommitPad(position, { volume: parseFloat(volumeInput.value) });
+    const raw = parseFloat(volumeInput.value);
+    if (volumeNumber) volumeNumber.value = String(Math.round(raw / 2 * 100));
+    autoCommitPad(position, { volume: raw });
   });
+  if (volumeNumber) {
+    volumeNumber.addEventListener('input', () => {
+      const n = parseInt(volumeNumber.value, 10);
+      if (Number.isNaN(n)) return;
+      const clamped = Math.max(0, Math.min(100, n));
+      volumeNumber.value = String(clamped);
+      const raw = clamped / 100 * 2;
+      volumeInput.value = String(raw);
+      autoCommitPad(position, { volume: raw });
+    });
+  }
 
   const colorInput = document.getElementById('pad-color');
   if (colorInput) {
