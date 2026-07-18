@@ -1085,6 +1085,13 @@ function formatSemitones(semitones) {
   return `${n > 0 ? '+' : ''}${n}`;
 }
 
+// Pan readout: C at center, L{n}/R{n} toward the sides (n is 0..100).
+function formatPan(v) {
+  const pct = Math.round(v * 100);
+  if (pct === 0) return 'C';
+  return pct < 0 ? `L${Math.abs(pct)}` : `R${pct}`;
+}
+
 function loadMasterFxDefaults() {
   try {
     const saved = localStorage.getItem(MASTER_FX_STORAGE);
@@ -1238,6 +1245,22 @@ function initPadFxControls() {
       toValue: (v) => parseInt(v, 10) / 100,
       toDisplay: (v) => `${Math.round(v * 100)}%`,
     },
+    {
+      id: 'pad-fx-drive',
+      displayId: 'pad-fx-drive-value',
+      key: 'drive',
+      default: 0,
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => `${v}%`,
+    },
+    {
+      id: 'pad-fx-pan',
+      displayId: 'pad-fx-pan-value',
+      key: 'pan',
+      default: 0,
+      toValue: (v) => parseInt(v, 10) / 100,
+      toDisplay: (v) => formatPan(v),
+    },
   ];
 
   // P.SHIFT/STRETCH are checkboxes, not knobs — separate from `controls`
@@ -1356,6 +1379,8 @@ async function triggerPad(position, data) {
       pitchShiftOn: data.pitchShiftOn ?? true,
       stretchOn: data.stretchOn ?? false,
       speed: data.speed ?? 100,
+      pan: data.pan ?? 0,
+      drive: data.drive ?? 0,
     });
   } catch (err) {
     showToast(t('toast.playbackFailed', { message: err.message }), 'error');

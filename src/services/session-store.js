@@ -60,6 +60,8 @@ const PAD_FX_DEFAULTS = {
   pitchShiftOn: true,
   stretchOn: false,
   speed: 100,
+  pan: 0,
+  drive: 0,
 };
 
 export async function load(name) {

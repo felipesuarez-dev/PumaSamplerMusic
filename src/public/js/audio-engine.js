@@ -99,6 +99,21 @@ export function createAudioEngine() {
     return curve;
   }
 
+  // Per-PAD Drive curve. amount is 0..100. Cross-fades the identity line with a
+  // tanh-shaped curve by t=amount/100, so at 0 the curve is bit-transparent
+  // (curve[i] === x) — an untouched Drive knob never colors the sound.
+  function makeDistortionCurve(amount) {
+    const t = Math.max(0, Math.min(100, amount || 0)) / 100;
+    const samples = 1024;
+    const curve = new Float32Array(samples);
+    const pregain = 1 + t * 9;
+    for (let i = 0; i < samples; i++) {
+      const x = (i / (samples - 1)) * 2 - 1;
+      curve[i] = (1 - t) * x + t * Math.tanh(x * pregain);
+    }
+    return curve;
+  }
+
   function ensureMasterChain(ctx) {
     if (masterChain) return masterChain;
 
@@ -218,7 +233,7 @@ export function createAudioEngine() {
   async function play(position, {
     videoId, start, end, volume = 1, loop = false, triggerMode = 'oneshot',
     pitch = 0, cutoff = 20000, resonance = 0.1, reverbSend = 0, delaySend = 0,
-    pitchShiftOn = true, stretchOn = false, speed = 100,
+    pitchShiftOn = true, stretchOn = false, speed = 100, pan = 0, drive = 0,
   }) {
     const ctx = await init();
     const workletOk = await ensureWorklet(ctx);
@@ -290,6 +305,16 @@ export function createAudioEngine() {
     filterNode.frequency.value = Math.max(20, Math.min(20000, cutoff));
     filterNode.Q.value = Math.max(0.1, Math.min(20, resonance));
 
+    // Drive (harmonic saturation) then Pan, in series after the filter and
+    // before the fan-out to dry/reverb/delay — so the sends hear the driven,
+    // panned signal (standard post-pan send routing).
+    const driveNode = ctx.createWaveShaper();
+    driveNode.curve = makeDistortionCurve(drive);
+    driveNode.oversample = '2x';
+
+    const panNode = ctx.createStereoPanner();
+    panNode.pan.value = Math.max(-1, Math.min(1, pan));
+
     const dryGain = ctx.createGain();
     dryGain.gain.value = 1;
 
@@ -306,11 +331,13 @@ export function createAudioEngine() {
     } else {
       gain.connect(filterNode);
     }
-    filterNode.connect(dryGain);
+    filterNode.connect(driveNode);
+    driveNode.connect(panNode);
+    panNode.connect(dryGain);
     dryGain.connect(chain.masterGain);
-    filterNode.connect(reverbSendGain);
+    panNode.connect(reverbSendGain);
     reverbSendGain.connect(chain.convolver);
-    filterNode.connect(delaySendGain);
+    panNode.connect(delaySendGain);
     delaySendGain.connect(chain.delayNode);
 
     const now = ctx.currentTime;
@@ -321,7 +348,7 @@ export function createAudioEngine() {
     }
 
     const sourceRef = {
-      source, gain, pitchShifterNode: pitchNode, filterNode, dryGain, reverbSendGain, delaySendGain,
+      source, gain, pitchShifterNode: pitchNode, filterNode, driveNode, panNode, dryGain, reverbSendGain, delaySendGain,
       videoId, startTime, endTime, position, duration,
       pitch, pitchShiftOn, stretchOn, speed,
     };
@@ -346,7 +373,7 @@ export function createAudioEngine() {
       } catch {
         // Already stopped
       }
-      [active.source, active.gain, active.pitchShifterNode, active.filterNode, active.dryGain, active.reverbSendGain, active.delaySendGain]
+      [active.source, active.gain, active.pitchShifterNode, active.filterNode, active.driveNode, active.panNode, active.dryGain, active.reverbSendGain, active.delaySendGain]
         .filter(Boolean)
         .forEach((node) => {
           try {
@@ -371,7 +398,7 @@ export function createAudioEngine() {
   // rather than only taking effect on the next trigger. No-ops if the pad
   // isn't currently active (its stored values still apply next time it's
   // triggered via play()). setTargetAtTime ramps smoothly to avoid clicks.
-  function updateVoiceFx(position, { pitch, cutoff, resonance, reverbSend, delaySend, pitchShiftOn, stretchOn, speed } = {}) {
+  function updateVoiceFx(position, { pitch, cutoff, resonance, reverbSend, delaySend, pitchShiftOn, stretchOn, speed, pan, drive } = {}) {
     const active = activeSources.get(position);
     if (!active || !audioContext) return;
 
@@ -409,6 +436,19 @@ export function createAudioEngine() {
     }
     if (delaySend !== undefined) {
       active.delaySendGain.gain.setTargetAtTime(Math.max(0, Math.min(1, delaySend)), now, RAMP);
+    }
+    if (pan !== undefined) {
+      active.panNode.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), now, RAMP);
+    }
+    // WaveShaper.curve isn't an AudioParam (can't ramp), so rebuild it. Throttle
+    // to ~25 Hz: a knob drag fires input dozens of times/sec, and reallocating
+    // a 1024-sample curve each tick would churn GC and risk zipper clicks.
+    if (drive !== undefined) {
+      const ms = performance.now();
+      if (ms - (active.lastDriveUpdateMs || 0) > 40) {
+        active.driveNode.curve = makeDistortionCurve(drive);
+        active.lastDriveUpdateMs = ms;
+      }
     }
   }
 

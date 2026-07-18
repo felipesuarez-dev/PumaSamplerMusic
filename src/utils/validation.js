@@ -106,6 +106,12 @@ export function validateSession(session) {
     if (pad.delaySend !== undefined && (typeof pad.delaySend !== 'number' || pad.delaySend < 0 || pad.delaySend > 1)) {
       errors.push(`Invalid delaySend for pad ${pad.position || '?'} (must be 0..1)`);
     }
+    if (pad.pan !== undefined && (typeof pad.pan !== 'number' || pad.pan < -1 || pad.pan > 1)) {
+      errors.push(`Invalid pan for pad ${pad.position || '?'} (must be -1..1)`);
+    }
+    if (pad.drive !== undefined && (typeof pad.drive !== 'number' || pad.drive < 0 || pad.drive > 100)) {
+      errors.push(`Invalid drive for pad ${pad.position || '?'} (must be 0..100)`);
+    }
   }
 
   return errors;

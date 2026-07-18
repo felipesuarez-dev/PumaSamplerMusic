@@ -244,6 +244,28 @@
                         <div class="master-divider" aria-hidden="true"></div>
                         <div class="master-knob">
                           <div class="master-label-row">
+                            <label class="master-label" for="pad-fx-drive" data-i18n="editor.driveField">Drive</label>
+                            <span class="help-icon" data-i18n-tooltip="tip.drive" data-tooltip="Adds harmonic saturation, from subtle warmth to gritty distortion. 0% is clean.">?</span>
+                          </div>
+                          <div class="master-knob-control">
+                            <input type="range" id="pad-fx-drive" min="0" max="100" step="1" value="0" aria-label="Drive" disabled>
+                          </div>
+                          <span class="master-value" id="pad-fx-drive-value">0%</span>
+                        </div>
+                        <div class="master-divider" aria-hidden="true"></div>
+                        <div class="master-knob">
+                          <div class="master-label-row">
+                            <label class="master-label" for="pad-fx-pan" data-i18n="editor.panField">Pan</label>
+                            <span class="help-icon" data-i18n-tooltip="tip.pan" data-tooltip="Places this PAD in the stereo field, from left (L) through center (C) to right (R).">?</span>
+                          </div>
+                          <div class="master-knob-control">
+                            <input type="range" id="pad-fx-pan" min="-100" max="100" step="1" value="0" aria-label="Pan" disabled>
+                          </div>
+                          <span class="master-value" id="pad-fx-pan-value">C</span>
+                        </div>
+                        <div class="master-divider" aria-hidden="true"></div>
+                        <div class="master-knob">
+                          <div class="master-label-row">
                             <label class="master-label" for="pad-fx-reverb-send" data-i18n="editor.reverbSendField">Rev</label>
                             <span class="help-icon" data-i18n-tooltip="tip.reverbSend" data-tooltip="How much of this PAD is sent to the shared reverb. 0% is fully dry.">?</span>
                           </div>
