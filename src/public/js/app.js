@@ -874,6 +874,13 @@ function makeResizable(el, { edge, dimension, min, max, onResizeEnd, collapseBel
         if (typeof onCollapse === 'function') onCollapse();
         return;
       }
+      // If the panel was collapsed earlier in this same drag (crossed below
+      // the threshold) and we're now back above it, re-expand before writing
+      // the inline size — otherwise the box grows but its content stays hidden
+      // (the collapsed class zeroes opacity/grid-rows). expand() is idempotent.
+      if (typeof isCollapsed === 'function' && isCollapsed() && typeof onExpand === 'function') {
+        onExpand();
+      }
       const maxPx = typeof max === 'function' ? max() : max;
       const next = Math.max(min, Math.min(maxPx, raw));
       el.style[dimension === 'width' ? 'width' : 'flexBasis'] = `${next}px`;

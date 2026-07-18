@@ -113,6 +113,9 @@ export function createPads(container, options = {}, initialCount = 9) {
 
     if (!data) {
       el.className = 'pad empty';
+      // Preserve selection highlight on an empty pad — the className reset
+      // above wipes it otherwise, so a selected empty pad would look unselected.
+      el.classList.toggle('selected', selectedPosition === position);
       el.style.background = '';
       el.style.borderColor = '';
       el.style.boxShadow = '';

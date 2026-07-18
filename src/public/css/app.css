@@ -564,7 +564,6 @@ button.is-proxied {
   width: 40px;
   background: transparent;
   border: none;
-  border-left: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
@@ -645,7 +644,6 @@ button.is-proxied {
   width: 40px;
   background: transparent;
   border: none;
-  border-right: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
@@ -1093,6 +1091,12 @@ button.is-proxied {
 }
 
 .pad.empty:hover {
+  opacity: 0.85;
+}
+
+/* A selected empty pad keeps the lit border. .pad.empty's 0.55 opacity would
+   dim the accent outline, so brighten it back up when selected. */
+.pad.empty.selected {
   opacity: 0.85;
 }
 
@@ -2224,8 +2228,6 @@ button.is-proxied {
     height: 44px;
     writing-mode: horizontal-tb;
     transform: none;
-    border-left: none;
-    border-bottom: 1px solid var(--border);
   }
 
   .pads-sidenav-body {
@@ -2311,8 +2313,6 @@ button.is-proxied {
     height: 44px;
     writing-mode: horizontal-tb;
     transform: none;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
   }
 
   .library-sidenav-body {
