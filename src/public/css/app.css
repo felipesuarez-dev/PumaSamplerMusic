@@ -323,9 +323,9 @@ button.is-proxied {
 }
 
 /* Thin grip, always visible between header and main so both states
-   (chevron up = hide, chevron down = show) stay discoverable. Carries the
-   hairline that used to live on .header's border-bottom, so there's never a
-   doubled 1px line when the header is visible. */
+   (chevron up = hide, chevron down = show) stay discoverable. Borderless to
+   match the Video Library collapse aesthetic — the header/main boundary reads
+   from the --surface vs --bg contrast, no hairline. */
 .header-grip {
   display: flex;
   align-items: center;
@@ -335,7 +335,6 @@ button.is-proxied {
   background: var(--surface);
   color: var(--text-muted);
   border: none;
-  border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: var(--transition);
 }
@@ -545,8 +544,7 @@ button.is-proxied {
   display: flex;
   overflow: hidden;
   background: var(--surface);
-  /* No outer border — reads flat/line-free like the video panel and navbar. */
-  border: none;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   transition: width 0.25s ease, height 0.25s ease;
 }
@@ -1342,12 +1340,6 @@ button.is-proxied {
   flex-direction: column;
 }
 
-/* PAD EDITOR reads flat/line-free like PADS and the video panel — drop the
-   outer box border (id override so any future .panel reuse keeps its border). */
-#pad-editor-panel {
-  border: none;
-}
-
 /* Shared toggle mechanics (no sizing opinions) for anything that collapses
    via the panel-header/panel-content grid-row pattern — the real PAD Editor
    panel and the two mini knob strips below it. */
@@ -1383,7 +1375,6 @@ button.is-proxied {
   gap: 8px;
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--border);
   color: var(--text-muted);
   cursor: pointer;
   padding: 7px 36px;
@@ -1482,9 +1473,6 @@ button.is-proxied {
   display: inline-block;
 }
 
-.collapsible-box.collapsed .panel-header {
-  border-bottom-color: transparent;
-}
 .collapsible-box.collapsed { flex: 0 0 auto; min-height: 0; }
 
 /* Colapso animado vía grid-template-rows (1fr -> 0fr) en vez de display:none
@@ -2548,6 +2536,16 @@ button.is-proxied {
   padding: 6px 8px;
   border-radius: var(--radius);
   outline: none;
+}
+
+/* The `hidden` attribute is display:none only in the UA stylesheet (low
+   priority), so these class rules with `display:` would override it. Compound
+   [hidden] guards (specificity 0,2,0) restore it without !important — same
+   technique as button.is-proxied. */
+.autosave-status[hidden],
+.settings-autosave-options[hidden],
+.settings-autosave-interval[hidden] {
+  display: none;
 }
 
 /* Auto-save status indicator (beside the Save button) */
