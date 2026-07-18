@@ -1909,6 +1909,23 @@ button.is-proxied {
   min-height: 0;
 }
 
+.video-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  margin-bottom: 12px;
+}
+
+.video-search:focus {
+  border-color: var(--accent);
+}
+
 .video-list {
   list-style: none;
   margin: 0;
@@ -1919,6 +1936,13 @@ button.is-proxied {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+}
+
+.video-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 16px 0;
 }
 
 .video-pager {

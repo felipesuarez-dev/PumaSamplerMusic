@@ -1879,7 +1879,8 @@ function initEditorListeners(position) {
 // Video Library
 let maxCacheGb = 5;
 let videoPage = 1;
-const VIDEO_PAGE_SIZE = 5;
+let videoSearchTerm = '';
+const VIDEO_PAGE_SIZE = 8;
 
 async function refreshVideos() {
   try {
@@ -1956,9 +1957,22 @@ function renderVideoList() {
     })),
   ];
 
-  const totalPages = Math.max(1, Math.ceil(all.length / VIDEO_PAGE_SIZE));
+  // Filter by the search term (matches title or videoId) before paginating, so
+  // the pager reflects the filtered set. videoSearchTerm is already lowercased.
+  const filtered = videoSearchTerm
+    ? all.filter((v) => (v.title || v.videoId).toLowerCase().includes(videoSearchTerm))
+    : all;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / VIDEO_PAGE_SIZE));
   videoPage = Math.min(videoPage, totalPages);
-  const pageItems = all.slice((videoPage - 1) * VIDEO_PAGE_SIZE, videoPage * VIDEO_PAGE_SIZE);
+  const pageItems = filtered.slice((videoPage - 1) * VIDEO_PAGE_SIZE, videoPage * VIDEO_PAGE_SIZE);
+
+  if (pageItems.length === 0 && all.length > 0) {
+    const empty = document.createElement('li');
+    empty.className = 'video-empty';
+    empty.textContent = t('video.emptySearch');
+    list.appendChild(empty);
+  }
 
   for (const video of pageItems) {
     const li = document.createElement('li');
@@ -2094,6 +2108,15 @@ function renderVideoPager(totalPages) {
 }
 
 // Add video form
+// Video Library search — filters the in-memory list on each render. The input
+// is static markup (not rebuilt by renderVideoList), so its value/focus survive
+// the 2s poll; the term lives in videoSearchTerm so the poll re-applies it.
+document.getElementById('video-search')?.addEventListener('input', (e) => {
+  videoSearchTerm = e.target.value.trim().toLowerCase();
+  videoPage = 1;
+  renderVideoList();
+});
+
 document.getElementById('add-video-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = document.getElementById('video-url');
