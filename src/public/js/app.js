@@ -269,22 +269,26 @@ function getAutosaveInterval() {
 }
 
 function setAutosaveStatus(state) {
-  const el = document.getElementById('autosave-status');
-  if (!el) return;
-  el.hidden = !isAutosaveEnabled();
-  if (!isAutosaveEnabled()) return;
-  const icon = el.querySelector('.material-symbols-outlined');
-  const label = el.querySelector('.autosave-status-label');
-  el.classList.toggle('saving', state === 'saving');
-  if (state === 'saving') {
-    if (icon) icon.textContent = 'sync';
-    if (label) label.textContent = t('autosave.saving');
-  } else if (state === 'saved') {
-    if (icon) icon.textContent = 'check_circle';
-    if (label) label.textContent = t('autosave.saved');
-  } else {
-    if (icon) icon.textContent = 'cloud_done';
-    if (label) label.textContent = t('autosave.idle');
+  const enabled = isAutosaveEnabled();
+  // Full indicator (beside Save) + the mini one in the collapsed-header grip.
+  for (const id of ['autosave-status', 'grip-autosave-status']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.hidden = !enabled;
+    if (!enabled) continue;
+    const icon = el.querySelector('.material-symbols-outlined');
+    const label = el.querySelector('.autosave-status-label');
+    el.classList.toggle('saving', state === 'saving');
+    if (state === 'saving') {
+      if (icon) icon.textContent = 'sync';
+      if (label) label.textContent = t('autosave.saving');
+    } else if (state === 'saved') {
+      if (icon) icon.textContent = 'check_circle';
+      if (label) label.textContent = t('autosave.saved');
+    } else {
+      if (icon) icon.textContent = 'cloud_done';
+      if (label) label.textContent = t('autosave.idle');
+    }
   }
 }
 
@@ -2297,17 +2301,23 @@ function initLocaleSwitcher() {
     codeEl.textContent = option.querySelector('span:last-child').textContent;
   }
 
-  function setOpen(open) {
+  // trigger defaults to the header button, but the collapsed-header mini flag
+  // button can pass itself so the fixed menu positions under whichever was
+  // clicked. aria-expanded is written on the actual trigger (and cleared on
+  // the other) so the invisible one doesn't stay marked expanded.
+  function setOpen(open, trigger = btn) {
     menu.hidden = !open;
-    btn.setAttribute('aria-expanded', String(open));
-    if (open) positionMenu(menu, btn);
+    btn.setAttribute('aria-expanded', open ? String(trigger === btn) : 'false');
+    const gripBtn = document.getElementById('grip-locale-btn');
+    if (gripBtn) gripBtn.setAttribute('aria-expanded', open ? String(trigger !== btn) : 'false');
+    if (open) positionMenu(menu, trigger);
   }
 
   headerMenuClosers.push(() => setOpen(false));
 
   paint(getLocale());
 
-  btn.addEventListener('click', () => setOpen(menu.hidden));
+  btn.addEventListener('click', () => setOpen(menu.hidden, btn));
 
   menu.addEventListener('click', (e) => {
     const option = e.target.closest('[data-locale]');
@@ -2330,11 +2340,13 @@ function initLocaleSwitcher() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!wrap.contains(e.target)) setOpen(false);
+    if (!wrap.contains(e.target) && !e.target.closest('#grip-locale-btn')) setOpen(false);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setOpen(false);
   });
+
+  return { open: (trigger) => setOpen(true, trigger) };
 }
 
 // Permanent kebab menu for the header's secondary actions. The real buttons
@@ -2366,10 +2378,14 @@ function initHeaderMoreMenu() {
   const menu = document.getElementById('header-more-menu');
   if (!wrap || !btn || !menu) return;
 
-  function setOpen(open) {
+  // trigger defaults to the kebab button; the collapsed-header mini ⋯ button
+  // can pass itself so the fixed menu positions under whichever was clicked.
+  function setOpen(open, trigger = btn) {
     menu.hidden = !open;
-    btn.setAttribute('aria-expanded', String(open));
-    if (open) positionMenu(menu, btn);
+    btn.setAttribute('aria-expanded', open ? String(trigger === btn) : 'false');
+    const gripBtn = document.getElementById('grip-more-btn');
+    if (gripBtn) gripBtn.setAttribute('aria-expanded', open ? String(trigger !== btn) : 'false');
+    if (open) positionMenu(menu, trigger);
   }
 
   // Pinned actions also appear as navbar buttons. The 5 target buttons live in
@@ -2398,7 +2414,7 @@ function initHeaderMoreMenu() {
 
   headerMenuClosers.push(() => setOpen(false));
 
-  btn.addEventListener('click', () => setOpen(menu.hidden));
+  btn.addEventListener('click', () => setOpen(menu.hidden, btn));
 
   menu.addEventListener('click', (e) => {
     // Pin clicks toggle navbar visibility and keep the menu open. The pin's
@@ -2421,13 +2437,47 @@ function initHeaderMoreMenu() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!wrap.contains(e.target)) setOpen(false);
+    if (!wrap.contains(e.target) && !e.target.closest('#grip-more-btn')) setOpen(false);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setOpen(false);
   });
 
   applyPinnedState();
+
+  return { open: (trigger) => setOpen(true, trigger) };
+}
+
+// Mini action buttons shown in the collapsed-header grip. They proxy the real
+// controls (stop/save) or open the same fixed menus positioned under the mini
+// trigger. stopPropagation keeps a click from also toggling the grip.
+function initGripActions({ localeSwitcher, headerMore, headerToggle } = {}) {
+  document.getElementById('grip-stop-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('btn-stop-all')?.click();
+  });
+  document.getElementById('grip-save-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('btn-save-session')?.click();
+  });
+  document.getElementById('grip-session-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // The native <select> is clipped while the header is hidden, so bring the
+    // header back first (loading a session is a "leave mini mode" action), then
+    // open the picker.
+    headerToggle?.expand();
+    const select = document.getElementById('session-select');
+    if (select?.showPicker) select.showPicker();
+    else select?.focus();
+  });
+  document.getElementById('grip-locale-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    localeSwitcher?.open(e.currentTarget);
+  });
+  document.getElementById('grip-more-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    headerMore?.open(e.currentTarget);
+  });
 }
 
 // Initial load
@@ -2435,8 +2485,9 @@ const panelToggleControllers = initPanelToggle();
 const librarySidenavToggle = initLibrarySidenav();
 const padsSidenavToggle = initPadsSidenav();
 const headerToggle = initHeaderToggle();
-initLocaleSwitcher();
-initHeaderMoreMenu();
+const localeSwitcher = initLocaleSwitcher();
+const headerMore = initHeaderMoreMenu();
+initGripActions({ localeSwitcher, headerMore, headerToggle });
 initTooltipPositioning();
 applyFontScale(getFontScale());
 refreshAutosave();

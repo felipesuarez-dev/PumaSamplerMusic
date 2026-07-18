@@ -108,13 +108,33 @@
     </header>
       </div>
     </div>
-    <button type="button" class="header-grip" id="header-toggle" aria-controls="header-collapse-inner" aria-expanded="true">
-      <span class="grip-brand">
-        <img src="/logo.png" alt="" class="grip-logo">
-        <span class="version">v1.0</span>
-      </span>
-      <span class="chev">▾</span>
-    </button>
+    <div class="header-grip" id="header-grip">
+      <button type="button" class="grip-toggle" id="header-toggle" aria-controls="header-collapse-inner" aria-expanded="true">
+        <span class="grip-brand">
+          <img src="/logo.png" alt="" class="grip-logo">
+          <span class="version">v1.0</span>
+        </span>
+        <span class="chev">▾</span>
+      </button>
+      <div class="grip-actions">
+        <button type="button" class="grip-btn grip-stop" id="grip-stop-btn" data-i18n-title="header.stopAllTitle" title="Stop all">
+          <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/></svg>
+        </button>
+        <button type="button" class="grip-btn grip-save" id="grip-save-btn" data-i18n-title="header.save" title="Save session">
+          <span class="material-symbols-outlined">save</span>
+        </button>
+        <span id="grip-autosave-status" class="autosave-status grip-autosave" hidden aria-live="polite">
+          <span class="material-symbols-outlined">cloud_done</span>
+        </span>
+        <button type="button" class="grip-btn grip-session" id="grip-session-btn" data-i18n-title="header.loadSessionOption" title="Load session...">
+          <span class="material-symbols-outlined">folder_open</span>
+        </button>
+        <button type="button" class="grip-btn grip-locale" id="grip-locale-btn" data-i18n-title="header.localeSelectTitle" title="Language">
+          <span class="locale-flag" data-flag></span>
+        </button>
+        <button type="button" class="grip-btn grip-more" id="grip-more-btn" data-i18n-title="header.moreTitle" title="More actions">⋯</button>
+      </div>
+    </div>
 
     <main class="main">
       <aside class="pads-sidenav expanded" id="pads-sidenav">

@@ -322,35 +322,42 @@ button.is-proxied {
   min-height: 0;
 }
 
-/* Thin grip, always visible between header and main so both states
-   (chevron up = hide, chevron down = show) stay discoverable. Borderless to
-   match the Video Library collapse aesthetic — the header/main boundary reads
-   from the --surface vs --bg contrast, no hairline. */
+/* Thin grip, always visible between header and main. Now a container: the
+   inner .grip-toggle button collapses/expands the header; .grip-actions holds
+   mini controls shown only when the header is hidden. Borderless to match the
+   Video Library collapse aesthetic (--surface vs --bg contrast, no hairline). */
 .header-grip {
   display: flex;
   align-items: center;
-  justify-content: center;
   width: 100%;
-  height: 20px;
   background: var(--surface);
+}
+
+.grip-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  background: transparent;
   color: var(--text-muted);
   border: none;
   cursor: pointer;
   transition: var(--transition);
 }
 
-.header-grip:hover {
+.grip-toggle:hover {
   background: var(--surface-hover);
   color: var(--text);
 }
 
-.header-grip .chev {
+.grip-toggle .chev {
   font-size: 0.8rem;
   line-height: 1;
   transition: transform 0.2s ease;
 }
 
-.header-grip[aria-expanded='true'] .chev {
+.grip-toggle[aria-expanded='true'] .chev {
   transform: rotate(180deg);
 }
 
@@ -358,6 +365,7 @@ button.is-proxied {
   display: none;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .grip-logo {
@@ -367,13 +375,67 @@ button.is-proxied {
   object-fit: contain;
 }
 
-/* When the header is collapsed, surface a compact logo + version in the grip
-   strip so the app stays identifiable; the full brand returns when expanded. */
+/* Mini action buttons — only while the header is hidden. */
+.grip-actions {
+  display: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.grip-actions::-webkit-scrollbar { display: none; }
+
+.grip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.grip-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.grip-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.grip-stop {
+  color: var(--danger);
+}
+
+.grip-save {
+  color: var(--accent);
+}
+
+.grip-autosave.autosave-status {
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+/* When the header is collapsed, surface a compact logo + version + mini
+   actions in the grip strip; the full brand returns when expanded. */
 .app.header-hidden .header-grip {
-  justify-content: space-between;
   padding: 0 12px;
-  height: auto;
   min-height: 28px;
+}
+
+.app.header-hidden .grip-toggle {
+  justify-content: space-between;
 }
 
 .app.header-hidden .grip-brand {
@@ -382,6 +444,21 @@ button.is-proxied {
 
 .app.header-hidden .grip-brand .version {
   margin-left: 0;
+}
+
+.app.header-hidden .grip-actions {
+  display: flex;
+}
+
+.app.header-hidden .grip-brand .chev,
+.grip-toggle .chev {
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .app.header-hidden .grip-brand .version {
+    display: none;
+  }
 }
 
 /* Buttons */
