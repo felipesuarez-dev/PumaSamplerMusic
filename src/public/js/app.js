@@ -1356,10 +1356,16 @@ async function triggerPad(position, data) {
   const audioUrl = api.getAudioUrl(data.videoId);
   const videoUrl = api.getVideoUrl(data.videoId);
 
+  // Show the loading spinner (delay-gated) across the whole load: audio decode
+  // here + video buffering in playSegment. The token flows into playSegment so
+  // it owns the success-clear; the error paths clear it themselves.
+  const loadToken = videoDisplay.setLoading(true);
+
   try {
     await audio.loadAudio(data.videoId, audioUrl);
   } catch (err) {
     showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
+    videoDisplay.setLoading(false, loadToken);
     return;
   }
 
@@ -1384,6 +1390,7 @@ async function triggerPad(position, data) {
     });
   } catch (err) {
     showToast(t('toast.playbackFailed', { message: err.message }), 'error');
+    videoDisplay.setLoading(false, loadToken);
     return;
   }
 
@@ -1393,6 +1400,7 @@ async function triggerPad(position, data) {
     start: data.start,
     end: data.end,
     muted: true,
+    loadToken,
   });
 
   return true;

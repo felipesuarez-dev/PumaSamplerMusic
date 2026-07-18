@@ -85,6 +85,7 @@ const dictionaries = {
     'waveform.helpPlayBody': 'Press Space to play or pause the preview. Click anywhere on the waveform to move the playhead (seek) to that position.',
 
     'video.placeholder': 'Add a video and assign it to a pad',
+    'video.loading': 'Loading…',
     'video.urlPlaceholder': 'https://youtube.com/watch?v=...',
     'video.addButton': 'Add Video',
     'video.status.ready': 'Ready',
@@ -340,6 +341,7 @@ const dictionaries = {
     'waveform.helpPlayBody': 'Presiona Espacio para reproducir o pausar la previsualización. Haz clic en cualquier parte de la onda para mover el cursor (saltar) a esa posición.',
 
     'video.placeholder': 'Agrega un video y asígnalo a un PAD',
+    'video.loading': 'Cargando…',
     'video.urlPlaceholder': 'https://youtube.com/watch?v=...',
     'video.addButton': 'Agregar video',
     'video.status.ready': 'Listo',

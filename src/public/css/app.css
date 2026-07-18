@@ -1328,6 +1328,33 @@ button.is-proxied {
   display: none;
 }
 
+/* Loading overlay — shown (via .visible class, not the hidden attribute) while
+   heavy/uncached media buffers. */
+.video-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  z-index: 5;
+}
+
+.video-loading-overlay.visible {
+  display: flex;
+}
+
+.loading-spinner-lg {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+  margin: 0;
+}
+
 /* Panel */
 .panel {
   position: relative;

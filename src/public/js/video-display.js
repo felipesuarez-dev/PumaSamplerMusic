@@ -14,6 +14,34 @@ export function createVideoDisplay(element, options = {}) {
     video.parentElement.appendChild(overlay);
   }
 
+  // Loading overlay (spinner) for slow/uncached media. A generation token
+  // guards against two concurrent loads (e.g. a pad trigger + an editor
+  // preview, which share this single video element) clearing each other's
+  // spinner. A 150ms delay-gate means cached/instant loads never flash it.
+  const loadingEl = document.getElementById('video-loading');
+  const displayEl = video.parentElement;
+  let loadGen = 0;
+  let showTimer = null;
+
+  function setLoading(on, token) {
+    if (on) {
+      loadGen += 1;
+      const my = loadGen;
+      clearTimeout(showTimer);
+      showTimer = setTimeout(() => {
+        if (my === loadGen && loadingEl) loadingEl.classList.add('visible');
+      }, 150);
+      if (displayEl) displayEl.setAttribute('aria-busy', 'true');
+      return my;
+    }
+    // Only the most recent load may clear the spinner — a superseded load's
+    // late resolution must not extinguish a newer load's spinner.
+    if (token !== undefined && token !== loadGen) return;
+    clearTimeout(showTimer);
+    if (loadingEl) loadingEl.classList.remove('visible');
+    if (displayEl) displayEl.setAttribute('aria-busy', 'false');
+  }
+
   function updateOverlay() {
     overlay.textContent = formatTime(video.currentTime || 0);
   }
@@ -42,7 +70,10 @@ export function createVideoDisplay(element, options = {}) {
     }
   }
 
-  async function playSegment({ videoId, url, start, end, muted, volume, onStop: onSegmentStop }) {
+  async function playSegment({ videoId, url, start, end, muted, volume, onStop: onSegmentStop, loadToken }) {
+    // Reuse the caller's load token (e.g. a pad trigger that already showed the
+    // spinner before its audio decode) or start our own (e.g. editor preview).
+    const token = loadToken ?? setLoading(true);
     load(videoId, url);
     if (typeof muted === 'boolean') video.muted = muted;
     if (typeof volume === 'number') video.volume = volume;
@@ -66,8 +97,10 @@ export function createVideoDisplay(element, options = {}) {
 
     try {
       await video.play();
+      setLoading(false, token);
     } catch (err) {
       console.warn('Video play failed:', err);
+      setLoading(false, token);
       return false;
     }
 
@@ -103,6 +136,7 @@ export function createVideoDisplay(element, options = {}) {
     load,
     unload,
     playSegment,
+    setLoading,
     seek,
     pause,
     stop,

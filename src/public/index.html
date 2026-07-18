@@ -322,6 +322,12 @@
             <img src="/logo.png" alt="" class="placeholder-logo">
             <p data-i18n="video.placeholder">Add a video and assign it to a pad</p>
           </div>
+          <!-- After the placeholder so the video[src] + .video-placeholder
+               adjacent-sibling selectors keep working. -->
+          <div id="video-loading" class="video-loading-overlay" role="status" aria-live="polite">
+            <span class="loading-spinner loading-spinner-lg"></span>
+            <p data-i18n="video.loading">Loading…</p>
+          </div>
         </div>
 
         <section class="panel collapsible-box" id="pad-editor-panel">
