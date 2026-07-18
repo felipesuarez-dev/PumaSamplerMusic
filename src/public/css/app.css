@@ -260,6 +260,25 @@ button.is-proxied {
   background: var(--surface-hover);
 }
 
+/* Grip session dropdown: truncate long session names; muted, non-interactive
+   empty state. */
+.grip-session-menu li {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grip-session-menu .grip-session-empty {
+  color: var(--text-muted);
+  font-weight: 400;
+  cursor: default;
+}
+
+.grip-session-menu .grip-session-empty:hover {
+  background: transparent;
+}
+
 /* Kebab items carrying a pin: label on the left, pin toggle on the right. */
 .header-more-item {
   display: flex;

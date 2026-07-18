@@ -2420,7 +2420,7 @@ function initLocaleSwitcher() {
     if (e.key === 'Escape') setOpen(false);
   });
 
-  return { open: (trigger) => setOpen(true, trigger) };
+  return { toggle: (trigger) => setOpen(menu.hidden, trigger) };
 }
 
 // Permanent kebab menu for the header's secondary actions. The real buttons
@@ -2519,13 +2519,66 @@ function initHeaderMoreMenu() {
 
   applyPinnedState();
 
-  return { open: (trigger) => setOpen(true, trigger) };
+  return { toggle: (trigger) => setOpen(menu.hidden, trigger) };
+}
+
+// Session picker for the collapsed-header grip: a fixed dropdown (like the
+// kebab/locale menus) so it doesn't expand the header. Populated on open from
+// the already-polled #session-select options, so no async fetch is needed.
+function initGripSessionMenu() {
+  const wrap = document.getElementById('grip-session-wrap');
+  const menu = document.getElementById('grip-session-menu');
+  if (!wrap || !menu) return null;
+
+  function setOpen(open, trigger) {
+    if (open) {
+      const select = document.getElementById('session-select');
+      const names = select
+        ? Array.from(select.options).map((o) => o.value).filter(Boolean)
+        : [];
+      menu.innerHTML = '';
+      if (names.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'grip-session-empty';
+        li.textContent = t('session.emptyList');
+        menu.appendChild(li);
+      } else {
+        for (const name of names) {
+          const li = document.createElement('li');
+          li.setAttribute('role', 'menuitem');
+          li.dataset.name = name;
+          li.textContent = name;
+          menu.appendChild(li);
+        }
+      }
+    }
+    menu.hidden = !open;
+    if (open) positionMenu(menu, trigger);
+  }
+
+  headerMenuClosers.push(() => setOpen(false));
+
+  menu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-name]');
+    if (!item) return;
+    setOpen(false);
+    sessionManager.load(item.dataset.name);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!wrap.contains(e.target) && !e.target.closest('#grip-session-btn')) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  });
+
+  return { toggle: (trigger) => setOpen(menu.hidden, trigger) };
 }
 
 // Mini action buttons shown in the collapsed-header grip. They proxy the real
 // controls (stop/save) or open the same fixed menus positioned under the mini
 // trigger. stopPropagation keeps a click from also toggling the grip.
-function initGripActions({ localeSwitcher, headerMore, headerToggle } = {}) {
+function initGripActions({ localeSwitcher, headerMore, gripSession } = {}) {
   document.getElementById('grip-stop-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById('btn-stop-all')?.click();
@@ -2536,21 +2589,15 @@ function initGripActions({ localeSwitcher, headerMore, headerToggle } = {}) {
   });
   document.getElementById('grip-session-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    // The native <select> is clipped while the header is hidden, so bring the
-    // header back first (loading a session is a "leave mini mode" action), then
-    // open the picker.
-    headerToggle?.expand();
-    const select = document.getElementById('session-select');
-    if (select?.showPicker) select.showPicker();
-    else select?.focus();
+    gripSession?.toggle(e.currentTarget);
   });
   document.getElementById('grip-locale-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    localeSwitcher?.open(e.currentTarget);
+    localeSwitcher?.toggle(e.currentTarget);
   });
   document.getElementById('grip-more-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    headerMore?.open(e.currentTarget);
+    headerMore?.toggle(e.currentTarget);
   });
 }
 
@@ -2561,7 +2608,8 @@ const padsSidenavToggle = initPadsSidenav();
 const headerToggle = initHeaderToggle();
 const localeSwitcher = initLocaleSwitcher();
 const headerMore = initHeaderMoreMenu();
-initGripActions({ localeSwitcher, headerMore, headerToggle });
+const gripSession = initGripSessionMenu();
+initGripActions({ localeSwitcher, headerMore, gripSession });
 initTooltipPositioning();
 applyFontScale(getFontScale());
 refreshAutosave();
