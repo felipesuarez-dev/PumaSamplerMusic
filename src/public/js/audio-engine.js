@@ -39,6 +39,19 @@ export function computeReleaseSchedule(durationSec, attackMs, releaseMs) {
   return { fadeStartOffset, releaseEffSec };
 }
 
+// Pure clamp for the Attack ramp on a one-shot: source.start(now, startTime,
+// durationSec) hard-stops the voice at now + durationSec, so an Attack ramp
+// longer than the slice itself would never finish -- the audible result
+// would be much quieter than `volume` (e.g. an 80ms slice with a 2000ms
+// Attack only ever reaches ~4% gain). Flooring attack to the slice duration
+// means the ramp always reaches `volume` by the time the voice ends. Only
+// meaningful for non-loop voices; loops have no hard stop to clamp against.
+export function clampAttackSeconds(attackMs, durationSec) {
+  const attackSec = Math.max(0, (attackMs || 0) / 1000);
+  const duration = Math.max(0, durationSec || 0);
+  return Math.min(attackSec, duration);
+}
+
 // Converts a semitone offset to the frequency ratio used to drive the
 // pitch-shifter worklet's grain-read speed (2 semitones = a whole tone, 12 =
 // one octave). Tempo/duration are unaffected — this only changes pitch (see
@@ -329,12 +342,19 @@ export function createAudioEngine() {
 
     // One-shot voices don't layer with each other: any new trigger cuts
     // whatever one-shots are currently playing. Loops are left alone so
-    // they can keep sounding as a background layer.
-    activeSources.forEach((active, pos) => {
-      if (pos !== position && !active.source.loop) {
-        stop(pos);
-      }
-    });
+    // they can keep sounding as a background layer. Position 0 is the
+    // reserved scratch voice used for Auto-Slicer slice preview (see
+    // slicer.js) -- previews are transient and must not kill a real pad,
+    // and triggering a real pad must not kill an in-progress preview
+    // either, so the cross-cut is skipped entirely whenever either side
+    // is position 0.
+    if (position !== 0) {
+      activeSources.forEach((active, pos) => {
+        if (pos !== position && pos !== 0 && !active.source.loop) {
+          stop(pos);
+        }
+      });
+    }
 
     const source = ctx.createBufferSource();
     source.buffer = playbackBuffer;
@@ -418,7 +438,14 @@ export function createAudioEngine() {
     delaySendGain.connect(chain.delayNode);
 
     const now = ctx.currentTime;
-    const attackSec = Math.max(0, (attack || 0) / 1000);
+    // Non-loop voices hard-stop at now + duration (source.start's duration
+    // arg, below), so Attack is clamped to the slice length -- otherwise an
+    // 80ms slice with a 2000ms Attack would only ever ramp to ~4% gain
+    // before being cut off. Loops have no hard stop, so their Attack is left
+    // unclamped.
+    const attackSec = loop
+      ? Math.max(0, (attack || 0) / 1000)
+      : clampAttackSeconds(attack, duration);
     const releaseSec = Math.max(0, (release || 0) / 1000);
 
     // Attack: ramp up from silence instead of jumping straight to `volume`.
@@ -436,9 +463,11 @@ export function createAudioEngine() {
     // slice does (e.g. an 80ms slice with a 2s release). fadeStartOffset is
     // always <= duration and >= attackSec, so this ramp starts after the
     // attack ramp has already reached `volume` — no automation conflict.
+    // attackSec is already clamped above, so it's fed in (converted back to
+    // ms) instead of the raw `attack` param.
     let releaseEffSec = 0;
     if (!loop) {
-      const schedule = computeReleaseSchedule(duration, attack, release);
+      const schedule = computeReleaseSchedule(duration, attackSec * 1000, release);
       releaseEffSec = schedule.releaseEffSec;
       if (releaseEffSec > 0) {
         const fadeStart = Math.max(now, now + schedule.fadeStartOffset);
@@ -458,6 +487,13 @@ export function createAudioEngine() {
       videoId, startTime, endTime, position, duration,
       pitch, pitchShiftOn, stretchOn, speed,
       releaseSec,
+      // Absolute AudioContext time this voice will hard-stop on its own
+      // (source.start's duration arg, below) -- Infinity for loops, which
+      // have no such cutoff. stop()'s release fade must never schedule
+      // past this: source.stop() does NOT push an already-scheduled hard
+      // stop back, so a longer fade would just get silently cut off
+      // mid-ramp (see stop()).
+      hardStopTime: loop ? Infinity : now + duration,
     };
     activeSources.set(position, sourceRef);
     emit('audiosourcestart', { position, videoId });
@@ -478,7 +514,21 @@ export function createAudioEngine() {
 
     const releaseSec = active.releaseSec || 0;
 
-    if (releaseSec > 0 && audioContext) {
+    // A stop()-triggered release fade can never outlive a voice's own
+    // already-scheduled hard stop (non-loop voices are started with
+    // source.start(now, startTime, duration), below in play()) --
+    // source.stop() does NOT push that earlier cutoff back, so scheduling a
+    // longer fade would just have the source die at the original time,
+    // mid-ramp (an audible click on gate release / retrigger). Clamp to
+    // whatever time is actually left before hardStopTime (Infinity for
+    // loops, so they're unaffected).
+    const now = audioContext ? audioContext.currentTime : 0;
+    const hardStopTime = active.hardStopTime ?? Infinity;
+    const releaseEffSec = releaseSec > 0 && audioContext
+      ? Math.min(releaseSec, Math.max(0, hardStopTime - now))
+      : 0;
+
+    if (releaseEffSec > 0) {
       // Release turns the hard stop into a fade-out. The voice is removed
       // from activeSources right away — not after the fade — so a retrigger
       // of this same pad, a manual stop() called again mid-fade, or the
@@ -488,11 +538,15 @@ export function createAudioEngine() {
       // source.onended, once the fade actually completes.
       activeSources.delete(position);
 
-      const now = audioContext.currentTime;
       const { gain, source } = active;
+      // Capture the live gain value BEFORE cancelScheduledValues clears any
+      // in-flight automation (e.g. an Attack ramp still in progress) --
+      // reading gain.value after cancelling would already reflect the
+      // cancellation and could return a stale/incorrect starting point.
+      const currentValue = gain.gain.value;
       gain.gain.cancelScheduledValues(now);
-      gain.gain.setValueAtTime(gain.gain.value, now);
-      gain.gain.linearRampToValueAtTime(0, now + releaseSec);
+      gain.gain.setValueAtTime(currentValue, now);
+      gain.gain.linearRampToValueAtTime(0, now + releaseEffSec);
 
       source.onended = () => {
         [active.source, active.gain, active.pitchShifterNode, active.filterNode, active.driveNode, active.panNode, active.dryGain, active.reverbSendGain, active.delaySendGain]
@@ -508,7 +562,7 @@ export function createAudioEngine() {
       };
 
       try {
-        source.stop(now + releaseSec);
+        source.stop(now + releaseEffSec);
       } catch {
         // Already stopped/scheduled
       }
@@ -544,7 +598,7 @@ export function createAudioEngine() {
   // rather than only taking effect on the next trigger. No-ops if the pad
   // isn't currently active (its stored values still apply next time it's
   // triggered via play()). setTargetAtTime ramps smoothly to avoid clicks.
-  function updateVoiceFx(position, { pitch, cutoff, resonance, reverbSend, delaySend, pitchShiftOn, stretchOn, speed, pan, drive } = {}) {
+  function updateVoiceFx(position, { pitch, cutoff, resonance, reverbSend, delaySend, pitchShiftOn, stretchOn, speed, pan, drive, release } = {}) {
     const active = activeSources.get(position);
     if (!active || !audioContext) return;
 
@@ -585,6 +639,15 @@ export function createAudioEngine() {
     }
     if (pan !== undefined) {
       active.panNode.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), now, RAMP);
+    }
+    // Release has no AudioParam to ramp live (it only takes effect the next
+    // time stop() is called on this voice, e.g. gate-off) -- just update the
+    // stored value stop() reads at that time. Attack and Reverse are left
+    // out: both are baked into the voice at trigger time (the Attack ramp
+    // already ran; Reverse picked the source buffer) and physically can't be
+    // retroactively applied to an in-flight voice.
+    if (release !== undefined) {
+      active.releaseSec = Math.max(0, release) / 1000;
     }
     // WaveShaper.curve isn't an AudioParam (can't ramp), so rebuild it. Throttle
     // to ~25 Hz: a knob drag fires input dozens of times/sec, and reallocating

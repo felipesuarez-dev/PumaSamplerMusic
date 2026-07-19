@@ -347,3 +347,57 @@ test('detectOnsets: reports monotonic progress from 0 to 1', () => {
 test('detectOnsets: empty input returns no slices', () => {
   assert.deepEqual(detectOnsets(new Float32Array(0), 48000), []);
 });
+
+test('detectOnsets: a tone starting at sample 0 does not register a spurious onset at t~=0', () => {
+  const sampleRate = 48000;
+  const totalSeconds = 2;
+  const totalSamples = Math.round(sampleRate * totalSeconds);
+  const data = new Float32Array(totalSamples);
+  // A continuous tone starting right at sample 0: frame 0's magnitude is
+  // nonzero while prevMagnitude starts all-zero, which used to be scored as
+  // a huge rise (a fake ~10ms first slice) before frame 0's flux was forced
+  // to 0.
+  for (let i = 0; i < totalSamples; i++) {
+    data[i] = 0.5 * Math.sin((2 * Math.PI * 440 * i) / sampleRate);
+  }
+  // A real, louder onset later on, so the pipeline still has something to
+  // legitimately detect.
+  const rand = mulberry32(99);
+  const decaySamples = Math.round(sampleRate * 0.02 * 8);
+  const onsetSample = Math.round(sampleRate * 1.0);
+  for (let i = 0; i < decaySamples && onsetSample + i < totalSamples; i++) {
+    const envelope = Math.exp(-i / sampleRate / 0.02);
+    data[onsetSample + i] += (rand() * 2 - 1) * 0.9 * envelope;
+  }
+
+  const slices = detectOnsets(data, sampleRate, { sensitivity: 0.5 });
+
+  // The very first slice must start at 0 and extend well past t=0 -- no
+  // spurious near-zero boundary from frame 0's would-be fake onset.
+  assert.equal(slices[0].start, 0);
+  assert.ok(
+    slices[0].end > 0.05,
+    `expected the first slice to extend past 50ms with no spurious onset near t=0, got end=${slices[0].end}`
+  );
+});
+
+test('detectOnsets: progress reaches 1 even for a single-frame (tiny) buffer', () => {
+  const sampleRate = 48000;
+  // Within [1024, 1535] samples this is exactly one analysis frame
+  // (numFrames === 1), where frame / (numFrames - 1 || 1) used to always
+  // evaluate to 0 and progress never reached 1.
+  const totalSamples = 1200;
+  const data = new Float32Array(totalSamples);
+  for (let i = 0; i < totalSamples; i++) {
+    data[i] = Math.sin((2 * Math.PI * 220 * i) / sampleRate);
+  }
+
+  const values = [];
+  detectOnsets(data, sampleRate, {
+    sensitivity: 0.5,
+    onProgress: (v) => values.push(v),
+  });
+
+  assert.ok(values.length > 0);
+  assert.equal(values[values.length - 1], 1);
+});

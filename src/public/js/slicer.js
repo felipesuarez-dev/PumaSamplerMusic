@@ -63,6 +63,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       openForVideo() {},
       isOpen: () => false,
       close() {},
+      handleVideoRemoved() {},
     };
   }
 
@@ -188,9 +189,41 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   function doAssign(sliceIndex, slice, position) {
     const padObject = buildSlicePadObject(position, currentVideoId, slice, sliceIndex);
     pads.update(position, padObject);
+    // A PAD position can only carry one slice's badge at a time. If another
+    // slice row was previously assigned to this same position, that PAD was
+    // just overwritten out from under it -- drop its now-stale entry so it
+    // loses its badge instead of falsely claiming the assignment.
+    for (const [otherIndex, otherPosition] of assignedMap) {
+      if (otherPosition === position && otherIndex !== sliceIndex) {
+        assignedMap.delete(otherIndex);
+      }
+    }
     assignedMap.set(sliceIndex, position);
     showToast(t('slicer.assigned', { position }), 'success');
     renderResultsList();
+  }
+
+  // A slice's assignedMap entry can go stale without going through
+  // doAssign -- e.g. the pad editor reassigns/clears that PAD directly, a
+  // session load replaces it, or the grid was resized smaller. Drop any
+  // entry whose PAD no longer actually holds that exact slice (matched by
+  // video + start/end) so the results list never shows a badge for an
+  // assignment that isn't really there anymore.
+  function pruneStaleAssignments() {
+    const count = pads.getCount();
+    for (const [sliceIndex, position] of [...assignedMap]) {
+      const slice = currentSlices[sliceIndex];
+      const data = position > count ? null : pads.getData(position);
+      const stillValid = Boolean(
+        slice && data
+        && data.videoId === currentVideoId
+        && data.start === slice.start
+        && data.end === slice.end,
+      );
+      if (!stillValid) {
+        assignedMap.delete(sliceIndex);
+      }
+    }
   }
 
   function requestAssign(sliceIndex, slice, position) {
@@ -208,6 +241,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   function renderResultsList() {
+    pruneStaleAssignments();
+
     if (!currentSlices.length) {
       resultsHintEl.textContent = t('slicer.noSlices');
       resultsHintEl.hidden = false;
@@ -339,8 +374,14 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     worker = w;
 
     w.onmessage = (event) => {
+      // Both `worker` and `myGen` are fixed per this call, so `data.gen !==
+      // myGen` can never be true for messages from this same worker `w` --
+      // it was a dead check. The live-identity guard below (mirroring
+      // onerror) is what actually rejects a zombie message from a
+      // terminate()d worker that could otherwise corrupt the cache for a
+      // newly opened video.
+      if (worker !== w) return;
       const data = event.data || {};
-      if (data.gen !== myGen) return; // stale message from a canceled/replaced run
       if (data.type === 'progress') {
         setProgress(data.value);
       } else if (data.type === 'done') {
@@ -503,20 +544,44 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     openCloseConfirmModal();
   }
 
+  // Called when a video is deleted (WS `video:removed` or the local delete
+  // path) while it may still be cached or open in the takeover. The video's
+  // audio no longer exists server-side, so there is nothing left to confirm
+  // -- performClose() already terminates any running worker and tears down
+  // the waveform/preview, so this just skips the usual close-confirm modal
+  // and tells the user why the panel closed.
+  function handleVideoRemoved(videoId) {
+    cache.delete(videoId);
+    if (open && currentVideoId === videoId) {
+      performClose();
+      showToast(t('slicer.videoRemoved'), 'info');
+    }
+  }
+
   closeBtn.addEventListener('click', close);
 
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
 
   generateBtn.addEventListener('click', async () => {
     if (!currentVideoId || analyzing) return;
+    // Claim the busy flag synchronously, before the audio-load await below.
+    // `analyzing` was previously only flipped inside startAnalysis(), which
+    // runs after this await -- two rapid clicks both read it as false and
+    // both proceed, firing overlapping loads/analyses. Early-return paths
+    // below restore it since no analysis actually started in that case.
+    analyzing = true;
     let buffer;
     try {
       buffer = await audio.loadAudio(currentVideoId, api.getAudioUrl(currentVideoId));
     } catch (err) {
+      analyzing = false;
       showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
       return;
     }
     if (buffer.duration > LONG_AUDIO_THRESHOLD_SEC) {
+      // Not analyzing yet -- only if/when the user confirms does
+      // startAnalysis() (and its own `analyzing = true`) actually run.
+      analyzing = false;
       openConfirmModal({
         title: t('slicer.longAudioTitle'),
         body: t('slicer.longAudioBody'),
@@ -565,5 +630,5 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     });
   });
 
-  return { openForVideo, isOpen, close };
+  return { openForVideo, isOpen, close, handleVideoRemoved };
 }

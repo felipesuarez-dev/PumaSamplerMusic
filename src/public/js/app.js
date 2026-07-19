@@ -1434,13 +1434,14 @@ async function triggerPad(position, data) {
 
   // Reverse only flips the audio playback direction — the video element has
   // no reverse-playback API, so playing it forward alongside reversed audio
-  // would just look wrong. Instead, show a frozen frame at the slice start;
-  // real video reverse is out of scope for this pad FX.
+  // would just look wrong. Instead, show a frozen frame at the slice end,
+  // since reversed audio audibly starts from that end of the slice; real
+  // video reverse is out of scope for this pad FX.
   if (data.reverse) {
     videoDisplay.showFrame({
       videoId: data.videoId,
       url: videoUrl,
-      time: data.start,
+      time: data.end,
       loadToken,
     });
   } else {
@@ -2200,6 +2201,7 @@ function renderVideoList() {
       try {
         await api.deleteVideo(video.videoId);
         audio.unload(video.videoId);
+        slicer.handleVideoRemoved(video.videoId);
         showToast(t('toast.videoRemoved', { name: video.title || video.videoId }), 'success');
         videoPage = 1;
         await refreshVideos();
@@ -2323,7 +2325,14 @@ ws.on('download:retrying', refreshVideos);
 // Local ffmpeg audio extraction phase — same rationale as 'retrying' above:
 // keeps the list's 'extracting' spinner/label fresh, no toast needed.
 ws.on('download:extracting', refreshVideos);
-ws.on('video:removed', refreshVideos);
+ws.on('video:removed', (payload) => {
+  // The video's audio may still be cached/open in the Auto-Slicer takeover
+  // (e.g. removed from another tab, or by the self-healing retry/error
+  // path) — close it without the usual confirm modal, since there's
+  // nothing left to confirm once the source video is gone.
+  if (payload && payload.videoId) slicer.handleVideoRemoved(payload.videoId);
+  refreshVideos();
+});
 
 // Session Manager
 const sessionManager = createSessionManager({

@@ -135,7 +135,7 @@ export const dictionaries = {
     'slicer.assignTargetEmpty': 'PAD {position} (empty)',
     'slicer.assignTargetOccupied': 'PAD {position} — {label}',
     'slicer.overwriteTitle': 'Overwrite PAD {position}?',
-    'slicer.overwriteBody': 'PAD {position} already has a sound assigned. Assigning this slice replaces it.',
+    'slicer.overwriteBody': 'PAD {position} already has a sound assigned. Assigning this slice replaces its sample and clears its key binding.',
     'slicer.newSessionSelected': 'New session with selected',
     'slicer.newSessionConfirmBody': 'Start a new session with the {count} selected slice(s) assigned to PADs 1..{count}? The current workspace will be cleared.',
     'slicer.newSessionCreated': 'New session created from {count} selected slice(s)',
@@ -150,6 +150,7 @@ export const dictionaries = {
     'slicer.dontShowAgain': "Don't show this again",
     'slicer.noSlices': 'No slices yet — set a sensitivity and click Generate Slices.',
     'slicer.workerUnavailable': 'Background analysis is not supported in this browser.',
+    'slicer.videoRemoved': 'This video was removed — the slicer was closed.',
     'tip.slicerSensitivity': 'Sensitivity: how easily a change in volume or timbre is detected as a new slice boundary. Lower values find fewer, longer slices; higher values find more, shorter ones.',
     'tip.slicerGenerate': 'Runs onset detection on the full track in the background and marks a slice boundary at each detected onset. Cancelable, and safe to leave running while you do something else.',
 
@@ -444,7 +445,7 @@ export const dictionaries = {
     'slicer.assignTargetEmpty': 'PAD {position} (vacío)',
     'slicer.assignTargetOccupied': 'PAD {position} — {label}',
     'slicer.overwriteTitle': '¿Sobrescribir el PAD {position}?',
-    'slicer.overwriteBody': 'El PAD {position} ya tiene un sonido asignado. Asignar este corte lo reemplaza.',
+    'slicer.overwriteBody': 'El PAD {position} ya tiene un sonido asignado. Asignar este corte reemplaza su muestra y borra su tecla asignada.',
     'slicer.newSessionSelected': 'Nueva sesión con los seleccionados',
     'slicer.newSessionConfirmBody': '¿Iniciar una nueva sesión con los {count} corte(s) seleccionados asignados a los PADs 1..{count}? El espacio de trabajo actual se vaciará.',
     'slicer.newSessionCreated': 'Nueva sesión creada a partir de {count} corte(s) seleccionados',
@@ -459,6 +460,7 @@ export const dictionaries = {
     'slicer.dontShowAgain': 'No volver a mostrar esto',
     'slicer.noSlices': 'Todavía no hay cortes — ajusta la sensibilidad y haz clic en Generar cortes.',
     'slicer.workerUnavailable': 'El análisis en segundo plano no es compatible con este navegador.',
+    'slicer.videoRemoved': 'Este video fue eliminado — el slicer se cerró.',
     'tip.slicerSensitivity': 'Sensibilidad: qué tan fácil se detecta un cambio de volumen o timbre como un nuevo límite de corte. Un valor más bajo encuentra menos cortes, más largos; uno más alto encuentra más cortes, más cortos.',
     'tip.slicerGenerate': 'Ejecuta la detección de onsets sobre toda la pista en segundo plano y marca un límite de corte en cada onset detectado. Se puede cancelar, y es seguro dejarlo corriendo mientras haces otra cosa.',
 

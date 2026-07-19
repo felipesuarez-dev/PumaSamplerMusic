@@ -332,7 +332,11 @@ export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onPro
       magnitude[i] = Math.hypot(re[i], im[i]);
     }
 
-    flux[frame] = spectralFlux(magnitude, prevMagnitude);
+    // Frame 0 has no previous frame to compare against -- prevMagnitude
+    // starts all-zero, so without this guard spectralFlux would score frame
+    // 0's full spectral energy as a rise, registering a fake onset right at
+    // (or ~10ms into) any signal that starts sounding at sample 0.
+    flux[frame] = frame === 0 ? 0 : spectralFlux(magnitude, prevMagnitude);
 
     // Ping-pong the magnitude buffers instead of copying.
     const tmp = prevMagnitude;
@@ -340,7 +344,10 @@ export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onPro
     magnitude = tmp;
 
     if (onProgress && (frame % PROGRESS_FRAME_STRIDE === 0 || frame === numFrames - 1)) {
-      onProgress(frame / (numFrames - 1 || 1));
+      // numFrames === 1 has no meaningful fraction between frames -- report
+      // done (1) instead of the frame/(numFrames-1||1) formula, which would
+      // otherwise divide by the fallback 1 and always emit 0.
+      onProgress(numFrames > 1 ? frame / (numFrames - 1) : 1);
     }
   }
 

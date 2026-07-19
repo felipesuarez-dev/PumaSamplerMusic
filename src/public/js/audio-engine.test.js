@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSliceTimes, semitonesToRatio, reverseSliceTimes, computeReleaseSchedule } from './audio-engine.js';
+import { computeSliceTimes, semitonesToRatio, reverseSliceTimes, computeReleaseSchedule, clampAttackSeconds } from './audio-engine.js';
 
 const MIN_DURATION = 0.01;
 
@@ -92,4 +92,19 @@ test('computeReleaseSchedule: attack alone already exceeds the slice, release is
   const { fadeStartOffset, releaseEffSec } = computeReleaseSchedule(0.05, 2000, 100);
   assert.equal(releaseEffSec, 0);
   assert.equal(fadeStartOffset, 0.05);
+});
+
+test('clampAttackSeconds: attack shorter than the slice is unaffected', () => {
+  assert.equal(clampAttackSeconds(200, 2), 0.2);
+});
+
+test('clampAttackSeconds: attack longer than the slice is floored to the slice duration', () => {
+  // 2000ms attack on an 80ms slice would otherwise ramp to only ~4% of
+  // volume before the one-shot's hard stop cuts it off.
+  assert.equal(clampAttackSeconds(2000, 0.08), 0.08);
+});
+
+test('clampAttackSeconds: zero/negative attack clamps to 0', () => {
+  assert.equal(clampAttackSeconds(0, 1), 0);
+  assert.equal(clampAttackSeconds(-50, 1), 0);
 });

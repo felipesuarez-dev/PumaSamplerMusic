@@ -123,6 +123,11 @@ export function createVideoDisplay(element, options = {}) {
     load(videoId, url);
     clearStopTimer();
     video.removeEventListener('timeupdate', updateOverlay);
+    // Pad-triggered frames are always muted (matching playSegment's pad
+    // usage) -- without this, a prior unmuted editor preview could leave
+    // video.muted = false, and the play() kick below would leak the video
+    // element's own audio track for the moment before it's paused again.
+    video.muted = true;
 
     if (video.readyState < 2) {
       await new Promise((resolve) => {
