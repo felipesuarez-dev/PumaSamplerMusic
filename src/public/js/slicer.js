@@ -71,6 +71,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   let open = false;
+  let closing = false;
+  let closeTimer = null;
   let currentVideoId = null;
   let waveform = null;
   let worker = null;
@@ -437,6 +439,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   function openForVideo(videoId) {
+    // Re-opening while the exit animation is still playing: finish the
+    // pending teardown synchronously so the two states can't overlap.
+    if (closing) finishClose();
+
     if (open && currentVideoId === videoId) return;
 
     if (open) {
@@ -480,10 +486,13 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     loadWaveformAudio(videoId, cached ? cached.slices : []);
   }
 
-  function performClose() {
-    cancelWorker();
-    stopPreview();
-    sidenav.classList.remove('slicer-takeover');
+  function finishClose() {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+    closing = false;
+    sidenav.classList.remove('slicer-takeover', 'slicer-closing');
     if (waveform) {
       waveform.destroy();
       waveform = null;
@@ -493,6 +502,27 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     currentSlices = [];
     assignedMap.clear();
     selected.clear();
+  }
+
+  function performClose() {
+    if (closing) return;
+    // Logic stops immediately; only the visual teardown waits for the exit
+    // animation (mirror of slicerTakeoverIn, shrinking back to the right).
+    cancelWorker();
+    stopPreview();
+    closing = true;
+    sidenav.classList.add('slicer-closing');
+    const onEnd = (e) => {
+      if (e.target !== sidenav) return;
+      sidenav.removeEventListener('animationend', onEnd);
+      finishClose();
+    };
+    sidenav.addEventListener('animationend', onEnd);
+    // Fallback in case animationend never fires (e.g. reduced motion).
+    closeTimer = setTimeout(() => {
+      sidenav.removeEventListener('animationend', onEnd);
+      finishClose();
+    }, 300);
   }
 
   function openCloseConfirmModal() {

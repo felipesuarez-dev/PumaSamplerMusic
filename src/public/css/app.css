@@ -3015,6 +3015,19 @@ button.is-proxied {
   to { transform: scaleX(1); opacity: 1; }
 }
 
+/* Exit mirrors the entrance: the panel shrinks back toward the right edge
+   (transform-origin is right center on the base rule) instead of vanishing.
+   slicer.js removes both classes on animationend (or a timeout fallback). */
+.library-sidenav.slicer-takeover.slicer-closing {
+  animation: slicerTakeoverOut 0.2s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes slicerTakeoverOut {
+  from { transform: scaleX(1); opacity: 1; }
+  to { transform: scaleX(0.85); opacity: 0; }
+}
+
 /* Body must be visible even if the rail was collapsed when Slice was
    clicked (app.js also force-expands the toggle, but this is the layout
    guarantee that doesn't depend on that). */
