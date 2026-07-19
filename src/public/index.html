@@ -431,6 +431,12 @@
             <div class="slicer-panel-header">
               <h3 class="panel-title" data-i18n="slicer.title">Auto-Slicer</h3>
               <span class="slicer-video-title" id="slicer-video-title"></span>
+              <div class="slicer-preview-volume-group">
+                <label for="slicer-preview-volume" class="slicer-preview-volume-label" data-i18n="slicer.previewVolume">Preview volume</label>
+                <input type="range" id="slicer-preview-volume" min="0" max="200" step="1" value="50">
+                <span class="slicer-preview-volume-value" id="slicer-preview-volume-value">50%</span>
+                <span class="help-icon" data-i18n-tooltip="tip.slicerPreviewVolume" data-tooltip="Volume of the slice preview inside the Auto-Slicer only, from 0% to 200%. Does not affect how PADs play live.">?</span>
+              </div>
               <button type="button" class="slicer-close-btn" id="slicer-close-btn" data-i18n-title="slicer.closeButtonTitle" title="Close Auto-Slicer">&times;</button>
             </div>
 

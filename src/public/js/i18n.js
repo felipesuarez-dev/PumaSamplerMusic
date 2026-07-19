@@ -151,8 +151,10 @@ export const dictionaries = {
     'slicer.noSlices': 'No slices yet — set a sensitivity and click Generate Slices.',
     'slicer.workerUnavailable': 'Background analysis is not supported in this browser.',
     'slicer.videoRemoved': 'This video was removed — the slicer was closed.',
+    'slicer.previewVolume': 'Preview volume',
     'tip.slicerSensitivity': 'Sensitivity: how easily a change in volume or timbre is detected as a new slice boundary. Lower values find fewer, longer slices; higher values find more, shorter ones.',
     'tip.slicerGenerate': 'Runs onset detection on the full track in the background and marks a slice boundary at each detected onset. Cancelable, and safe to leave running while you do something else.',
+    'tip.slicerPreviewVolume': 'Volume of the slice preview inside the Auto-Slicer only, from 0% to 200%. Does not affect how PADs play live.',
 
     'cache.confirmTitle': 'Clear the video cache?',
     'cache.confirmBody': 'This deletes every downloaded video and audio file. Sessions that reference them are not deleted — the next time you play or load one, its videos will download again automatically.',
@@ -461,8 +463,10 @@ export const dictionaries = {
     'slicer.noSlices': 'Todavía no hay cortes — ajusta la sensibilidad y haz clic en Generar cortes.',
     'slicer.workerUnavailable': 'El análisis en segundo plano no es compatible con este navegador.',
     'slicer.videoRemoved': 'Este video fue eliminado — el slicer se cerró.',
+    'slicer.previewVolume': 'Volumen de previsualización',
     'tip.slicerSensitivity': 'Sensibilidad: qué tan fácil se detecta un cambio de volumen o timbre como un nuevo límite de corte. Un valor más bajo encuentra menos cortes, más largos; uno más alto encuentra más cortes, más cortos.',
     'tip.slicerGenerate': 'Ejecuta la detección de onsets sobre toda la pista en segundo plano y marca un límite de corte en cada onset detectado. Se puede cancelar, y es seguro dejarlo corriendo mientras haces otra cosa.',
+    'tip.slicerPreviewVolume': 'Volumen de la previsualización de cortes dentro del Auto-Slicer únicamente, de 0% a 200%. No afecta cómo se reproducen los PADs en vivo.',
 
     'cache.confirmTitle': '¿Vaciar el caché de videos?',
     'cache.confirmBody': 'Esto elimina todos los archivos de video y audio descargados. Las sesiones que los referencian no se eliminan: la próxima vez que reproduzcas o cargues una, sus videos se volverán a descargar automáticamente.',

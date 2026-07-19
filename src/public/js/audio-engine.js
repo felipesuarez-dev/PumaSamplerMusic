@@ -661,6 +661,18 @@ export function createAudioEngine() {
     }
   }
 
+  // Live-updates a currently-playing voice's gain (e.g. slicer preview volume
+  // slider). Deliberately separate from updateVoiceFx, which never touches
+  // volume. A voice that's mid-release-fade is already removed from
+  // activeSources (see stop()), so the lookup below naturally skips it
+  // instead of fighting the fade-out ramp.
+  function setVoiceVolume(position, volume) {
+    const active = activeSources.get(position);
+    if (!active || !audioContext) return;
+    const clamped = Math.max(0, Math.min(2, volume));
+    active.gain.gain.setTargetAtTime(clamped, audioContext.currentTime, 0.01);
+  }
+
   function getActivePositions() {
     return Array.from(activeSources.keys());
   }
@@ -681,6 +693,7 @@ export function createAudioEngine() {
     stop,
     stopAll,
     updateVoiceFx,
+    setVoiceVolume,
     getActivePositions,
     isLoaded,
     unload,

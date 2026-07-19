@@ -4,6 +4,7 @@ import { formatTime } from './state.js';
 const CLOSE_SKIP_CONFIRM_KEY = 'puma-slicer-skip-close-confirm';
 const LONG_AUDIO_THRESHOLD_SEC = 10 * 60;
 const DEFAULT_SENSITIVITY = 0.5;
+const DEFAULT_PREVIEW_VOLUME_PCT = 50;
 
 // Full per-pad shape used whenever the slicer creates a pad from scratch
 // (single assignment or "new session with selected"). Mirrors PAD_FX_DEFAULTS
@@ -46,6 +47,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const rulerCanvas = document.getElementById('slicer-waveform-ruler');
   const sensitivityInput = document.getElementById('slicer-sensitivity');
   const sensitivityValueEl = document.getElementById('slicer-sensitivity-value');
+  const previewVolumeInput = document.getElementById('slicer-preview-volume');
+  const previewVolumeValueEl = document.getElementById('slicer-preview-volume-value');
   const generateBtn = document.getElementById('slicer-generate-btn');
   const overlayEl = document.getElementById('slicer-overlay');
   const progressEl = document.getElementById('slicer-progress');
@@ -85,6 +88,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   let previewingIndex = null;
   let previewBtnEl = null;
   let previewTimer = null;
+  // Session-scoped only (resets to the default on reload) -- gain applied to
+  // the preview voice (position 0), slider percent / 100 so 0..200% maps to
+  // gain 0..2.
+  let previewVolume = DEFAULT_PREVIEW_VOLUME_PCT / 100;
 
   function isOpen() {
     return open;
@@ -105,6 +112,19 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
   function updateSensitivityLabel() {
     sensitivityValueEl.textContent = parseFloat(sensitivityInput.value).toFixed(2);
+  }
+
+  // Updates the module-scoped gain from the slider, refreshes the value
+  // label, and -- when a preview is currently playing -- pushes the change
+  // live to the engine so dragging the slider is audible immediately instead
+  // of only taking effect on the next preview.
+  function updatePreviewVolume() {
+    const pct = parseInt(previewVolumeInput.value, 10);
+    previewVolumeValueEl.textContent = `${pct}%`;
+    previewVolume = pct / 100;
+    if (previewingIndex !== null) {
+      audio.setVoiceVolume(0, previewVolume);
+    }
   }
 
   function showOverlay() {
@@ -159,7 +179,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     btnEl.innerHTML = '<span class="material-symbols-outlined">stop</span>';
     // Position 0 is never a real pad (pads are 1..N) — a dedicated scratch
     // voice slot for slice preview, stopped the same way any pad is (stop(0)).
-    audio.play(0, { videoId: currentVideoId, start: slice.start, end: slice.end, volume: 1 }).catch(() => {});
+    audio.play(0, { videoId: currentVideoId, start: slice.start, end: slice.end, volume: previewVolume }).catch(() => {});
     const durationMs = Math.max(0, slice.end - slice.start) * 1000;
     previewTimer = setTimeout(() => {
       if (previewingIndex === index) stopPreview();
@@ -561,6 +581,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   closeBtn.addEventListener('click', close);
 
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
+  previewVolumeInput.addEventListener('input', updatePreviewVolume);
 
   generateBtn.addEventListener('click', async () => {
     if (!currentVideoId || analyzing) return;
