@@ -1,12 +1,28 @@
 import { createWaveform } from './waveform.js';
 import { formatTime } from './state.js';
-import { boundariesToSlices, slicesToBoundaries, moveBoundary, insertBoundary, removeBoundary } from './slicer-slices.js';
+import {
+  boundariesToSlices,
+  slicesToBoundaries,
+  moveBoundary,
+  insertBoundary,
+  removeBoundary,
+  computeGridBoundaries,
+  bpmFromLength,
+} from './slicer-slices.js';
 import { MIN_SLICE_SECONDS, snapToZeroCrossing } from './slicer-core.js';
 
 const CLOSE_SKIP_CONFIRM_KEY = 'puma-slicer-skip-close-confirm';
 const LONG_AUDIO_THRESHOLD_SEC = 10 * 60;
 const DEFAULT_SENSITIVITY = 0.5;
 const DEFAULT_PREVIEW_VOLUME_PCT = 50;
+const DEFAULT_MODE = 'onsets';
+const DEFAULT_METHOD = 'specflux';
+const DEFAULT_GRID_BEATS = 16;
+const DEFAULT_GRID_DIVISIONS = 4;
+// Shuriken-derived cap: keeps a runaway beats*divisions config (e.g. 256*32)
+// from generating tens of thousands of sub-minGap slices synchronously.
+const GRID_SLICE_LIMIT = 512;
+const UNDO_STACK_LIMIT = 30;
 // Bounded zero-crossing scan radius applied when a dragged marker is
 // committed (mouseup). Deliberately smaller than MIN_SLICE_SECONDS so the
 // snap alone can never violate the min-gap invariant on its own -- the
@@ -55,6 +71,14 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const rulerCanvas = document.getElementById('slicer-waveform-ruler');
   const sensitivityInput = document.getElementById('slicer-sensitivity');
   const sensitivityValueEl = document.getElementById('slicer-sensitivity-value');
+  const methodSelect = document.getElementById('slicer-method');
+  const modeOnsetsBtn = document.getElementById('slicer-mode-onsets');
+  const modeGridBtn = document.getElementById('slicer-mode-grid');
+  const onsetControlsEl = document.getElementById('slicer-onset-controls');
+  const gridControlsEl = document.getElementById('slicer-grid-controls');
+  const gridBeatsInput = document.getElementById('slicer-grid-beats');
+  const gridDivisionsInput = document.getElementById('slicer-grid-divisions');
+  const gridBpmEl = document.getElementById('slicer-grid-bpm');
   const previewVolumeInput = document.getElementById('slicer-preview-volume');
   const previewVolumeValueEl = document.getElementById('slicer-preview-volume-value');
   const generateBtn = document.getElementById('slicer-generate-btn');
@@ -95,9 +119,19 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // Cleared on close and whenever the open video changes (see openForVideo).
   let currentAudioBuffer = null;
 
+  // 'onsets' or 'grid' -- which controls row is visible and which path
+  // Generate takes. Persisted per video in the cache entry (merged, never
+  // replacing sensitivity/slices/method/gridBeats/gridDivisions).
+  let mode = DEFAULT_MODE;
+
+  // Bounded undo history of currentSlices snapshots, pushed right before a
+  // mutation is known to happen (marker drag/add/delete, grid generate,
+  // onset analysis result). Cleared on video switch and on close teardown.
+  let undoStack = [];
+
   // One analysis per video, cached in memory only (never per-pad) — reopening
   // a video restores its last generated slices without re-running the worker.
-  const cache = new Map(); // videoId -> { sensitivity, slices }
+  const cache = new Map(); // videoId -> { sensitivity, slices, mode, gridBeats, gridDivisions, method }
   let currentSlices = [];
   const assignedMap = new Map(); // sliceIndex -> pad position, for the currently open video
   const selected = new Set(); // sliceIndex, for "new session with selected"
@@ -162,7 +196,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // the neighbors are too close together) -- this is what catches the
     // edge case where the (smaller-radius) zero-crossing snap lands the
     // boundary exactly at or past minGap from a neighbor.
-    applyBoundaries(moveBoundary(boundaries, index, snapped, MIN_SLICE_SECONDS));
+    const moved = moveBoundary(boundaries, index, snapped, MIN_SLICE_SECONDS);
+    if (moved === boundaries) return; // no-op guard: neighbors too close together
+    pushUndoSnapshot();
+    applyBoundaries(moved);
   }
 
   function handleMarkerAdded(time) {
@@ -173,6 +210,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const boundaries = slicesToBoundaries(currentSlices);
     const next = insertBoundary(boundaries, time, MIN_SLICE_SECONDS);
     if (!next) return; // rejected: too close to an existing boundary or the ends
+    pushUndoSnapshot();
     assignedMap.clear();
     selected.clear();
     applyBoundaries(next);
@@ -183,9 +221,48 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const boundaries = slicesToBoundaries(currentSlices);
     const next = removeBoundary(boundaries, index);
     if (next === boundaries) return; // no-op guard (index 0 / last)
+    pushUndoSnapshot();
     assignedMap.clear();
     selected.clear();
     applyBoundaries(next);
+  }
+
+  // Bounded snapshot stack for Ctrl+Z -- pushed right before a mutation is
+  // known to happen (after all reject/no-op guards have already passed), so
+  // a no-op edit never pollutes the undo history with a duplicate state.
+  function pushUndoSnapshot() {
+    undoStack.push(currentSlices.map((s) => ({ ...s })));
+    if (undoStack.length > UNDO_STACK_LIMIT) undoStack.shift();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    const previous = undoStack.pop();
+    stopPreview();
+    assignedMap.clear();
+    selected.clear();
+    applyBoundaries(slicesToBoundaries(previous));
+  }
+
+  // Same input-focus convention as pads.js isInputFocused(): while a text
+  // field/select is focused (e.g. the grid beats input), native browser
+  // undo must keep working instead of being hijacked by our Ctrl+Z.
+  function isInputFocused() {
+    const active = document.activeElement;
+    return Boolean(active && (
+      active.tagName === 'INPUT' ||
+      active.tagName === 'TEXTAREA' ||
+      active.tagName === 'SELECT'
+    ));
+  }
+
+  function handleSlicerKeydown(e) {
+    if (isInputFocused()) return;
+    const key = e.key ? e.key.toLowerCase() : '';
+    if ((e.ctrlKey || e.metaKey) && key === 'z') {
+      e.preventDefault();
+      undo();
+    }
   }
 
   // Click-to-audition: finds the slice containing `time` and toggles its
@@ -216,6 +293,78 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }
   }
 
+  // Toggles between the Onsets and Grid controls rows, mirrors the active
+  // state onto both segmented buttons, and merges the new mode into the
+  // per-video cache entry (never replaces sensitivity/slices/method/grid*).
+  function setMode(next) {
+    mode = next === 'grid' ? 'grid' : 'onsets';
+    const isGrid = mode === 'grid';
+    onsetControlsEl.hidden = isGrid;
+    gridControlsEl.hidden = !isGrid;
+    modeOnsetsBtn.classList.toggle('active', !isGrid);
+    modeOnsetsBtn.setAttribute('aria-pressed', String(!isGrid));
+    modeGridBtn.classList.toggle('active', isGrid);
+    modeGridBtn.setAttribute('aria-pressed', String(isGrid));
+    if (currentVideoId) {
+      cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), mode });
+    }
+  }
+
+  // Single place that flips the analyzing flag, so the mode toggle is always
+  // disabled in lockstep with it -- prevents a late worker `done` message
+  // from landing after the user switched to Grid mid-analysis (the toggle
+  // being unclickable means the mode literally cannot change mid-flight).
+  function setAnalyzing(value) {
+    analyzing = value;
+    modeOnsetsBtn.disabled = value;
+    modeGridBtn.disabled = value;
+  }
+
+  // Live BPM readout for Grid mode (beats / minutes over the loaded track).
+  // Shows a placeholder until the buffer is decoded or the beats field holds
+  // an invalid value.
+  function updateGridBpmLabel() {
+    const beats = parseInt(gridBeatsInput.value, 10);
+    if (!currentAudioBuffer || !Number.isFinite(beats) || beats < 1 || currentAudioBuffer.duration <= 0) {
+      gridBpmEl.textContent = '— BPM';
+      return;
+    }
+    gridBpmEl.textContent = `${bpmFromLength(beats, currentAudioBuffer.duration).toFixed(1)} BPM`;
+  }
+
+  // Grid mode's Generate path: synchronous (no worker/overlay/long-audio
+  // confirm) since computeGridBoundaries is O(n) pure arithmetic. Guards
+  // mirror the ones baked into the editing layer (minGap) plus a hard cap on
+  // total slice count so a runaway beats*divisions config can't hang the
+  // main thread building thousands of DOM rows.
+  function generateGrid() {
+    if (!currentVideoId) return;
+    const beats = parseInt(gridBeatsInput.value, 10);
+    const divisions = parseInt(gridDivisionsInput.value, 10);
+    if (!Number.isFinite(beats) || !Number.isFinite(divisions) || beats < 1 || divisions < 1) return;
+    if (beats * divisions > GRID_SLICE_LIMIT) {
+      showToast(t('slicer.gridSliceLimit'), 'warning');
+      return;
+    }
+    if (!currentAudioBuffer) return;
+    const duration = currentAudioBuffer.duration;
+    if (duration / (beats * divisions) < MIN_SLICE_SECONDS) {
+      showToast(t('slicer.gridTooDense'), 'warning');
+      return;
+    }
+    pushUndoSnapshot();
+    stopPreview();
+    assignedMap.clear();
+    selected.clear();
+    applyBoundaries(computeGridBoundaries(duration, beats, divisions));
+    cache.set(currentVideoId, {
+      ...(cache.get(currentVideoId) || {}),
+      mode: 'grid',
+      gridBeats: beats,
+      gridDivisions: divisions,
+    });
+  }
+
   function showOverlay() {
     overlayEl.classList.add('visible');
   }
@@ -244,7 +393,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     if (!analyzing && !worker) return;
     gen += 1;
     terminateWorker();
-    analyzing = false;
+    setAnalyzing(false);
     hideOverlay();
   }
 
@@ -480,11 +629,15 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     });
   }
 
-  function finishAnalysis(sensitivity, slices) {
-    analyzing = false;
+  function finishAnalysis(sensitivity, method, slices) {
+    setAnalyzing(false);
     hideOverlay();
     terminateWorker();
-    cache.set(currentVideoId, { sensitivity, slices });
+    // Pushed before currentSlices is overwritten below, so Ctrl+Z after a
+    // fresh Generate restores whatever slices (possibly none) existed prior
+    // to this analysis.
+    pushUndoSnapshot();
+    cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), sensitivity, method, slices });
     currentSlices = slices;
     assignedMap.clear();
     selected.clear();
@@ -493,7 +646,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   function failAnalysis(message) {
-    analyzing = false;
+    setAnalyzing(false);
     hideOverlay();
     terminateWorker();
     showToast(message || t('slicer.workerUnavailable'), 'error');
@@ -508,18 +661,19 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     terminateWorker();
     gen += 1;
     const myGen = gen;
-    analyzing = true;
+    setAnalyzing(true);
     setProgress(0);
     showOverlay();
 
     const sensitivity = parseFloat(sensitivityInput.value);
+    const method = methodSelect.value;
     const channelDataCopy = buffer.getChannelData(0).slice();
 
     let w;
     try {
       w = new Worker('/js/slicer-worker.js', { type: 'module' });
     } catch {
-      analyzing = false;
+      setAnalyzing(false);
       hideOverlay();
       showToast(t('slicer.workerUnavailable'), 'error');
       return;
@@ -538,7 +692,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       if (data.type === 'progress') {
         setProgress(data.value);
       } else if (data.type === 'done') {
-        finishAnalysis(sensitivity, data.slices);
+        finishAnalysis(sensitivity, method, data.slices);
       } else if (data.type === 'error') {
         failAnalysis(data.message);
       }
@@ -549,7 +703,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     };
 
     w.postMessage(
-      { channelData: channelDataCopy, sampleRate: buffer.sampleRate, sensitivity, gen: myGen },
+      { channelData: channelDataCopy, sampleRate: buffer.sampleRate, sensitivity, method, gen: myGen },
       [channelDataCopy.buffer],
     );
   }
@@ -562,6 +716,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       if (currentVideoId !== videoId || !waveform) return; // switched away mid-load
       waveform.setAudioBuffer(buffer);
       currentAudioBuffer = buffer;
+      updateGridBpmLabel();
       if (cachedSlices.length) waveform.setMarkers(slicesToBoundaries(cachedSlices));
     } catch (err) {
       if (currentVideoId !== videoId || !waveform) return;
@@ -585,6 +740,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     } else {
       sidenav.classList.add('slicer-takeover');
       open = true;
+      // Symmetric with the removeEventListener in finishClose() -- added
+      // once per open takeover, not per video switch within it.
+      window.addEventListener('keydown', handleSlicerKeydown);
     }
 
     currentVideoId = videoId;
@@ -598,6 +756,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     assignedMap.clear();
     selected.clear();
     currentSlices = [];
+    undoStack.length = 0;
     hideOverlay();
 
     // Canvas gotcha: the takeover class was just added, making the panel
@@ -609,14 +768,19 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     wf.draw();
     wf.setMarkers([]);
 
+    // Every field below is independently optional in a cache entry -- e.g.
+    // a video whose only history is a grid generate has gridBeats/gridDivisions
+    // but no sensitivity/method, and vice versa -- so each is only applied to
+    // its input when actually defined, instead of stamping "undefined" in.
     const cached = cache.get(videoId);
-    if (cached) {
-      sensitivityInput.value = String(cached.sensitivity);
-      currentSlices = cached.slices;
-    } else {
-      sensitivityInput.value = String(DEFAULT_SENSITIVITY);
-    }
+    sensitivityInput.value = String(cached && cached.sensitivity !== undefined ? cached.sensitivity : DEFAULT_SENSITIVITY);
+    methodSelect.value = cached && cached.method !== undefined ? cached.method : DEFAULT_METHOD;
+    gridBeatsInput.value = String(cached && cached.gridBeats !== undefined ? cached.gridBeats : DEFAULT_GRID_BEATS);
+    gridDivisionsInput.value = String(cached && cached.gridDivisions !== undefined ? cached.gridDivisions : DEFAULT_GRID_DIVISIONS);
+    currentSlices = cached ? cached.slices : [];
+    setMode(cached && cached.mode !== undefined ? cached.mode : DEFAULT_MODE);
     updateSensitivityLabel();
+    updateGridBpmLabel();
     renderResultsList();
 
     loadWaveformAudio(videoId, cached ? cached.slices : []);
@@ -629,6 +793,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }
     closing = false;
     sidenav.classList.remove('slicer-takeover', 'slicer-closing');
+    window.removeEventListener('keydown', handleSlicerKeydown);
     if (waveform) {
       waveform.destroy();
       waveform = null;
@@ -637,6 +802,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     currentVideoId = null;
     currentSlices = [];
     currentAudioBuffer = null;
+    undoStack.length = 0;
     assignedMap.clear();
     selected.clear();
   }
@@ -750,26 +916,41 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
   previewVolumeInput.addEventListener('input', updatePreviewVolume);
 
+  modeOnsetsBtn.addEventListener('click', () => {
+    if (analyzing) return; // also hard-disabled while analyzing, this is belt-and-suspenders
+    setMode('onsets');
+  });
+  modeGridBtn.addEventListener('click', () => {
+    if (analyzing) return;
+    setMode('grid');
+  });
+  gridBeatsInput.addEventListener('input', updateGridBpmLabel);
+  gridDivisionsInput.addEventListener('change', updateGridBpmLabel);
+
   generateBtn.addEventListener('click', async () => {
     if (!currentVideoId || analyzing) return;
+    if (mode === 'grid') {
+      generateGrid();
+      return;
+    }
     // Claim the busy flag synchronously, before the audio-load await below.
     // `analyzing` was previously only flipped inside startAnalysis(), which
     // runs after this await -- two rapid clicks both read it as false and
     // both proceed, firing overlapping loads/analyses. Early-return paths
     // below restore it since no analysis actually started in that case.
-    analyzing = true;
+    setAnalyzing(true);
     let buffer;
     try {
       buffer = await audio.loadAudio(currentVideoId, api.getAudioUrl(currentVideoId));
     } catch (err) {
-      analyzing = false;
+      setAnalyzing(false);
       showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
       return;
     }
     if (buffer.duration > LONG_AUDIO_THRESHOLD_SEC) {
       // Not analyzing yet -- only if/when the user confirms does
-      // startAnalysis() (and its own `analyzing = true`) actually run.
-      analyzing = false;
+      // startAnalysis() (and its own setAnalyzing(true)) actually run.
+      setAnalyzing(false);
       openConfirmModal({
         title: t('slicer.longAudioTitle'),
         body: t('slicer.longAudioBody'),
