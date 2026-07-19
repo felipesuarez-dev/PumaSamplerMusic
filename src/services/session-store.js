@@ -62,6 +62,9 @@ const PAD_FX_DEFAULTS = {
   speed: 100,
   pan: 0,
   drive: 0,
+  attack: 0,
+  release: 0,
+  reverse: false,
 };
 
 export async function load(name) {
@@ -94,7 +97,9 @@ export async function save(session) {
     ...session,
     createdAt: session.createdAt || now,
     updatedAt: now,
-    schemaVersion: 2,
+    // Version 3 marks sessions saved with per-pad attack/release/reverse.
+    // No migration branches on it: load() backfills pad defaults via spread.
+    schemaVersion: 3,
   };
 
   await writeFile(path, JSON.stringify(normalized, null, 2), 'utf8');

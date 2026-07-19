@@ -112,6 +112,15 @@ export function validateSession(session) {
     if (pad.drive !== undefined && (typeof pad.drive !== 'number' || pad.drive < 0 || pad.drive > 100)) {
       errors.push(`Invalid drive for pad ${pad.position || '?'} (must be 0..100)`);
     }
+    if (pad.attack !== undefined && (typeof pad.attack !== 'number' || pad.attack < 0 || pad.attack > 2000)) {
+      errors.push(`Invalid attack for pad ${pad.position || '?'} (must be 0..2000)`);
+    }
+    if (pad.release !== undefined && (typeof pad.release !== 'number' || pad.release < 0 || pad.release > 2000)) {
+      errors.push(`Invalid release for pad ${pad.position || '?'} (must be 0..2000)`);
+    }
+    if (pad.reverse !== undefined && typeof pad.reverse !== 'boolean') {
+      errors.push(`Invalid reverse for pad ${pad.position || '?'} (must be a boolean)`);
+    }
   }
 
   return errors;

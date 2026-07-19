@@ -28,21 +28,22 @@ after(async () => {
   await rm(tmpDataDir, { recursive: true, force: true });
 });
 
-test('save/load round-trip preserves pads and stamps schemaVersion 2', async () => {
+test('save/load round-trip preserves pads and stamps schemaVersion 3', async () => {
   const pads = [
     { id: 1, videoId: 'abc123', start: 0.5, end: 2.5 },
     { id: 2, videoId: 'def456', start: 0, end: 1 },
   ];
 
   const saved = await sessionStore.save({ name: 'roundtrip-session', pads });
-  assert.equal(saved.schemaVersion, 2);
+  assert.equal(saved.schemaVersion, 3);
 
   const loaded = await sessionStore.load('roundtrip-session');
   assert.deepEqual(loaded.pads, pads.map((p) => ({
     pitch: 0, cutoff: 100, resonance: 0.1, reverbSend: 0, delaySend: 0,
-    pitchShiftOn: true, stretchOn: false, speed: 100, pan: 0, drive: 0, ...p,
+    pitchShiftOn: true, stretchOn: false, speed: 100, pan: 0, drive: 0,
+    attack: 0, release: 0, reverse: false, ...p,
   })));
-  assert.equal(loaded.schemaVersion, 2);
+  assert.equal(loaded.schemaVersion, 3);
 });
 
 test('load migrates a schemaVersion 1 session with no masterFx to a full default masterFx', async () => {
@@ -95,7 +96,32 @@ test('load fills PAD_FX_DEFAULTS on a legacy pad with no FX fields', async () =>
     speed: 100,
     pan: 0,
     drive: 0,
+    attack: 0,
+    release: 0,
+    reverse: false,
   });
+});
+
+test('load fills attack/release/reverse defaults on a legacy pad and preserves saved values', async () => {
+  const legacyPath = join(config.sessionsDir, 'legacy-envelope-session.json');
+  const legacySession = {
+    name: 'legacy-envelope-session',
+    pads: [
+      { position: 1, videoId: 'abc12345678', start: 0, end: 1 },
+      { position: 2, videoId: 'abc12345678', start: 0, end: 1, attack: 120, release: 300, reverse: true },
+    ],
+    schemaVersion: 2,
+  };
+  await writeFile(legacyPath, JSON.stringify(legacySession), 'utf8');
+
+  const loaded = await sessionStore.load('legacy-envelope-session');
+
+  assert.equal(loaded.pads[0].attack, 0);
+  assert.equal(loaded.pads[0].release, 0);
+  assert.equal(loaded.pads[0].reverse, false);
+  assert.equal(loaded.pads[1].attack, 120);
+  assert.equal(loaded.pads[1].release, 300);
+  assert.equal(loaded.pads[1].reverse, true);
 });
 
 test('load preserves an already-saved per-pad FX value instead of overwriting it', async () => {
