@@ -6,6 +6,7 @@ import { createVideoDisplay } from './video-display.js';
 import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
 import { createSessionManager } from './session.js';
+import { createSlicer } from './slicer.js';
 import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
 import { enhanceKnobs } from './knob.js';
 
@@ -850,6 +851,11 @@ function makeResizable(el, { edge, dimension, min, max, onResizeEnd, collapseBel
   applyEdge(edge);
 
   handle.addEventListener('mousedown', (e) => {
+    // The slicer takeover pins this panel to the full viewport via CSS
+    // (position: fixed; inset: 0) — CSS alone already hides the handle, but
+    // this guard also stops a drag from writing an inline width/flexBasis
+    // that would fight the takeover's layout once it closes.
+    if (el.classList.contains('slicer-takeover')) return;
     e.preventDefault();
     // Dragging a collapsed panel's handle re-expands it first, then resizes
     // from the freshly-expanded size (offsetWidth read below is synchronous
@@ -2131,12 +2137,17 @@ function renderVideoList() {
       statusHtml = `<span class="status ${video.status}">${statusLabel(video.status)}</span>`;
     }
 
+    const sliceBtnHtml = video.status === 'ready'
+      ? `<button type="button" class="video-slice-btn" data-slice-id="${video.videoId}" data-i18n-title="slicer.openTitle" title="${t('slicer.openTitle')}"><span class="material-symbols-outlined">content_cut</span></button>`
+      : '';
+
     li.innerHTML = `
       <div class="video-item-info">
         <span class="video-item-title">${escapeHtml(video.title || video.videoId)}</span>
         <span class="video-item-meta">${formatTime(video.duration || 0)} · ${video.videoId}</span>
       </div>
       ${statusHtml}
+      ${sliceBtnHtml}
       <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
     `;
 
@@ -2151,6 +2162,17 @@ function renderVideoList() {
       if (video.sizeBytes) detail.push(formatBytes(video.sizeBytes));
       detail.push(video.videoId);
       infoEl.dataset.tooltip = detail.join('\n');
+    }
+
+    const sliceBtn = li.querySelector('[data-slice-id]');
+    if (sliceBtn) {
+      sliceBtn.addEventListener('click', () => {
+        // Opening the takeover from a collapsed rail must still work — force
+        // it expanded first (the takeover's CSS makes the panel full-viewport
+        // either way, but this keeps the toggle's own state/aria in sync).
+        if (librarySidenavToggle && librarySidenavToggle.isCollapsed()) librarySidenavToggle.expand();
+        slicer.openForVideo(video.videoId);
+      });
     }
 
     const retryBtn = li.querySelector('[data-retry-cta]');
@@ -2337,6 +2359,18 @@ const sessionManager = createSessionManager({
       masterFxControls.applyState(session.masterFx || loadMasterFxDefaults());
     }
   },
+});
+
+// Auto-Slicer takeover view
+const slicer = createSlicer({
+  api,
+  audio,
+  pads,
+  store,
+  sessionManager,
+  showToast,
+  openConfirmModal,
+  t,
 });
 
 // Export session

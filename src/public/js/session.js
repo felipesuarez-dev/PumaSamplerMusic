@@ -513,6 +513,7 @@ export function createSessionManager(options = {}) {
     showManageSessionsModal,
     refreshList,
     importFromZip,
+    clearWorkspace,
     getCurrent: () => currentSession,
   };
 }

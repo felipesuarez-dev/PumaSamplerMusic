@@ -2250,6 +2250,20 @@ button.is-proxied {
   background: var(--danger-dim);
 }
 
+/* Overrides the generic red "remove" look above — Slice is not destructive. */
+.video-item button.video-slice-btn {
+  color: var(--text-muted);
+}
+
+.video-item button.video-slice-btn:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.video-slice-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -2970,4 +2984,344 @@ button.is-proxied {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Auto-Slicer takeover view
+   ==========================================================================
+   The Video Library sidenav becomes a full-viewport modal-like view while
+   slicing. Specificity note: `.library-sidenav.slicer-takeover` (two classes)
+   intentionally outranks both `.library-sidenav:not(.expanded)` (collapsed,
+   32px) and the `.library-sidenav { height: 44px }` mobile override below —
+   an explicit height here is mandatory, since inset:0 alone would lose to
+   that mobile rule's explicit height on its own specificity tier. z-index 50
+   sits under session modals (2000) and tooltips (9999) by design — it's a
+   full-screen view, not a modal, and the global stop-key/shortcuts remain
+   active on purpose (the header stays reachable underneath). */
+.library-sidenav.slicer-takeover {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: 100vh;
+  z-index: 50;
+  border-radius: 0;
+  overflow: auto;
+  transform-origin: right center;
+  animation: slicerTakeoverIn 0.2s ease;
+}
+
+@keyframes slicerTakeoverIn {
+  from { transform: scaleX(0.85); opacity: 0.5; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* Body must be visible even if the rail was collapsed when Slice was
+   clicked (app.js also force-expands the toggle, but this is the layout
+   guarantee that doesn't depend on that). */
+.library-sidenav.slicer-takeover .library-sidenav-body {
+  opacity: 1;
+  height: 100%;
+}
+
+/* The takeover replaces the whole rail's normal content with its own
+   header/waveform/results — hide the regular chrome instead of reparenting
+   or duplicating it. */
+.library-sidenav.slicer-takeover .library-sidenav-toggle,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .library-sidenav-header,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .video-library {
+  display: none;
+}
+
+/* The resize handle is injected by makeResizable() as a child of the sidenav
+   element itself (a sibling of the toggle/body) — hidden here for the same
+   reason app.js also guards its mousedown handler: a drag would otherwise
+   write an inline width that fights the takeover's fixed layout. */
+.library-sidenav.slicer-takeover .resize-handle {
+  display: none;
+}
+
+.slicer-panel {
+  display: none;
+  height: 100%;
+}
+
+.library-sidenav.slicer-takeover #slicer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+}
+
+.slicer-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.slicer-panel-header .panel-title {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.slicer-video-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slicer-close-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: var(--transition);
+}
+
+.slicer-close-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.slicer-waveform-container {
+  position: relative;
+  flex: 0 0 auto;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.slicer-waveform-container .waveform-ruler {
+  width: 100%;
+  height: 20px;
+  display: block;
+}
+
+.slicer-waveform-container canvas:not(.waveform-ruler) {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: block;
+  cursor: crosshair;
+}
+
+.slicer-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.slicer-controls-row label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.slicer-controls-row input[type='range'] {
+  flex: 1;
+  min-width: 120px;
+}
+
+.slicer-sensitivity-value {
+  min-width: 38px;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Blocking overlay during analysis — same visual language as
+   .video-loading-overlay, scoped to this panel instead of the video area. */
+.slicer-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(10, 12, 16, 0.9);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 24px;
+  z-index: 10;
+  border-radius: var(--radius);
+}
+
+.slicer-overlay.visible {
+  display: flex;
+}
+
+.slicer-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, 80%);
+}
+
+.slicer-progress {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  appearance: none;
+}
+
+.slicer-progress::-webkit-progress-bar {
+  background: var(--surface-light);
+  border-radius: 4px;
+}
+
+.slicer-progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.15s ease;
+}
+
+.slicer-progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+.slicer-progress-value {
+  min-width: 40px;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.slicer-results {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slicer-results-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.slicer-results-header h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.slicer-results-header .hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.slicer-slice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.slice-row-checkbox {
+  flex: 0 0 auto;
+}
+
+.slice-row-index {
+  flex: 0 0 auto;
+  min-width: 28px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.slice-row-time {
+  flex: 0 0 auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.slice-row-duration {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.slice-preview-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+}
+
+.slicer-assign-select {
+  flex: 1;
+  min-width: 140px;
+}
+
+.slice-row-badge {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--success);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .library-sidenav.slicer-takeover {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .slicer-waveform-container {
+    height: 150px;
+  }
+
+  .slice-row {
+    align-items: flex-start;
+  }
+
+  .slicer-assign-select {
+    min-width: 100%;
+    order: 10;
+  }
 }

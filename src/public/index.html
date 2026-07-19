@@ -426,6 +426,47 @@
               <button type="button" class="btn btn-secondary btn-clear-cache" id="btn-clear-cache" data-i18n="video.clearCache">Clear cache</button>
             </div>
           </div>
+
+          <div class="slicer-panel" id="slicer-panel">
+            <div class="slicer-panel-header">
+              <h3 class="panel-title" data-i18n="slicer.title">Auto-Slicer</h3>
+              <span class="slicer-video-title" id="slicer-video-title"></span>
+              <button type="button" class="slicer-close-btn" id="slicer-close-btn" data-i18n-title="slicer.closeButtonTitle" title="Close Auto-Slicer">&times;</button>
+            </div>
+
+            <div class="slicer-waveform-container">
+              <canvas id="slicer-waveform-ruler" class="waveform-ruler"></canvas>
+              <canvas id="slicer-waveform-canvas"></canvas>
+            </div>
+
+            <div class="slicer-controls-row">
+              <label for="slicer-sensitivity" data-i18n="slicer.sensitivity">Sensitivity</label>
+              <input type="range" id="slicer-sensitivity" min="0" max="1" step="0.01" value="0.5">
+              <span class="slicer-sensitivity-value" id="slicer-sensitivity-value">0.50</span>
+              <span class="help-icon" data-i18n-tooltip="tip.slicerSensitivity" data-tooltip="How easily a change is detected as a new slice boundary. Lower finds fewer, larger slices; higher finds more, shorter ones.">?</span>
+              <button type="button" class="btn" id="slicer-generate-btn" data-i18n="slicer.generate">Generate Slices</button>
+              <span class="help-icon" data-i18n-tooltip="tip.slicerGenerate" data-tooltip="Runs onset detection on the full track in the background and marks a slice boundary at each detected onset.">?</span>
+            </div>
+
+            <div class="slicer-overlay" id="slicer-overlay">
+              <div class="loading-spinner-lg"></div>
+              <p data-i18n="slicer.analyzing">Analyzing and generating slices…</p>
+              <div class="slicer-progress-row">
+                <progress class="slicer-progress" id="slicer-progress" value="0" max="1"></progress>
+                <span class="slicer-progress-value" id="slicer-progress-value">0%</span>
+              </div>
+              <button type="button" class="btn btn-secondary" id="slicer-cancel-btn" data-i18n="slicer.cancel">Cancel</button>
+            </div>
+
+            <div class="slicer-results">
+              <div class="slicer-results-header">
+                <h4 data-i18n="slicer.slicesTitle">Slices</h4>
+                <p class="hint" id="slicer-results-hint"></p>
+              </div>
+              <ul class="slicer-slice-list" id="slicer-slice-list"></ul>
+              <button type="button" class="btn" id="slicer-new-session-btn" data-i18n="slicer.newSessionSelected" disabled>New session with selected</button>
+            </div>
+          </div>
         </div>
       </aside>
     </main>
