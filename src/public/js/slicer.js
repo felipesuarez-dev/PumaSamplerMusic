@@ -160,10 +160,15 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       onMarkerDelete: handleMarkerDeleted,
       onWaveformClick: auditionAtTime,
     });
-    // index.html can't be edited for this batch -- the canvas title
-    // attribute is a simple, always-visible-on-hover way to surface the
-    // drag/dblclick/right-click hint.
+    // The canvas title attribute is a simple, always-visible-on-hover way to
+    // surface the drag/dblclick/right-click hint. Set it directly here so
+    // it's visible immediately, and also mark it with data-i18n-title so
+    // applyTranslations() (called on locale switch) re-queries the DOM and
+    // refreshes it -- otherwise the hint would stay in the stale locale
+    // after a language change since this canvas is created once and never
+    // re-rendered.
     canvas.title = t('slicer.markerHint');
+    canvas.setAttribute('data-i18n-title', 'slicer.markerHint');
     return waveform;
   }
 
@@ -198,7 +203,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // boundary exactly at or past minGap from a neighbor.
     const moved = moveBoundary(boundaries, index, snapped, MIN_SLICE_SECONDS);
     if (moved === boundaries) return; // no-op guard: neighbors too close together
-    pushUndoSnapshot();
+    pushUndoSnapshot(false);
     applyBoundaries(moved);
   }
 
@@ -210,7 +215,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const boundaries = slicesToBoundaries(currentSlices);
     const next = insertBoundary(boundaries, time, MIN_SLICE_SECONDS);
     if (!next) return; // rejected: too close to an existing boundary or the ends
-    pushUndoSnapshot();
+    pushUndoSnapshot(true);
     assignedMap.clear();
     selected.clear();
     applyBoundaries(next);
@@ -221,7 +226,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const boundaries = slicesToBoundaries(currentSlices);
     const next = removeBoundary(boundaries, index);
     if (next === boundaries) return; // no-op guard (index 0 / last)
-    pushUndoSnapshot();
+    pushUndoSnapshot(true);
     assignedMap.clear();
     selected.clear();
     applyBoundaries(next);
@@ -230,18 +235,69 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // Bounded snapshot stack for Ctrl+Z -- pushed right before a mutation is
   // known to happen (after all reject/no-op guards have already passed), so
   // a no-op edit never pollutes the undo history with a duplicate state.
-  function pushUndoSnapshot() {
-    undoStack.push(currentSlices.map((s) => ({ ...s })));
+  // Each entry also carries `indexShifting` (whether the edit that's about to
+  // happen changes slice indices/count) and the mode context active at push
+  // time, so undo() can decide precisely what else needs to be restored.
+  function pushUndoSnapshot(indexShifting) {
+    // Sourced from the pre-mutation cache entry (not the live inputs): at
+    // push time the cache still holds the config that produced the CURRENT
+    // (pre-mutation) currentSlices, since every push site's cache.set(...)
+    // with the NEW config runs AFTER this call (generateGrid, finishAnalysis).
+    const prev = cache.get(currentVideoId) || {};
+    undoStack.push({
+      slices: currentSlices.map((s) => ({ ...s })),
+      indexShifting,
+      mode,
+      gridBeats: mode === 'grid' ? prev.gridBeats : undefined,
+      gridDivisions: mode === 'grid' ? prev.gridDivisions : undefined,
+      sensitivity: mode === 'onsets' ? prev.sensitivity : undefined,
+      method: mode === 'onsets' ? prev.method : undefined,
+    });
     if (undoStack.length > UNDO_STACK_LIMIT) undoStack.shift();
   }
 
   function undo() {
+    if (analyzing) return;
     if (!undoStack.length) return;
-    const previous = undoStack.pop();
+    const entry = undoStack.pop();
     stopPreview();
-    assignedMap.clear();
-    selected.clear();
-    applyBoundaries(slicesToBoundaries(previous));
+    // Index-shifting edits (add/delete/generate/analysis) can leave badges
+    // pointing at the wrong slice, so they're cleared wholesale. A marker
+    // drag never shifts indices -- pruneStaleAssignments() (called from
+    // renderResultsList() inside applyBoundaries()) already surgically drops
+    // only the badges that actually went stale.
+    if (entry.indexShifting) {
+      assignedMap.clear();
+      selected.clear();
+    }
+    if (entry.mode !== mode) {
+      setMode(entry.mode);
+    }
+    if (entry.mode === 'grid') {
+      if (entry.gridBeats !== undefined) gridBeatsInput.value = entry.gridBeats;
+      if (entry.gridDivisions !== undefined) gridDivisionsInput.value = entry.gridDivisions;
+      updateGridBpmLabel();
+    } else if (entry.mode === 'onsets') {
+      if (entry.sensitivity !== undefined) {
+        sensitivityInput.value = entry.sensitivity;
+        updateSensitivityLabel();
+      }
+      if (entry.method !== undefined) methodSelect.value = entry.method;
+    }
+    applyBoundaries(slicesToBoundaries(entry.slices));
+    // Persist the restored config back into the cache -- applyBoundaries
+    // already synced `slices` and setMode (when it ran) already synced
+    // `mode`, but the gridBeats/gridDivisions/sensitivity/method fields
+    // otherwise stay stale in the cache until the next Generate, so a video
+    // switch away and back wouldn't reflect the undone state.
+    if (currentVideoId) {
+      const merged = { ...(cache.get(currentVideoId) || {}), mode: entry.mode };
+      if (entry.gridBeats !== undefined) merged.gridBeats = entry.gridBeats;
+      if (entry.gridDivisions !== undefined) merged.gridDivisions = entry.gridDivisions;
+      if (entry.sensitivity !== undefined) merged.sensitivity = entry.sensitivity;
+      if (entry.method !== undefined) merged.method = entry.method;
+      cache.set(currentVideoId, merged);
+    }
   }
 
   // Same input-focus convention as pads.js isInputFocused(): while a text
@@ -346,13 +402,16 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       showToast(t('slicer.gridSliceLimit'), 'warning');
       return;
     }
-    if (!currentAudioBuffer) return;
+    if (!currentAudioBuffer) {
+      showToast(t('slicer.audioNotReady'), 'warning');
+      return;
+    }
     const duration = currentAudioBuffer.duration;
     if (duration / (beats * divisions) < MIN_SLICE_SECONDS) {
       showToast(t('slicer.gridTooDense'), 'warning');
       return;
     }
-    pushUndoSnapshot();
+    pushUndoSnapshot(true);
     stopPreview();
     assignedMap.clear();
     selected.clear();
@@ -636,7 +695,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // Pushed before currentSlices is overwritten below, so Ctrl+Z after a
     // fresh Generate restores whatever slices (possibly none) existed prior
     // to this analysis.
-    pushUndoSnapshot();
+    pushUndoSnapshot(true);
     cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), sensitivity, method, slices });
     currentSlices = slices;
     assignedMap.clear();
