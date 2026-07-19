@@ -30,6 +30,7 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a 
 - **Full video download** — `yt-dlp` downloads the complete video; `ffmpeg` extracts the audio track.
 - **Up to 27 assignable pads** — each pad can bind to any keyboard key (or combination like `shift+a`).
 - **Time-slice editor** — waveform display with drag handles, plus transport controls (play, mark in, mark out) to set the exact segment while the video is playing.
+- **Auto-Slicer** — analyzes a downloaded video's audio (spectral-flux onset detection) and generates slices automatically; review them on the waveform, preview each one, and assign them to free pads or create a new session from the selection.
 - **Session persistence** — save/load your pad layout as a JSON file, or start a new session from a template copied from an existing one. The session manager adds search and per-session delete.
 - **Organize mode** — rearrange the grid without triggering audio: drag to swap or move pads, copy one pad to another, or clear it with a confirmation modal; a context menu (right-click / long-press) offers the same.
 - **Compact header** — secondary actions (New, Manage, Export, Import, Logs, Settings) live in a three-dots (⋯) menu; each of the five actions can be pinned to the toolbar as a button. The STOP button shows only its icon and the configured key.
@@ -108,6 +109,7 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 | **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor; every edit auto-commits, no per-pad save button |
 | **Per-pad FX** | Tune (±12 semitones), Cut, Res, Reverb send, and Delay send knobs per pad; P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH switch with a Speed knob (50–200%, time-stretch); tweaking these live while a pad loops warps it in real time |
 | **Rotary knobs** | Master and per-pad FX controls as rotary knobs: vertical drag, mouse wheel, Shift for fine adjustment, keyboard accessible |
+| **Auto-Slicer** | Per-video Slice button: automatic cut detection with adjustable sensitivity, a real progress bar during analysis, a slice list with durations, preview, and selective assignment bounded by the pads in the grid |
 | **Waveform Zoom/Pan** | `Ctrl` + mouse wheel to zoom, drag to pan, plus zoom in/out/reset buttons for precise slicing on long samples |
 | **Transport** | Play preview, mark in, mark out, stop; playhead synced to the video position; Material Symbols icons instead of plain Unicode glyphs |
 | **Session Manager** | Save (name modal)/load/delete sessions; Manage modal with search and per-row delete; new-session modal to start fresh or copy pads from an existing session as a template |
@@ -242,6 +244,14 @@ Edit `docker-compose.yml`:
 **[PumaSoft][pumasoft-link]**
 
 </div>
+
+## Acknowledgments
+
+The Auto-Slicer and the per-pad envelope FX draw on concepts from these open-source projects (concepts and design parameters only; no code was copied):
+
+- **[Ninjas 2](https://github.com/clearly-broken-software/ninjas2)** (GPL-3.0) — the slice-sensitivity concept (a single control inversely mapped to the detection threshold) and the slicer UX.
+- **[Shuriken Beat Slicer](https://github.com/rock-hopper/shuriken)** (GPL-2.0) — the onset-detection parameters (window/hop size, minimum inter-onset interval) and snapping cuts to the nearest zero crossing.
+- **[Grace](https://github.com/s-oram/Grace)** (MIT) — the envelope and region concepts applied to the per-pad controls.
 
 ## License
 

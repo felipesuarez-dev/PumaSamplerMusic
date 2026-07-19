@@ -30,6 +30,7 @@ PumaSamplerMusic resuelve esto en una sola ventana del navegador: pega una URL d
 - **Descarga completa de video** — `yt-dlp` descarga el video completo; `ffmpeg` extrae la pista de audio.
 - **Hasta 27 PADs asignables** — cada PAD puede vincularse a cualquier tecla del teclado (o combinación como `shift+a`).
 - **Editor de fragmentos de tiempo** — visualización de forma de onda con controladores de arrastre, más controles de transporte (reproducir, marcar entrada, marcar salida) para fijar el segmento exacto mientras el video se reproduce.
+- **Auto-Slicer** — analiza el audio de un video descargado (detección de onsets por flujo espectral) y genera cortes automáticamente; revisa los slices sobre la forma de onda, previsualiza cada uno y asígnalos a PADs libres o crea una sesión nueva con la selección.
 - **Persistencia de sesiones** — guarda/carga la disposición de PADs como un archivo JSON, o inicia una sesión nueva a partir de una plantilla copiada de una sesión existente. El gestor de sesiones ofrece búsqueda y eliminación por sesión.
 - **Modo Organizar** — reorganiza la grilla sin disparar audio: arrastra para intercambiar o mover PADs, copia un PAD a otro, o límpialo con un modal de confirmación; también hay un menú contextual (clic derecho / mantener presionado).
 - **Barra superior compacta** — las acciones secundarias (Nueva, Gestionar, Exportar, Importar, Logs, Configuración) viven en un menú de tres puntos (⋯); cada una de las cinco acciones puede anclarse (pin) a la barra como botón. El botón STOP muestra solo el ícono y la tecla configurada.
@@ -108,6 +109,7 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 | **Editor de PAD** | Etiqueta, tecla, volumen, color, modo de disparo (one-shot / gate), loop, editor de segmento de forma de onda; cada edición se guarda automáticamente, sin botón de guardado por PAD |
 | **FX por PAD** | Knobs de Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD; switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, time-stretch); ajustar en vivo mientras el PAD hace loop lo deforma en tiempo real |
 | **Knobs rotativos** | Controles de FX maestros y por PAD como knobs giratorios: arrastre vertical, rueda del mouse, Shift para ajuste fino, navegables por teclado |
+| **Auto-Slicer** | Botón Slice por video: detección automática de cortes con sensibilidad ajustable, barra de progreso real durante el análisis, lista de slices con duración, previsualización y asignación selectiva limitada a los PADs de la grilla |
 | **Zoom/Pan de forma de onda** | `Ctrl` + rueda del mouse para zoom, arrastrar para pan, más botones de zoom in/out/reset para cortes precisos en muestras largas |
 | **Transporte** | Reproducir previsualización, marcar entrada, marcar salida, detener; playhead sincronizado con la posición del video; íconos Material Symbols en vez de glifos Unicode planos |
 | **Gestor de sesiones** | Guardar (modal con nombre)/cargar/eliminar sesiones; modal Gestionar con búsqueda y eliminación por fila; modal de sesión nueva para empezar de cero o copiar PADs de una sesión existente como plantilla |
@@ -242,6 +244,14 @@ Edita `docker-compose.yml`:
 **[PumaSoft][pumasoft-link]**
 
 </div>
+
+## Créditos
+
+El Auto-Slicer y los FX de envolvente por PAD se inspiran en conceptos de estos proyectos open source (solo conceptos y parámetros de diseño; no se copió código):
+
+- **[Ninjas 2](https://github.com/clearly-broken-software/ninjas2)** (GPL-3.0) — el concepto de sensibilidad de corte (un solo control mapeado inversamente al umbral de detección) y la UX del slicer.
+- **[Shuriken Beat Slicer](https://github.com/rock-hopper/shuriken)** (GPL-2.0) — los parámetros de detección de onsets (tamaño de ventana/hop, intervalo mínimo entre onsets) y el ajuste de cortes al cruce por cero más cercano.
+- **[Grace](https://github.com/s-oram/Grace)** (MIT) — los conceptos de envolventes y regiones aplicados a los controles por PAD.
 
 ## Licencia
 
