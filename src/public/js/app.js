@@ -2528,7 +2528,7 @@ const PINNABLE_IDS = [
 // grip strip buttons. Tooltip keys reuse existing i18n strings (no new keys).
 const PINNED_ACTION_META = {
   'btn-new-session': { icon: 'add', titleKey: 'header.new' },
-  'btn-manage-sessions': { icon: 'folder_open', titleKey: 'session.manageTitle' },
+  'btn-manage-sessions': { icon: 'folder_managed', titleKey: 'session.manageTitle' },
   'btn-export-session': { icon: 'download', titleKey: 'header.exportTitle' },
   'btn-import-session': { icon: 'upload', titleKey: 'header.importTitle' },
   'btn-view-logs': { icon: 'receipt_long', titleKey: 'header.logsTitle' },
