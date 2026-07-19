@@ -646,7 +646,7 @@ button.is-proxied {
 }
 
 .pads-sidenav:not(.expanded) {
-  width: 40px;
+  width: 32px;
 }
 
 @media (min-width: 1100px) {
@@ -656,8 +656,8 @@ button.is-proxied {
 }
 
 .pads-sidenav-toggle {
-  flex: 0 0 40px;
-  width: 40px;
+  flex: 0 0 32px;
+  width: 32px;
   background: transparent;
   border: none;
   color: var(--text-muted);
@@ -695,8 +695,8 @@ button.is-proxied {
 
 /* Collapsed: box-sizing border-box floors the body's width at its horizontal
    padding (32px), which min-width: 0 cannot pierce. Since the body precedes
-   the toggle in the flex row, that invisible floor pushes the 40px toggle
-   past the 38px clip edge, leaving only a ~6px sliver of it visible. Zeroing
+   the toggle in the flex row, that invisible floor pushes the 32px toggle
+   past the 30px clip edge, leaving only a sliver of it visible. Zeroing
    the horizontal padding while collapsed lets the body truly reach 0 width
    so the toggle tab renders fully (mirroring how VIDEOS, whose toggle comes
    first, never hits this). */
@@ -722,7 +722,7 @@ button.is-proxied {
 .library-sidenav {
   position: relative;
   flex: 0 0 auto;
-  width: 40px;
+  width: 32px;
   display: flex;
   overflow: hidden;
   background: var(--surface);
@@ -736,8 +736,8 @@ button.is-proxied {
 }
 
 .library-sidenav-toggle {
-  flex: 0 0 40px;
-  width: 40px;
+  flex: 0 0 32px;
+  width: 32px;
   background: transparent;
   border: none;
   color: var(--text-muted);
