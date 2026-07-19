@@ -1273,6 +1273,22 @@ function initPadFxControls() {
       toValue: (v) => parseInt(v, 10) / 100,
       toDisplay: (v) => formatPan(v),
     },
+    {
+      id: 'pad-fx-attack',
+      displayId: 'pad-fx-attack-value',
+      key: 'attack',
+      default: 0,
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => `${v}ms`,
+    },
+    {
+      id: 'pad-fx-release',
+      displayId: 'pad-fx-release-value',
+      key: 'release',
+      default: 0,
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => `${v}ms`,
+    },
   ];
 
   // P.SHIFT/STRETCH are checkboxes, not knobs — separate from `controls`
@@ -1282,6 +1298,7 @@ function initPadFxControls() {
   const switches = [
     { id: 'pad-fx-pshift', key: 'pitchShiftOn', default: true },
     { id: 'pad-fx-stretch', key: 'stretchOn', default: false },
+    { id: 'pad-fx-reverse', key: 'reverse', default: false },
   ];
 
   // The Speed knob is only meaningful while STRETCH is on, in addition to
@@ -1399,6 +1416,9 @@ async function triggerPad(position, data) {
       speed: data.speed ?? 100,
       pan: data.pan ?? 0,
       drive: data.drive ?? 0,
+      attack: data.attack ?? 0,
+      release: data.release ?? 0,
+      reverse: data.reverse ?? false,
     });
   } catch (err) {
     showToast(t('toast.playbackFailed', { message: err.message }), 'error');
@@ -1406,14 +1426,27 @@ async function triggerPad(position, data) {
     return;
   }
 
-  videoDisplay.playSegment({
-    videoId: data.videoId,
-    url: videoUrl,
-    start: data.start,
-    end: data.end,
-    muted: true,
-    loadToken,
-  });
+  // Reverse only flips the audio playback direction — the video element has
+  // no reverse-playback API, so playing it forward alongside reversed audio
+  // would just look wrong. Instead, show a frozen frame at the slice start;
+  // real video reverse is out of scope for this pad FX.
+  if (data.reverse) {
+    videoDisplay.showFrame({
+      videoId: data.videoId,
+      url: videoUrl,
+      time: data.start,
+      loadToken,
+    });
+  } else {
+    videoDisplay.playSegment({
+      videoId: data.videoId,
+      url: videoUrl,
+      start: data.start,
+      end: data.end,
+      muted: true,
+      loadToken,
+    });
+  }
 
   return true;
 }

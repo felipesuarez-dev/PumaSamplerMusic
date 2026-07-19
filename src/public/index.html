@@ -219,6 +219,11 @@
                             <span class="mini-switch-track"></span>
                             <span class="mini-switch-label" data-i18n-tooltip="tip.stretchSwitch" data-tooltip="When on, Speed changes tempo without changing pitch.">STRETCH</span>
                           </label>
+                          <label class="mini-switch">
+                            <input type="checkbox" id="pad-fx-reverse" disabled>
+                            <span class="mini-switch-track"></span>
+                            <span class="mini-switch-label" data-i18n-tooltip="tip.reverse" data-tooltip="Plays this PAD's slice backwards on the next trigger. The video shows a frozen frame at the slice start instead of playing.">REV</span>
+                          </label>
                         </div>
                         <div class="master-divider" aria-hidden="true"></div>
                         <div class="master-knob">
@@ -307,6 +312,28 @@
                             <input type="range" id="pad-fx-delay-send" min="0" max="100" step="1" value="0" aria-label="Delay Send" disabled>
                           </div>
                           <span class="master-value" id="pad-fx-delay-send-value">0%</span>
+                        </div>
+                        <div class="master-divider" aria-hidden="true"></div>
+                        <div class="master-knob">
+                          <div class="master-label-row">
+                            <label class="master-label" for="pad-fx-attack">Atk</label>
+                            <span class="help-icon" data-i18n-tooltip="tip.attack" data-tooltip="Fade-in time from silence to this PAD's volume, in milliseconds.">?</span>
+                          </div>
+                          <div class="master-knob-control">
+                            <input type="range" id="pad-fx-attack" min="0" max="2000" step="10" value="0" aria-label="Attack" disabled>
+                          </div>
+                          <span class="master-value" id="pad-fx-attack-value">0ms</span>
+                        </div>
+                        <div class="master-divider" aria-hidden="true"></div>
+                        <div class="master-knob">
+                          <div class="master-label-row">
+                            <label class="master-label" for="pad-fx-release">Rel</label>
+                            <span class="help-icon" data-i18n-tooltip="tip.release" data-tooltip="Fade-out time to silence, in milliseconds. Applies at the slice's natural end and when the PAD is stopped or retriggered.">?</span>
+                          </div>
+                          <div class="master-knob-control">
+                            <input type="range" id="pad-fx-release" min="0" max="2000" step="10" value="0" aria-label="Release" disabled>
+                          </div>
+                          <span class="master-value" id="pad-fx-release-value">0ms</span>
                         </div>
                       </div>
                     </div>

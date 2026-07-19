@@ -5,6 +5,40 @@ export function computeSliceTimes(start, end, bufferDuration) {
   return { startTime, endTime, duration };
 }
 
+// Remaps a slice's [start, end] into the mirrored range that lines up with a
+// time-reversed buffer of the given duration: what used to be `duration -
+// end` seconds from the end is now that many seconds from the start. Inputs
+// are clamped to [0, duration] first, then the mapped result is clamped again
+// and reordered so `start <= end` always holds, even if the caller passed a
+// reversed or degenerate (start === end) range.
+export function reverseSliceTimes(start, end, duration) {
+  const dur = Math.max(0, duration || 0);
+  const clamp = (v) => Math.max(0, Math.min(dur, v || 0));
+  const s = clamp(start);
+  const e = clamp(end);
+  let newStart = clamp(dur - e);
+  let newEnd = clamp(dur - s);
+  if (newStart > newEnd) {
+    [newStart, newEnd] = [newEnd, newStart];
+  }
+  return { start: newStart, end: newEnd };
+}
+
+// Pure clamp logic for the Release envelope on a one-shot's natural end.
+// A one-shot is started with source.start(now, startTime, durationSec) — a
+// hard stop at now + durationSec that nothing else extends — so a release
+// longer than the remaining slice (after Attack has already used part of it)
+// would produce a negative fade-in time. This floors the effective release
+// at 0 and never lets the fade start before the slice begins.
+export function computeReleaseSchedule(durationSec, attackMs, releaseMs) {
+  const duration = Math.max(0, durationSec || 0);
+  const attackSec = Math.max(0, (attackMs || 0) / 1000);
+  const releaseSec = Math.max(0, (releaseMs || 0) / 1000);
+  const releaseEffSec = Math.max(0, Math.min(releaseSec, duration - attackSec));
+  const fadeStartOffset = Math.max(0, duration - releaseEffSec);
+  return { fadeStartOffset, releaseEffSec };
+}
+
 // Converts a semitone offset to the frequency ratio used to drive the
 // pitch-shifter worklet's grain-read speed (2 semitones = a whole tone, 12 =
 // one octave). Tempo/duration are unaffected — this only changes pitch (see
@@ -17,6 +51,7 @@ export function semitonesToRatio(semitones) {
 export function createAudioEngine() {
   let audioContext = null;
   const buffers = new Map(); // videoId -> AudioBuffer
+  const reversedBuffers = new Map(); // videoId -> reversed AudioBuffer (lazy, cached alongside `buffers`)
   const activeSources = new Map(); // position -> { sourceNode, gainNode, videoId, startTime, endTime }
 
   let masterChain = null;
@@ -230,10 +265,35 @@ export function createAudioEngine() {
     return audioBuffer;
   }
 
+  // Reverse playback needs its own AudioBuffer (AudioBufferSourceNode has no
+  // native "play backwards" option) — built lazily on first use per video and
+  // cached so repeatedly triggering a Reverse pad doesn't re-copy/reverse the
+  // whole buffer every time. Cleared alongside the forward buffer in unload().
+  function getReversedBuffer(videoId) {
+    if (reversedBuffers.has(videoId)) return reversedBuffers.get(videoId);
+    const audioBuffer = buffers.get(videoId);
+    if (!audioBuffer || !audioContext) return null;
+
+    const reversed = audioContext.createBuffer(
+      audioBuffer.numberOfChannels,
+      audioBuffer.length,
+      audioBuffer.sampleRate,
+    );
+    for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+      const source = audioBuffer.getChannelData(channel).slice();
+      source.reverse();
+      reversed.getChannelData(channel).set(source);
+    }
+
+    reversedBuffers.set(videoId, reversed);
+    return reversed;
+  }
+
   async function play(position, {
     videoId, start, end, volume = 1, loop = false, triggerMode = 'oneshot',
     pitch = 0, cutoff = 20000, resonance = 0.1, reverbSend = 0, delaySend = 0,
     pitchShiftOn = true, stretchOn = false, speed = 100, pan = 0, drive = 0,
+    attack = 0, release = 0, reverse = false,
   }) {
     const ctx = await init();
     const workletOk = await ensureWorklet(ctx);
@@ -245,7 +305,24 @@ export function createAudioEngine() {
     const audioBuffer = buffers.get(videoId);
     if (!audioBuffer) return false;
 
-    const { startTime, endTime, duration } = computeSliceTimes(start, end, audioBuffer.duration);
+    // Reverse only swaps which buffer/slice we read from — everything
+    // downstream (filter, drive, pan, sends, attack/release envelope) is
+    // unaffected, so it's applied here, before computeSliceTimes, rather than
+    // threaded through the rest of the voice chain.
+    let playbackBuffer = audioBuffer;
+    let sliceStart = start;
+    let sliceEnd = end;
+    if (reverse) {
+      const reversedBuffer = getReversedBuffer(videoId);
+      if (reversedBuffer) {
+        playbackBuffer = reversedBuffer;
+        const remapped = reverseSliceTimes(start, end, audioBuffer.duration);
+        sliceStart = remapped.start;
+        sliceEnd = remapped.end;
+      }
+    }
+
+    const { startTime, endTime, duration } = computeSliceTimes(sliceStart, sliceEnd, playbackBuffer.duration);
 
     // Stop any existing playback on this pad
     stop(position);
@@ -260,7 +337,7 @@ export function createAudioEngine() {
     });
 
     const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
+    source.buffer = playbackBuffer;
     source.loop = loop;
     source.loopStart = startTime;
     source.loopEnd = endTime;
@@ -341,6 +418,35 @@ export function createAudioEngine() {
     delaySendGain.connect(chain.delayNode);
 
     const now = ctx.currentTime;
+    const attackSec = Math.max(0, (attack || 0) / 1000);
+    const releaseSec = Math.max(0, (release || 0) / 1000);
+
+    // Attack: ramp up from silence instead of jumping straight to `volume`.
+    // With attack <= 0 the gain node keeps the `gain.gain.value = volume`
+    // assignment made right after it was created — today's exact behavior.
+    if (attackSec > 0) {
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(volume, now + attackSec);
+    }
+
+    // Release on a one-shot's natural end: the hard stop at now + duration
+    // (from source.start's duration arg, below) would otherwise cut the
+    // sample with a click. computeReleaseSchedule floors the effective
+    // release so it never eats into the Attack ramp or starts before the
+    // slice does (e.g. an 80ms slice with a 2s release). fadeStartOffset is
+    // always <= duration and >= attackSec, so this ramp starts after the
+    // attack ramp has already reached `volume` — no automation conflict.
+    let releaseEffSec = 0;
+    if (!loop) {
+      const schedule = computeReleaseSchedule(duration, attack, release);
+      releaseEffSec = schedule.releaseEffSec;
+      if (releaseEffSec > 0) {
+        const fadeStart = Math.max(now, now + schedule.fadeStartOffset);
+        gain.gain.setValueAtTime(volume, fadeStart);
+        gain.gain.linearRampToValueAtTime(0, fadeStart + releaseEffSec);
+      }
+    }
+
     if (loop) {
       source.start(now, startTime);
     } else {
@@ -351,6 +457,7 @@ export function createAudioEngine() {
       source, gain, pitchShifterNode: pitchNode, filterNode, driveNode, panNode, dryGain, reverbSendGain, delaySendGain,
       videoId, startTime, endTime, position, duration,
       pitch, pitchShiftOn, stretchOn, speed,
+      releaseSec,
     };
     activeSources.set(position, sourceRef);
     emit('audiosourcestart', { position, videoId });
@@ -367,24 +474,63 @@ export function createAudioEngine() {
 
   function stop(position) {
     const active = activeSources.get(position);
-    if (active) {
-      try {
-        active.source.stop();
-      } catch {
-        // Already stopped
-      }
-      [active.source, active.gain, active.pitchShifterNode, active.filterNode, active.driveNode, active.panNode, active.dryGain, active.reverbSendGain, active.delaySendGain]
-        .filter(Boolean)
-        .forEach((node) => {
-          try {
-            node.disconnect();
-          } catch {
-            // already disconnected
-          }
-        });
+    if (!active) return;
+
+    const releaseSec = active.releaseSec || 0;
+
+    if (releaseSec > 0 && audioContext) {
+      // Release turns the hard stop into a fade-out. The voice is removed
+      // from activeSources right away — not after the fade — so a retrigger
+      // of this same pad, a manual stop() called again mid-fade, or the
+      // cross-one-shot cut logic in play() all see the pad as free instead
+      // of trying to stop this (already fading) source a second time. Node
+      // disconnects and the audiosourcestop emit are deferred to
+      // source.onended, once the fade actually completes.
       activeSources.delete(position);
-      emit('audiosourcestop', { position, videoId: active.videoId });
+
+      const now = audioContext.currentTime;
+      const { gain, source } = active;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, now + releaseSec);
+
+      source.onended = () => {
+        [active.source, active.gain, active.pitchShifterNode, active.filterNode, active.driveNode, active.panNode, active.dryGain, active.reverbSendGain, active.delaySendGain]
+          .filter(Boolean)
+          .forEach((node) => {
+            try {
+              node.disconnect();
+            } catch {
+              // already disconnected
+            }
+          });
+        emit('audiosourcestop', { position, videoId: active.videoId });
+      };
+
+      try {
+        source.stop(now + releaseSec);
+      } catch {
+        // Already stopped/scheduled
+      }
+      return;
     }
+
+    try {
+      active.source.stop();
+    } catch {
+      // Already stopped
+    }
+    [active.source, active.gain, active.pitchShifterNode, active.filterNode, active.driveNode, active.panNode, active.dryGain, active.reverbSendGain, active.delaySendGain]
+      .filter(Boolean)
+      .forEach((node) => {
+        try {
+          node.disconnect();
+        } catch {
+          // already disconnected
+        }
+      });
+    activeSources.delete(position);
+    emit('audiosourcestop', { position, videoId: active.videoId });
   }
 
   function stopAll() {
@@ -462,6 +608,7 @@ export function createAudioEngine() {
 
   function unload(videoId) {
     buffers.delete(videoId);
+    reversedBuffers.delete(videoId);
   }
 
   return {

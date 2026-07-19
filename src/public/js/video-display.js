@@ -115,6 +115,37 @@ export function createVideoDisplay(element, options = {}) {
     return true;
   }
 
+  // Shows a single frozen frame at `time` instead of playing a segment — used
+  // for Reverse pads, where the video has no reverse-playback counterpart to
+  // the reversed audio, so a still frame at the slice start is shown instead.
+  async function showFrame({ videoId, url, time, loadToken }) {
+    const token = loadToken ?? setLoading(true);
+    load(videoId, url);
+    clearStopTimer();
+    video.removeEventListener('timeupdate', updateOverlay);
+
+    if (video.readyState < 2) {
+      await new Promise((resolve) => {
+        const onReady = () => {
+          video.removeEventListener('loadeddata', onReady);
+          resolve();
+        };
+        video.addEventListener('loadeddata', onReady);
+        // Mirrors playSegment's kick-start: some browsers (notably mobile
+        // Safari) only buffer beyond metadata once play() is called, even
+        // with no `preload` attribute set. Immediately paused below once the
+        // frame is available, so nothing is audibly/visibly played.
+        video.play().catch(() => {});
+      });
+    }
+
+    video.pause();
+    video.currentTime = time;
+    updateOverlay();
+    setLoading(false, token);
+    return true;
+  }
+
   function seek(time) {
     video.currentTime = time;
     updateOverlay();
@@ -136,6 +167,7 @@ export function createVideoDisplay(element, options = {}) {
     load,
     unload,
     playSegment,
+    showFrame,
     setLoading,
     seek,
     pause,
