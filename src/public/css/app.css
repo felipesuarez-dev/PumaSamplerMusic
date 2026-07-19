@@ -460,6 +460,41 @@ button.is-proxied {
   flex-shrink: 0;
 }
 
+/* Pinned actions mirrored as icon buttons in the collapsed-header grip strip.
+   Hidden by default (and when empty) — revealed alongside .grip-brand once
+   the header collapses. */
+.grip-pinned-actions {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.grip-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.grip-pin-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.grip-pin-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
 /* When the header is collapsed, surface a compact logo + version + mini
    actions in the grip strip; the full brand returns when expanded. */
 .app.header-hidden .header-grip {
@@ -483,6 +518,10 @@ button.is-proxied {
   display: flex;
 }
 
+.app.header-hidden .grip-pinned-actions {
+  display: flex;
+}
+
 .app.header-hidden .grip-brand .chev,
 .grip-toggle .chev {
   flex-shrink: 0;
@@ -491,6 +530,10 @@ button.is-proxied {
 @media (max-width: 480px) {
   .app.header-hidden .grip-brand .version,
   .app.header-hidden .grip-app-name {
+    display: none;
+  }
+
+  .app.header-hidden .grip-pinned-actions {
     display: none;
   }
 }
