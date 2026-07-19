@@ -1340,6 +1340,12 @@ function initPadFxControls() {
     if (!input) continue;
 
     input.addEventListener('change', () => {
+      // Toggling steals focus onto this checkbox, which pads.js'
+      // isInputFocused() treats as "typing" and blocks all pad keydowns —
+      // blur it immediately so pad keys work again without an extra click
+      // elsewhere (mirrors the session.js load() precedent).
+      input.blur();
+
       const { selectedPosition } = store.get();
       if (!selectedPosition) return;
 
@@ -2447,8 +2453,14 @@ function initLocaleSwitcher() {
 
   function paint(locale) {
     const option = menu.querySelector(`[data-locale="${locale}"]`) || menu.querySelector('[data-locale="en"]');
-    flagEl.innerHTML = option.querySelector('.locale-flag').innerHTML;
+    const flagHtml = option.querySelector('.locale-flag').innerHTML;
+    flagEl.innerHTML = flagHtml;
     codeEl.textContent = option.querySelector('span:last-child').textContent;
+    // The collapsed-header grip has its own mini flag-only button (no code
+    // span, room is 22px) — it's a separate DOM node from `btn`, so it needs
+    // its own paint or it stays a visually-empty icon forever.
+    const gripFlagEl = document.getElementById('grip-locale-btn')?.querySelector('[data-flag]');
+    if (gripFlagEl) gripFlagEl.innerHTML = flagHtml;
   }
 
   // trigger defaults to the header button, but the collapsed-header mini flag
@@ -2512,6 +2524,16 @@ const PINNABLE_IDS = [
   'btn-view-logs',
 ];
 
+// Icon + tooltip key per pinnable action, used to render the collapsed-header
+// grip strip buttons. Tooltip keys reuse existing i18n strings (no new keys).
+const PINNED_ACTION_META = {
+  'btn-new-session': { icon: 'add', titleKey: 'header.new' },
+  'btn-manage-sessions': { icon: 'folder_managed', titleKey: 'session.manageTitle' },
+  'btn-export-session': { icon: 'download', titleKey: 'header.exportTitle' },
+  'btn-import-session': { icon: 'upload', titleKey: 'header.importTitle' },
+  'btn-view-logs': { icon: 'receipt_long', titleKey: 'header.logsTitle' },
+};
+
 function getPinnedActions() {
   try {
     const raw = JSON.parse(localStorage.getItem(PINNED_ACTIONS_STORAGE));
@@ -2549,6 +2571,37 @@ function initHeaderMoreMenu() {
       if (targetBtn) targetBtn.classList.toggle('is-proxied', !isPinned);
       const pinEl = menu.querySelector(`.menu-pin[data-pin="${id}"]`);
       if (pinEl) pinEl.setAttribute('aria-pressed', String(isPinned));
+    }
+    renderGripPinnedActions(pinned);
+  }
+
+  // Mirrors pinned actions as small icon buttons in the collapsed-header grip
+  // strip, so they stay reachable without expanding the header. Rebuilt from
+  // scratch on every change — the list is short and this keeps ordering (and
+  // pin/unpin) trivial instead of diffing DOM nodes.
+  function renderGripPinnedActions(pinned) {
+    const container = document.getElementById('grip-pinned-actions');
+    if (!container) return;
+    container.innerHTML = '';
+    for (const id of PINNABLE_IDS) {
+      if (!pinned.includes(id)) continue;
+      const meta = PINNED_ACTION_META[id];
+      if (!meta) continue;
+      const gripBtn = document.createElement('button');
+      gripBtn.type = 'button';
+      gripBtn.className = 'grip-pin-btn';
+      gripBtn.dataset.proxy = id;
+      gripBtn.dataset.i18nTitle = meta.titleKey;
+      gripBtn.title = t(meta.titleKey);
+      const icon = document.createElement('span');
+      icon.className = 'material-symbols-outlined';
+      icon.textContent = meta.icon;
+      gripBtn.appendChild(icon);
+      gripBtn.addEventListener('click', () => {
+        const target = document.getElementById(id);
+        if (target) target.click();
+      });
+      container.appendChild(gripBtn);
     }
   }
 

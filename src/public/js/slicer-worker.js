@@ -7,11 +7,12 @@
 import { detectOnsets } from './slicer-core.js';
 
 self.onmessage = (event) => {
-  const { channelData, sampleRate, sensitivity, gen } = event.data;
+  const { channelData, sampleRate, sensitivity, method = 'specflux', gen } = event.data;
 
   try {
     const slices = detectOnsets(channelData, sampleRate, {
       sensitivity,
+      method,
       onProgress: (value) => {
         self.postMessage({ type: 'progress', value, gen });
       },

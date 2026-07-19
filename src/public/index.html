@@ -112,6 +112,7 @@
       <button type="button" class="grip-toggle" id="header-toggle" aria-controls="header-collapse-inner" aria-expanded="true">
         <span class="grip-brand">
           <img src="/logo.png" alt="" class="grip-logo">
+          <span class="grip-app-name">PumaSamplerMusic</span>
           <span class="version">v1.0</span>
         </span>
         <span class="chev">▾</span>
@@ -126,6 +127,7 @@
         <span id="grip-autosave-status" class="autosave-status grip-autosave" hidden aria-live="polite">
           <span class="material-symbols-outlined">cloud_done</span>
         </span>
+        <span class="grip-pinned-actions" id="grip-pinned-actions"></span>
         <div class="grip-session-wrap" id="grip-session-wrap">
           <button type="button" class="grip-btn grip-session" id="grip-session-btn" data-i18n-title="header.loadSessionOption" title="Load session...">
             <span class="material-symbols-outlined">folder_open</span>
@@ -352,6 +354,7 @@
                 <button id="btn-organize-mode" type="button" class="btn btn-secondary btn-organize"
                         aria-pressed="false" data-i18n="organize.toggleButton"
                         data-i18n-title="organize.toggleTitle" title="Organize mode">Organize</button>
+                <span class="help-icon" data-i18n-tooltip="tip.organizeHelp" data-tooltip="Organize mode: drag pads to swap or move them. Right-click (or long-press) a pad to open a menu to copy or clear it.">?</span>
               </div>
             </div>
             <div class="pad-grid" id="pad-grid">
@@ -445,11 +448,45 @@
               <canvas id="slicer-waveform-canvas"></canvas>
             </div>
 
-            <div class="slicer-controls-row">
+            <div class="slicer-mode-toggle" role="group" aria-label="Slicing mode">
+              <button type="button" class="slicer-mode-btn active" id="slicer-mode-onsets" aria-pressed="true" data-i18n="slicer.modeOnsets">Onsets</button>
+              <button type="button" class="slicer-mode-btn" id="slicer-mode-grid" aria-pressed="false" data-i18n="slicer.modeGrid">Grid</button>
+            </div>
+
+            <div class="slicer-controls-row" id="slicer-onset-controls">
               <label for="slicer-sensitivity" data-i18n="slicer.sensitivity">Sensitivity</label>
               <input type="range" id="slicer-sensitivity" min="0" max="1" step="0.01" value="0.5">
               <span class="slicer-sensitivity-value" id="slicer-sensitivity-value">0.50</span>
               <span class="help-icon" data-i18n-tooltip="tip.slicerSensitivity" data-tooltip="How easily a change is detected as a new slice boundary. Lower finds fewer, larger slices; higher finds more, shorter ones.">?</span>
+              <label for="slicer-method" data-i18n="slicer.method">Method</label>
+              <select id="slicer-method" class="slicer-method-select">
+                <option value="specflux" selected data-i18n="slicer.methodSpectralFlux">Spectral Flux</option>
+                <option value="hfc" data-i18n="slicer.methodHfc">High Frequency</option>
+                <option value="energy" data-i18n="slicer.methodEnergy">Energy</option>
+              </select>
+              <span class="help-icon" data-i18n-tooltip="tip.slicerMethod" data-tooltip="How transients are detected. Spectral Flux works well overall; High Frequency favors bright hits like cymbals and hi-hats; Energy favors loud, percussive hits.">?</span>
+            </div>
+
+            <div class="slicer-controls-row slicer-grid-controls" id="slicer-grid-controls" hidden>
+              <label for="slicer-grid-beats" data-i18n="slicer.beats">Beats</label>
+              <input type="number" id="slicer-grid-beats" min="1" max="256" step="1" value="16">
+              <label for="slicer-grid-divisions" data-i18n="slicer.divisions">Divisions</label>
+              <select id="slicer-grid-divisions" class="slicer-method-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+                <option value="32">32</option>
+              </select>
+              <span class="slicer-bpm-value" id="slicer-grid-bpm">— BPM</span>
+              <span class="help-icon" data-i18n-tooltip="tip.slicerGrid" data-tooltip="Slices the audio into equal parts from a beat count and divisions per beat, instead of detecting onsets. Also shows the implied BPM for that beat count over the track length.">?</span>
+            </div>
+
+            <div class="slicer-controls-row">
               <button type="button" class="btn" id="slicer-generate-btn" data-i18n="slicer.generate">Generate Slices</button>
               <span class="help-icon" data-i18n-tooltip="tip.slicerGenerate" data-tooltip="Runs onset detection on the full track in the background and marks a slice boundary at each detected onset.">?</span>
             </div>

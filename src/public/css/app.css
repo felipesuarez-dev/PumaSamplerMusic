@@ -394,6 +394,20 @@ button.is-proxied {
   object-fit: contain;
 }
 
+/* Mirrors .header h1's weight/letter-spacing feel, sized down for the 28px
+   strip. Single line with an ellipsis safety net rather than wrapping or
+   pushing the mini action buttons out of view. */
+.grip-app-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 /* Mini action buttons — only while the header is hidden. */
 .grip-actions {
   display: none;
@@ -446,6 +460,41 @@ button.is-proxied {
   flex-shrink: 0;
 }
 
+/* Pinned actions mirrored as icon buttons in the collapsed-header grip strip.
+   Hidden by default (and when empty) — revealed alongside .grip-brand once
+   the header collapses. */
+.grip-pinned-actions {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.grip-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.grip-pin-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.grip-pin-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
 /* When the header is collapsed, surface a compact logo + version + mini
    actions in the grip strip; the full brand returns when expanded. */
 .app.header-hidden .header-grip {
@@ -469,13 +518,22 @@ button.is-proxied {
   display: flex;
 }
 
+.app.header-hidden .grip-pinned-actions {
+  display: flex;
+}
+
 .app.header-hidden .grip-brand .chev,
 .grip-toggle .chev {
   flex-shrink: 0;
 }
 
 @media (max-width: 480px) {
-  .app.header-hidden .grip-brand .version {
+  .app.header-hidden .grip-brand .version,
+  .app.header-hidden .grip-app-name {
+    display: none;
+  }
+
+  .app.header-hidden .grip-pinned-actions {
     display: none;
   }
 }
@@ -3164,6 +3222,43 @@ button.is-proxied {
   cursor: crosshair;
 }
 
+/* Onsets/Grid segmented toggle -- same active-state language as .pad-tab. */
+.slicer-mode-toggle {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.slicer-mode-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.slicer-mode-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.slicer-mode-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.slicer-mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .slicer-controls-row {
   display: flex;
   align-items: center;
@@ -3189,6 +3284,50 @@ button.is-proxied {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+/* Method select (onset row) and divisions select (grid row) -- fixed width
+   instead of .session-modal-select's flex:1 so they sit inline with the
+   short labels/inputs around them instead of stretching to fill the row. */
+.slicer-method-select {
+  flex: 0 0 auto;
+  min-width: 140px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.slicer-method-select:focus {
+  border-color: var(--accent);
+}
+
+.slicer-grid-controls input[type='number'] {
+  flex: 0 0 auto;
+  width: 72px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.slicer-grid-controls input[type='number']:focus {
+  border-color: var(--accent);
+}
+
+.slicer-bpm-value {
+  min-width: 80px;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Blocking overlay during analysis — same visual language as

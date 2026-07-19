@@ -6,12 +6,15 @@ import {
   hann,
   fft,
   spectralFlux,
+  frameEnergy,
+  highFrequencyContent,
   adaptiveThreshold,
   pickPeaks,
   enforceMinIOI,
   snapToZeroCrossing,
   buildSlices,
   detectOnsets,
+  MIN_SLICE_SECONDS,
 } from './slicer-core.js';
 
 // Deterministic PRNG (mulberry32) so noise-burst test signals are
@@ -123,6 +126,32 @@ test('spectralFlux: falling energy is half-wave rectified away (ignored)', () =>
   assert.equal(spectralFlux(drop, prev), 0);
 });
 
+test('MIN_SLICE_SECONDS: exported and holds the documented default', () => {
+  assert.equal(MIN_SLICE_SECONDS, 0.08);
+});
+
+test('frameEnergy: sum of squared samples over a windowed real frame', () => {
+  const frame = new Float32Array([1, -2, 3, 0.5]);
+  // 1^2 + (-2)^2 + 3^2 + 0.5^2 = 1 + 4 + 9 + 0.25 = 14.25
+  assert.equal(frameEnergy(frame), 14.25);
+});
+
+test('frameEnergy: all-zero frame has zero energy', () => {
+  assert.equal(frameEnergy(new Float32Array(8)), 0);
+});
+
+test('highFrequencyContent: sum of (bin+1)*|X[bin]|^2 over the half-spectrum', () => {
+  const magnitude = new Float32Array([1, 2, 3]);
+  // (0+1)*1^2 + (1+1)*2^2 + (2+1)*3^2 = 1 + 8 + 27 = 36
+  assert.equal(highFrequencyContent(magnitude), 36);
+});
+
+test('highFrequencyContent: weights higher bins more than an equal-magnitude low bin', () => {
+  const lowBinOnly = new Float32Array([5, 0, 0]);
+  const highBinOnly = new Float32Array([0, 0, 5]);
+  assert.ok(highFrequencyContent(highBinOnly) > highFrequencyContent(lowBinOnly));
+});
+
 // A gently wobbling noise floor (so local mean absolute deviation is never
 // exactly zero) with one sharp spike at index 10, far enough from the edges
 // that its local window (+-5) never overlaps index 0 or 3.
@@ -187,6 +216,22 @@ test('snapToZeroCrossing: closest crossing wins over a farther one', () => {
   // Use start at 4 so left crossing (index 1, distance 3) is farther than right crossing (index 5, distance 1).
   const snapped = snapToZeroCrossing(data, 4, 10);
   assert.equal(snapped, 5);
+});
+
+test('snapToZeroCrossing: best-of-two picks whichever straddling sample is closer to zero', () => {
+  // Sign-flip pair at index 2/3: data[2]=-0.9 (far from zero), data[3]=0.1
+  // (close to zero) -- the refinement must pick index 3, not the earlier
+  // index 2 that the pre-refinement behavior always returned.
+  const data = new Float32Array([-0.9, -0.9, -0.9, 0.1, 1, 1]);
+  const snapped = snapToZeroCrossing(data, 0, 10);
+  assert.equal(snapped, 3);
+});
+
+test('snapToZeroCrossing: best-of-two picks the left sample when it is closer to zero', () => {
+  // Mirror of the above: data[2]=-0.1 (close to zero), data[3]=0.9 (far).
+  const data = new Float32Array([-0.9, -0.9, -0.1, 0.9, 1, 1]);
+  const snapped = snapToZeroCrossing(data, 0, 10);
+  assert.equal(snapped, 2);
 });
 
 test('snapToZeroCrossing: bounded radius returns the original index when no crossing exists nearby', () => {
@@ -379,6 +424,108 @@ test('detectOnsets: a tone starting at sample 0 does not register a spurious ons
     slices[0].end > 0.05,
     `expected the first slice to extend past 50ms with no spurious onset near t=0, got end=${slices[0].end}`
   );
+});
+
+test('detectOnsets: default method output is identical to an explicit "specflux" call', () => {
+  const sampleRate = 48000;
+  const onsetSeconds = [0.5, 1.5];
+  const defaultData = buildClickSignal({
+    sampleRate,
+    totalSeconds: 2,
+    onsetSeconds,
+    decaySeconds: 0.02,
+    amplitude: 0.8,
+  });
+  const explicitData = new Float32Array(defaultData); // detectOnsets mutates in place
+
+  const defaultSlices = detectOnsets(defaultData, sampleRate, { sensitivity: 0.5 });
+  const explicitSlices = detectOnsets(explicitData, sampleRate, { sensitivity: 0.5, method: 'specflux' });
+
+  assert.deepEqual(defaultSlices, explicitSlices);
+});
+
+test('detectOnsets: unknown method falls back to "specflux"', () => {
+  const sampleRate = 48000;
+  const onsetSeconds = [0.5, 1.5];
+  const specfluxData = buildClickSignal({
+    sampleRate,
+    totalSeconds: 2,
+    onsetSeconds,
+    decaySeconds: 0.02,
+    amplitude: 0.8,
+  });
+  const unknownData = new Float32Array(specfluxData);
+
+  const specfluxSlices = detectOnsets(specfluxData, sampleRate, { sensitivity: 0.5, method: 'specflux' });
+  const unknownSlices = detectOnsets(unknownData, sampleRate, { sensitivity: 0.5, method: 'not-a-method' });
+
+  assert.deepEqual(specfluxSlices, unknownSlices);
+});
+
+// Same decaying-envelope shape as buildClickSignal (see the comment above
+// it): a sustained flat-amplitude burst pollutes the adaptive threshold's
+// own local window, so onset test signals use a fast exponential decay
+// instead, matching a real percussive transient.
+function buildDecayingToneSignal({ sampleRate, totalSeconds, onsetSeconds, decaySeconds, amplitude, freq }) {
+  const totalSamples = Math.round(sampleRate * totalSeconds);
+  const data = new Float32Array(totalSamples);
+  const decaySamples = Math.round(sampleRate * decaySeconds * 8);
+
+  for (const onsetSec of onsetSeconds) {
+    const startSample = Math.round(sampleRate * onsetSec);
+    for (let i = 0; i < decaySamples && startSample + i < totalSamples; i++) {
+      const envelope = Math.exp(-i / sampleRate / decaySeconds);
+      data[startSample + i] += Math.sin((2 * Math.PI * freq * i) / sampleRate) * amplitude * envelope;
+    }
+  }
+
+  return data;
+}
+
+test('detectOnsets: method "energy" detects a loud burst in otherwise silent audio', () => {
+  const sampleRate = 48000;
+  const data = buildClickSignal({
+    sampleRate,
+    totalSeconds: 2,
+    onsetSeconds: [1.0],
+    decaySeconds: 0.02,
+    amplitude: 0.9,
+  });
+
+  const slices = detectOnsets(data, sampleRate, { sensitivity: 0.5, method: 'energy' });
+  const detectedStarts = slices.slice(1).map((s) => s.start);
+
+  assert.ok(detectedStarts.length > 0, 'expected at least one detected onset for the loud burst');
+  const closest = detectedStarts.reduce(
+    (best, s) => (Math.abs(s - 1.0) < Math.abs(best - 1.0) ? s : best),
+    Infinity
+  );
+  assert.ok(Math.abs(closest - 1.0) <= 0.05, `expected an onset near 1.0s, closest was ${closest}s`);
+});
+
+test('detectOnsets: method "hfc" detects a high-frequency burst', () => {
+  const sampleRate = 48000;
+  // A high-frequency (near Nyquist-ish) decaying tone burst -- HFC weights
+  // high bins heavily so this should register even though a low-frequency
+  // burst of the same shape/amplitude might not.
+  const data = buildDecayingToneSignal({
+    sampleRate,
+    totalSeconds: 2,
+    onsetSeconds: [1.0],
+    decaySeconds: 0.02,
+    amplitude: 0.9,
+    freq: 12000,
+  });
+
+  const slices = detectOnsets(data, sampleRate, { sensitivity: 0.5, method: 'hfc' });
+  const detectedStarts = slices.slice(1).map((s) => s.start);
+
+  assert.ok(detectedStarts.length > 0, 'expected at least one detected onset for the high-frequency burst');
+  const closest = detectedStarts.reduce(
+    (best, s) => (Math.abs(s - 1.0) < Math.abs(best - 1.0) ? s : best),
+    Infinity
+  );
+  assert.ok(Math.abs(closest - 1.0) <= 0.05, `expected an onset near 1.0s, closest was ${closest}s`);
 });
 
 test('detectOnsets: progress reaches 1 even for a single-frame (tiny) buffer', () => {
