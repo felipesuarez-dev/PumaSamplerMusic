@@ -1,8 +1,12 @@
 import { formatTime } from './state.js';
 import { t } from './i18n.js';
 import { buildPeakCache as buildPeakCacheFromSamples } from './waveform-peaks.js';
+import { MIN_SLICE_SECONDS } from './slicer-core.js';
 
 const PEAK_BUCKET_COUNT = 8192;
+// Deferral window between a single click's audition and it being cancelled
+// by a following dblclick (see onClick/onDblClick).
+const CLICK_DEFER_MS = 250;
 
 export function createWaveform(canvas, options = {}) {
   const ctx = canvas.getContext('2d');
@@ -42,6 +46,15 @@ export function createWaveform(canvas, options = {}) {
   // by views that only need waveform + markers, no start/end selection.
   const selectionEnabled = options.selectionEnabled !== false;
 
+  // Opt-in marker drag/add/delete interactivity, off by default so every
+  // existing consumer (the pad editor's Trim tab) is completely unaffected.
+  // The auto-slicer is the only caller that turns this on.
+  const markersEditable = options.markersEditable === true;
+  const markerMinGapSeconds = options.markerMinGapSeconds != null ? options.markerMinGapSeconds : MIN_SLICE_SECONDS;
+  let markerDragIndex = null;
+  let markerDidMove = false;
+  let clickTimer = null;
+
   let zoomLevel = 1;
   let zoomCenter = 0;
   let panPrevX = 0;
@@ -51,6 +64,10 @@ export function createWaveform(canvas, options = {}) {
   const onChange = options.onChange || (() => {});
   const onSeek = options.onSeek || (() => {});
   const onZoom = options.onZoom || (() => {});
+  const onMarkerChange = options.onMarkerChange || (() => {});
+  const onMarkerAdd = options.onMarkerAdd || (() => {});
+  const onMarkerDelete = options.onMarkerDelete || (() => {});
+  const onWaveformClick = options.onWaveformClick || null;
 
   function getAccentColor() {
     try {
@@ -633,15 +650,48 @@ export function createWaveform(canvas, options = {}) {
     rulerCtx.stroke();
   }
 
+  // Nearest interior marker (skips the fixed 0/duration ends, which aren't
+  // draggable/deletable) within an ~8px CSS-pixel hit radius, DPR-aware like
+  // the other hit-test radii in this file. Nearest-wins so dense marker
+  // grids resolve deterministically. Returns null when markers aren't
+  // editable or none qualify.
+  function findMarkerHit(x) {
+    if (!markersEditable) return null;
+    const dpr = window.devicePixelRatio || 1;
+    const hitRadius = 8 * dpr;
+    let bestIndex = null;
+    let bestDist = Infinity;
+    for (let i = 1; i < markers.length - 1; i++) {
+      const dist = Math.abs(x - timeToX(markers[i]));
+      if (dist < hitRadius && dist < bestDist) {
+        bestDist = dist;
+        bestIndex = i;
+      }
+    }
+    return bestIndex === null ? null : { index: bestIndex, dist: bestDist };
+  }
+
   function getDragTarget(x) {
+    markerDragIndex = null;
     const playheadX = timeToX(playhead);
     const playheadRadius = 10 * (window.devicePixelRatio || 1);
     const playheadDist = Math.abs(x - playheadX);
+    const playheadHit = playheadDist < playheadRadius;
+
+    // Markers win over the playhead only when strictly closer — this must
+    // run before the `!selectionEnabled` early return below (the slicer,
+    // the only markersEditable consumer, always sets selectionEnabled:
+    // false) and before pan-candidate promotion in onMouseDown.
+    const markerHit = findMarkerHit(x);
+    if (markerHit && (!playheadHit || markerHit.dist < playheadDist)) {
+      markerDragIndex = markerHit.index;
+      return 'marker';
+    }
 
     if (!selectionEnabled) {
       // No start/end selection to hit-test — only the playhead handle is
       // draggable; everything else (pan, seek) is handled by the caller.
-      return playheadDist < playheadRadius ? 'playhead' : null;
+      return playheadHit ? 'playhead' : null;
     }
 
     const startX = timeToX(start);
@@ -671,7 +721,7 @@ export function createWaveform(canvas, options = {}) {
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (window.devicePixelRatio || 1);
     const target = getDragTarget(x);
-    if (target === 'start' || target === 'end' || target === 'playhead') {
+    if (target === 'start' || target === 'end' || target === 'playhead' || target === 'marker') {
       canvas.style.cursor = 'ew-resize';
     } else if (target === 'segment') {
       canvas.style.cursor = 'grab';
@@ -690,6 +740,9 @@ export function createWaveform(canvas, options = {}) {
     canvas.removeEventListener('wheel', onWheel);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('click', onClick);
+    canvas.removeEventListener('dblclick', onDblClick);
+    canvas.removeEventListener('contextmenu', onContextMenu);
+    clearTimeout(clickTimer);
   }
 
   function onMouseMove(e) {
@@ -731,11 +784,25 @@ export function createWaveform(canvas, options = {}) {
     } else if (dragTarget === 'playhead') {
       playhead = time;
       onSeek(time);
+    } else if (dragTarget === 'marker') {
+      const idx = markerDragIndex;
+      if (idx !== null) {
+        const left = markers[idx - 1];
+        const right = markers[idx + 1];
+        // Mirror moveBoundary's no-op guard: if the neighbors are already
+        // closer together than 2*minGap, the clamp range would be inverted
+        // -- leave the marker where it is instead of teleporting it past a
+        // neighbor.
+        if (right - left >= 2 * markerMinGapSeconds) {
+          markers[idx] = Math.min(right - markerMinGapSeconds, Math.max(left + markerMinGapSeconds, time));
+        }
+        markerDidMove = true;
+      }
     }
 
     wasDragging = true;
     draw();
-    if (dragTarget !== 'playhead') {
+    if (dragTarget !== 'playhead' && dragTarget !== 'marker') {
       onChange({ start, end });
     }
   }
@@ -744,8 +811,16 @@ export function createWaveform(canvas, options = {}) {
     if (isDragging && dragTarget !== 'pan-candidate') {
       wasDragging = true;
     }
+    // Commit once, only if the marker actually moved during this drag (a
+    // plain click-without-movement on a marker must not re-trigger the
+    // snap/clamp/re-render pipeline in the caller).
+    if (isDragging && dragTarget === 'marker' && markerDragIndex !== null && markerDidMove) {
+      onMarkerChange(markerDragIndex, markers[markerDragIndex]);
+    }
     isDragging = false;
     dragTarget = null;
+    markerDragIndex = null;
+    markerDidMove = false;
     panPrevX = 0;
     panStartX = 0;
   }
@@ -790,13 +865,49 @@ export function createWaveform(canvas, options = {}) {
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (window.devicePixelRatio || 1);
     const time = xToTime(x);
+
+    if (markersEditable && onWaveformClick) {
+      // The second click of a dblclick sequence has e.detail === 2 --
+      // ignore it so onDblClick below is the sole owner of that gesture.
+      if (e.detail > 1) return;
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => onWaveformClick(time), CLICK_DEFER_MS);
+      return;
+    }
+
+    // Not markersEditable (e.g. the pad editor's Trim tab): identical to
+    // the original, non-deferred click-to-seek behavior.
     onSeek(time);
+  }
+
+  function onDblClick(e) {
+    if (!markersEditable) return;
+    e.preventDefault();
+    clearTimeout(clickTimer);
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (window.devicePixelRatio || 1);
+    onMarkerAdd(xToTime(x));
+  }
+
+  function onContextMenu(e) {
+    if (!markersEditable) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (window.devicePixelRatio || 1);
+    const hit = findMarkerHit(x);
+    if (!hit) return;
+    // Only preventDefault (suppress the native menu) when an interior
+    // marker was actually hit -- elsewhere, and always when not editable,
+    // the native context menu stays untouched.
+    e.preventDefault();
+    onMarkerDelete(hit.index);
   }
 
   canvas.addEventListener('mousemove', updateCursor);
   canvas.addEventListener('wheel', onWheel);
   canvas.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('click', onClick);
+  canvas.addEventListener('dblclick', onDblClick);
+  canvas.addEventListener('contextmenu', onContextMenu);
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', onMouseUp);
   window.addEventListener('resize', resize);

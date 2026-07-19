@@ -10,9 +10,8 @@
 
 import { MIN_SLICE_SECONDS } from './slicer-core.js';
 
-// Converts a sorted boundaries array into contiguous slices. Mirrors
-// slicer.js's private slicesToMarkerTimes in reverse (see slicesToBoundaries
-// below for the inverse).
+// Converts a sorted boundaries array into contiguous slices. Inverse of
+// slicesToBoundaries below.
 export function boundariesToSlices(boundaries) {
   const slices = [];
   for (let i = 1; i < boundaries.length; i++) {
