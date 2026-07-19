@@ -1,9 +1,8 @@
 import { formatTime } from './state.js';
 import { t } from './i18n.js';
-import { buildPeakCache as buildPeakCacheFromSamples } from './waveform-peaks.js';
+import { buildPeakCache as buildPeakCacheFromSamples, selectLevel as selectPeakLevel } from './waveform-peaks.js';
 import { MIN_SLICE_SECONDS } from './slicer-core.js';
 
-const PEAK_BUCKET_COUNT = 8192;
 // Deferral window between a single click's audition and it being cancelled
 // by a following dblclick (see onClick/onDblClick).
 const CLICK_DEFER_MS = 250;
@@ -24,16 +23,20 @@ export function createWaveform(canvas, options = {}) {
   let isLoading = false;
   let emptyMessage = t('waveform.selectVideo');
 
-  // Per-instance cache of precomputed min/max peaks for the currently loaded
-  // audio buffer. Avoids rescanning the raw Float32Array on every draw() call
-  // (e.g. on every mousemove while dragging a handle). Scoped to this closure
-  // so multiple concurrent waveform instances (e.g. pad editor + slicer) each
-  // own their cache instead of clobbering a shared one.
+  // Per-instance multi-level cache of precomputed min/max peaks for the
+  // currently loaded audio buffer: { levels: [{bucketSize, mins, maxs}] },
+  // coarsest level first. Avoids rescanning the raw Float32Array on every
+  // draw() call (e.g. on every mousemove while dragging a handle), and
+  // avoids the coarsest-only cache dragging draw work down to a fixed
+  // resolution regardless of zoom. Scoped to this closure so multiple
+  // concurrent waveform instances (e.g. pad editor + slicer) each own their
+  // cache instead of clobbering a shared one. Built once per buffer, no
+  // invalidation (memory stays bounded regardless of source duration).
   let peakCache = null;
 
   function buildPeakCache(buffer) {
     const data = buffer.getChannelData(0);
-    peakCache = buildPeakCacheFromSamples(data, PEAK_BUCKET_COUNT);
+    peakCache = buildPeakCacheFromSamples(data);
   }
 
   // Slice markers (times in seconds) drawn on top of the waveform, e.g. for
@@ -361,8 +364,11 @@ export function createWaveform(canvas, options = {}) {
 
     const { visibleStart } = getVisibleRange();
     const sampleOffset = Math.floor((visibleStart / duration) * data.length);
-    const useCache = peakCache && step >= peakCache.bucketSize;
-    const numBuckets = useCache ? peakCache.mins.length : 0;
+    // Coarsest level that still resolves at/finer than `step` (samples per
+    // pixel) maximizes work saved without under-resolving the draw.
+    const level = selectPeakLevel(peakCache, step);
+    const useCache = !!level;
+    const numBuckets = useCache ? level.mins.length : 0;
 
     for (let x = xMin; x < xMax; x += 1) {
       let min = 1;
@@ -370,13 +376,13 @@ export function createWaveform(canvas, options = {}) {
       const offset = sampleOffset + Math.floor(x * step);
 
       if (useCache) {
-        let bucketStart = Math.floor(offset / peakCache.bucketSize);
-        let bucketEnd = Math.ceil((offset + step) / peakCache.bucketSize);
+        let bucketStart = Math.floor(offset / level.bucketSize);
+        let bucketEnd = Math.ceil((offset + step) / level.bucketSize);
         bucketStart = Math.max(0, Math.min(bucketStart, numBuckets - 1));
         bucketEnd = Math.max(bucketStart + 1, Math.min(bucketEnd, numBuckets));
         for (let b = bucketStart; b < bucketEnd; b++) {
-          if (peakCache.mins[b] < min) min = peakCache.mins[b];
-          if (peakCache.maxs[b] > max) max = peakCache.maxs[b];
+          if (level.mins[b] < min) min = level.mins[b];
+          if (level.maxs[b] > max) max = level.maxs[b];
         }
       } else {
         for (let i = 0; i < step && offset + i < data.length; i++) {

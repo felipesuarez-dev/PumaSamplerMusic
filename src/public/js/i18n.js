@@ -74,6 +74,7 @@ export const dictionaries = {
     'tip.delayTime': 'Delay Time (D.Time): time in milliseconds between each echo repeat, from 50ms to 1000ms.',
     'tip.delayFeedback': 'Delay Feedback (D.FB): from 0% to 90%, sets how much of each echo feeds back into the next one. Higher means more repeats before the echo fades out.',
     'tip.gridSize': 'Choose how many PADs the grid has (9, 12, 18 or 27, always 3 per row). Increasing adds empty PADs; decreasing removes the extra PADs that no longer fit, discarding their settings.',
+    'tip.organizeHelp': 'Organize mode: drag pads to swap or move them. Right-click (or long-press) a pad to open a menu to copy or clear it.',
     'tip.stopKeyCapture': 'Click, then press a key to set it as the global stop shortcut.',
     'tip.addVideo': 'Only YouTube links are supported. Downloads happen in the background.',
     'tip.triggerMode': 'One-shot plays the full slice once per press. Gate plays only while the key is held down, and stops (applying Release, if set) as soon as it\'s released.',
@@ -120,7 +121,7 @@ export const dictionaries = {
     'video.emptySearch': 'No videos match your search.',
 
     'slicer.title': 'Auto-Slicer',
-    'slicer.openTitle': 'Slice this video',
+    'slicer.openTitle': 'Automatically create slices from this video, select them and assign them to different pads',
     'slicer.closeButtonTitle': 'Close Auto-Slicer',
     'slicer.sensitivity': 'Sensitivity',
     'slicer.generate': 'Generate Slices',
@@ -399,6 +400,7 @@ export const dictionaries = {
     'tip.delayTime': 'Delay Time (D.Time): tiempo en milisegundos entre cada repetición del eco, de 50ms a 1000ms.',
     'tip.delayFeedback': 'Delay Feedback (D.FB): de 0% a 90%, define cuánta señal de cada eco vuelve a alimentar el siguiente. Un valor más alto significa más repeticiones antes de que el eco se desvanezca.',
     'tip.gridSize': 'Elige cuántos PADs tiene la grilla (9, 12, 18 o 27, siempre 3 por fila). Aumentar agrega PADs vacíos; reducir descarta los PADs que ya no entran y pierde su configuración.',
+    'tip.organizeHelp': 'Modo organizar: arrastra los pads para intercambiarlos o moverlos. Clic derecho (o pulsación larga) sobre un pad abre un menú para copiarlo o limpiarlo.',
     'tip.stopKeyCapture': 'Haz clic y luego presiona una tecla para asignarla como atajo global de stop.',
     'tip.addVideo': 'Solo se admiten links de YouTube. La descarga se hace en segundo plano.',
     'tip.triggerMode': 'One-shot reproduce la muestra completa una vez por cada toque. Gate reproduce solo mientras se mantiene apretada la tecla, y se detiene (aplicando Release, si está configurado) apenas se suelta.',
@@ -445,7 +447,7 @@ export const dictionaries = {
     'video.emptySearch': 'Ningún video coincide con la búsqueda.',
 
     'slicer.title': 'Auto-Slicer',
-    'slicer.openTitle': 'Cortar este video',
+    'slicer.openTitle': 'Crear slices automáticamente de este video, seleccionar y asignar a diferentes pads',
     'slicer.closeButtonTitle': 'Cerrar el Auto-Slicer',
     'slicer.sensitivity': 'Sensibilidad',
     'slicer.generate': 'Generar cortes',

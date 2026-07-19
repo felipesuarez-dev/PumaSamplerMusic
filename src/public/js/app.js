@@ -1340,6 +1340,12 @@ function initPadFxControls() {
     if (!input) continue;
 
     input.addEventListener('change', () => {
+      // Toggling steals focus onto this checkbox, which pads.js'
+      // isInputFocused() treats as "typing" and blocks all pad keydowns —
+      // blur it immediately so pad keys work again without an extra click
+      // elsewhere (mirrors the session.js load() precedent).
+      input.blur();
+
       const { selectedPosition } = store.get();
       if (!selectedPosition) return;
 
@@ -2447,8 +2453,14 @@ function initLocaleSwitcher() {
 
   function paint(locale) {
     const option = menu.querySelector(`[data-locale="${locale}"]`) || menu.querySelector('[data-locale="en"]');
-    flagEl.innerHTML = option.querySelector('.locale-flag').innerHTML;
+    const flagHtml = option.querySelector('.locale-flag').innerHTML;
+    flagEl.innerHTML = flagHtml;
     codeEl.textContent = option.querySelector('span:last-child').textContent;
+    // The collapsed-header grip has its own mini flag-only button (no code
+    // span, room is 22px) — it's a separate DOM node from `btn`, so it needs
+    // its own paint or it stays a visually-empty icon forever.
+    const gripFlagEl = document.getElementById('grip-locale-btn')?.querySelector('[data-flag]');
+    if (gripFlagEl) gripFlagEl.innerHTML = flagHtml;
   }
 
   // trigger defaults to the header button, but the collapsed-header mini flag

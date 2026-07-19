@@ -394,6 +394,20 @@ button.is-proxied {
   object-fit: contain;
 }
 
+/* Mirrors .header h1's weight/letter-spacing feel, sized down for the 28px
+   strip. Single line with an ellipsis safety net rather than wrapping or
+   pushing the mini action buttons out of view. */
+.grip-app-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 /* Mini action buttons — only while the header is hidden. */
 .grip-actions {
   display: none;
@@ -475,7 +489,8 @@ button.is-proxied {
 }
 
 @media (max-width: 480px) {
-  .app.header-hidden .grip-brand .version {
+  .app.header-hidden .grip-brand .version,
+  .app.header-hidden .grip-app-name {
     display: none;
   }
 }
