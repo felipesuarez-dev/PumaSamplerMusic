@@ -4,16 +4,6 @@ import { buildPeakCache as buildPeakCacheFromSamples } from './waveform-peaks.js
 
 const PEAK_BUCKET_COUNT = 8192;
 
-// Module-level cache of precomputed min/max peaks for the currently loaded
-// audio buffer. Avoids rescanning the raw Float32Array on every draw() call
-// (e.g. on every mousemove while dragging a handle).
-let peakCache = null;
-
-function buildPeakCache(buffer) {
-  const data = buffer.getChannelData(0);
-  peakCache = buildPeakCacheFromSamples(data, PEAK_BUCKET_COUNT);
-}
-
 export function createWaveform(canvas, options = {}) {
   const ctx = canvas.getContext('2d');
   const rulerCanvas = options.rulerCanvas;
@@ -29,6 +19,28 @@ export function createWaveform(canvas, options = {}) {
   let wasDragging = false;
   let isLoading = false;
   let emptyMessage = t('waveform.selectVideo');
+
+  // Per-instance cache of precomputed min/max peaks for the currently loaded
+  // audio buffer. Avoids rescanning the raw Float32Array on every draw() call
+  // (e.g. on every mousemove while dragging a handle). Scoped to this closure
+  // so multiple concurrent waveform instances (e.g. pad editor + slicer) each
+  // own their cache instead of clobbering a shared one.
+  let peakCache = null;
+
+  function buildPeakCache(buffer) {
+    const data = buffer.getChannelData(0);
+    peakCache = buildPeakCacheFromSamples(data, PEAK_BUCKET_COUNT);
+  }
+
+  // Slice markers (times in seconds) drawn on top of the waveform, e.g. for
+  // the auto-slicer view. Stored as a private copy so external mutation of
+  // the array passed to setMarkers() can't desync the drawn state.
+  let markers = Array.isArray(options.markers) ? options.markers.slice() : [];
+
+  // When false, the start/end selection UI (dim overlay, gradient, borders,
+  // IN/OUT labels, handles) and its hit-testing are disabled entirely. Used
+  // by views that only need waveform + markers, no start/end selection.
+  const selectionEnabled = options.selectionEnabled !== false;
 
   let zoomLevel = 1;
   let zoomCenter = 0;
@@ -55,6 +67,15 @@ export function createWaveform(canvas, options = {}) {
 
   function getMutedFill() {
     return 'rgba(160, 170, 184, 0.08)';
+  }
+
+  function getMarkerColor() {
+    try {
+      const styles = getComputedStyle(document.documentElement);
+      return styles.getPropertyValue('--success').trim() || '#4ade80';
+    } catch {
+      return '#4ade80';
+    }
   }
 
   function getVisibleRange() {
@@ -144,6 +165,11 @@ export function createWaveform(canvas, options = {}) {
 
   function setPlayhead(time) {
     playhead = Math.max(0, Math.min(duration, time || 0));
+    draw();
+  }
+
+  function setMarkers(times) {
+    markers = Array.isArray(times) ? times.slice() : [];
     draw();
   }
 
@@ -238,40 +264,49 @@ export function createWaveform(canvas, options = {}) {
     ctx.setLineDash([]);
 
     // Waveform regions
-    drawWaveformRegion(data, step, 0, startX, yOffset, getMutedColor(), getMutedFill());
-    drawWaveformRegion(data, step, startX, endX, yOffset, accent, null);
-    drawWaveformRegion(data, step, endX, width, yOffset, getMutedColor(), getMutedFill());
+    if (selectionEnabled) {
+      drawWaveformRegion(data, step, 0, startX, yOffset, getMutedColor(), getMutedFill());
+      drawWaveformRegion(data, step, startX, endX, yOffset, accent, null);
+      drawWaveformRegion(data, step, endX, width, yOffset, getMutedColor(), getMutedFill());
+    } else {
+      drawWaveformRegion(data, step, 0, width, yOffset, accent, null);
+    }
 
-    // Spotlight: dim everything outside selection
-    const dimColor = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillStyle = dimColor;
-    ctx.fillRect(0, 0, startX, height);
-    ctx.fillRect(endX, 0, width - endX, height);
+    if (selectionEnabled) {
+      // Spotlight: dim everything outside selection
+      const dimColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.fillStyle = dimColor;
+      ctx.fillRect(0, 0, startX, height);
+      ctx.fillRect(endX, 0, width - endX, height);
 
-    // Selection overlay
-    const overlayGrad = ctx.createLinearGradient(0, 0, 0, height);
-    overlayGrad.addColorStop(0, 'rgba(255, 159, 28, 0.10)');
-    overlayGrad.addColorStop(0.5, 'rgba(255, 159, 28, 0.28)');
-    overlayGrad.addColorStop(1, 'rgba(255, 159, 28, 0.10)');
-    ctx.fillStyle = overlayGrad;
-    ctx.fillRect(startX, 0, endX - startX, height);
+      // Selection overlay
+      const overlayGrad = ctx.createLinearGradient(0, 0, 0, height);
+      overlayGrad.addColorStop(0, 'rgba(255, 159, 28, 0.10)');
+      overlayGrad.addColorStop(0.5, 'rgba(255, 159, 28, 0.28)');
+      overlayGrad.addColorStop(1, 'rgba(255, 159, 28, 0.10)');
+      ctx.fillStyle = overlayGrad;
+      ctx.fillRect(startX, 0, endX - startX, height);
 
-    // Selection borders
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 2 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(startX, 0);
-    ctx.lineTo(startX, height);
-    ctx.moveTo(endX, 0);
-    ctx.lineTo(endX, height);
-    ctx.stroke();
+      // Selection borders
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(startX, 0);
+      ctx.lineTo(startX, height);
+      ctx.moveTo(endX, 0);
+      ctx.lineTo(endX, height);
+      ctx.stroke();
 
-    // IN / OUT labels
-    drawInOutLabels(startX, endX, height, accent);
+      // IN / OUT labels
+      drawInOutLabels(startX, endX, height, accent);
 
-    // Handles
-    drawHandle(startX, height);
-    drawHandle(endX, height);
+      // Handles
+      drawHandle(startX, height);
+      drawHandle(endX, height);
+    }
+
+    // Slice markers (drawn after the waveform/selection layers so they stay visible)
+    drawMarkers(height);
 
     // Playhead
     drawPlayhead(timeToX(playhead), height);
@@ -498,6 +533,37 @@ export function createWaveform(canvas, options = {}) {
     drawLabel('OUT', end, endX, 'right');
   }
 
+  function drawMarkers(height) {
+    if (!markers.length) return;
+
+    const { visibleStart, visibleEnd } = getVisibleRange();
+    const dpr = window.devicePixelRatio || 1;
+    const color = getMarkerColor();
+    const capHalfWidth = 4 * dpr;
+    const capHeight = 6 * dpr;
+
+    for (const time of markers) {
+      if (time < visibleStart || time > visibleEnd) continue;
+      const x = timeToX(time);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+
+      // Small triangular cap at the top, in the same restrained style as the playhead.
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x - capHalfWidth, capHeight);
+      ctx.lineTo(x + capHalfWidth, capHeight);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   function drawRuler() {
     if (!rulerCtx || !rulerCanvas) return;
 
@@ -568,15 +634,22 @@ export function createWaveform(canvas, options = {}) {
   }
 
   function getDragTarget(x) {
+    const playheadX = timeToX(playhead);
+    const playheadRadius = 10 * (window.devicePixelRatio || 1);
+    const playheadDist = Math.abs(x - playheadX);
+
+    if (!selectionEnabled) {
+      // No start/end selection to hit-test — only the playhead handle is
+      // draggable; everything else (pan, seek) is handled by the caller.
+      return playheadDist < playheadRadius ? 'playhead' : null;
+    }
+
     const startX = timeToX(start);
     const endX = timeToX(end);
-    const playheadX = timeToX(playhead);
     const handleRadius = 14 * (window.devicePixelRatio || 1);
-    const playheadRadius = 10 * (window.devicePixelRatio || 1);
 
     const startDist = Math.abs(x - startX);
     const endDist = Math.abs(x - endX);
-    const playheadDist = Math.abs(x - playheadX);
 
     if (playheadDist < playheadRadius && playheadDist < startDist && playheadDist < endDist) return 'playhead';
     if (startDist < handleRadius && startDist < endDist) return 'start';
@@ -735,6 +808,7 @@ export function createWaveform(canvas, options = {}) {
     setEmpty,
     setSegment,
     setPlayhead,
+    setMarkers,
     getSegment,
     getZoomLevel,
     zoomIn: () => zoomInAt(canvas.width / 2),
