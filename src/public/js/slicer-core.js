@@ -159,6 +159,30 @@ export function spectralFlux(magnitude, prevMagnitude) {
   return sum;
 }
 
+// Sum of squared samples over a windowed (post-Hann) real frame. The
+// cheapest detection value available -- needs no FFT -- and simply tracks
+// how loud the frame is, which is enough to flag sudden loud bursts.
+export function frameEnergy(frameSamples) {
+  let sum = 0;
+  for (let i = 0; i < frameSamples.length; i++) {
+    const s = frameSamples[i];
+    sum += s * s;
+  }
+  return sum;
+}
+
+// High-frequency content: sum of (bin+1)*|X[bin]|^2 over the half-spectrum
+// magnitude array. Weighting by bin index emphasizes high-frequency energy,
+// which rises sharply on percussive/transient onsets (Masri, 1996). Takes
+// the same half-spectrum magnitude shape spectralFlux consumes.
+export function highFrequencyContent(magnitude) {
+  let sum = 0;
+  for (let i = 0; i < magnitude.length; i++) {
+    sum += (i + 1) * magnitude[i] * magnitude[i];
+  }
+  return sum;
+}
+
 // Multiplier applied to the local mean absolute deviation on top of the
 // local mean. Chosen empirically against the synthetic burst/click test
 // signals in slicer-core.test.js so that sensitivity 0.5 (multiplier
@@ -231,6 +255,13 @@ export function enforceMinIOI(onsets, minGap) {
 // zero sample). Bounded by `maxRadius` because digital silence has no
 // crossings at all; an unbounded scan would walk to the end of the buffer.
 // Returns the original (clamped) index untouched if nothing is found.
+//
+// Best-of-two refinement (Shuriken sampleutils.cpp): once a genuine
+// sign-flip pair (i, i+1) is found, the true zero crossing sits somewhere
+// between the two samples, not necessarily at the earlier one. Returning
+// whichever of the pair has the smaller absolute amplitude picks the sample
+// that is actually closer to that true crossing, instead of always favoring
+// the left side.
 export function snapToZeroCrossing(data, index, maxRadius) {
   const n = data.length;
   if (n === 0) return index;
@@ -243,13 +274,24 @@ export function snapToZeroCrossing(data, index, maxRadius) {
     return a === 0 || (a < 0 && b >= 0) || (a > 0 && b <= 0);
   };
 
+  // Resolves a crossing found at pair (i, i+1) to the single best index. An
+  // exact-zero sample at i is the crossing itself and wins outright; a
+  // genuine sign-flip pair resolves to whichever side has smaller
+  // |amplitude| (ties keep i, matching the pre-refinement behavior).
+  const bestOfPair = (i) => {
+    const a = data[i];
+    if (a === 0) return i;
+    const b = data[i + 1];
+    return Math.abs(b) < Math.abs(a) ? i + 1 : i;
+  };
+
   if (data[start] === 0) return start;
 
   for (let d = 0; d <= maxRadius; d++) {
     const right = start + d;
-    if (isCrossing(right)) return right;
+    if (isCrossing(right)) return bestOfPair(right);
     const left = start - d;
-    if (left >= 0 && isCrossing(left)) return left;
+    if (left >= 0 && isCrossing(left)) return bestOfPair(left);
   }
 
   return start;
@@ -287,9 +329,16 @@ export function buildSlices(onsetSamples, totalSamples, minSliceSamples) {
 const WINDOW_SIZE = 1024;
 const HOP_SIZE = 512;
 const MIN_IOI_SECONDS = 0.05;
-const MIN_SLICE_SECONDS = 0.08;
+export const MIN_SLICE_SECONDS = 0.08;
 const ZERO_CROSSING_RADIUS_SECONDS = 0.01;
 const PROGRESS_FRAME_STRIDE = 512;
+
+// Detection methods available to detectOnsets. 'specflux' (default)
+// preserves the original behavior exactly; 'hfc' and 'energy' are Shuriken-
+// derived alternatives that swap in a different per-frame detection value
+// while every downstream stage (adaptive threshold, peak-picking, min-IOI,
+// zero-crossing snap, slice tiling) stays method-agnostic.
+const DETECTION_METHODS = new Set(['specflux', 'hfc', 'energy']);
 
 // Orchestrates the full pipeline over one mono channel and returns onsets as
 // { start, end } slice boundaries in seconds, tiling the whole buffer.
@@ -297,7 +346,17 @@ const PROGRESS_FRAME_STRIDE = 512;
 // Mutates channelData in place (see normalizePeak) -- callers that need the
 // original buffer preserved must pass a disposable copy. This is deliberate:
 // defensively copying an hour-long buffer would double peak memory use.
-export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onProgress } = {}) {
+//
+// `method` selects the per-frame detection value: 'specflux' (default,
+// spectral flux -- rising spectral energy), 'hfc' (high-frequency content),
+// or 'energy' (frame RMS energy, no FFT needed but computed alongside it
+// here to keep the frame loop's shape and allocations identical across
+// methods). An unknown method falls back to 'specflux'.
+export function detectOnsets(
+  channelData,
+  sampleRate,
+  { sensitivity = 0.5, method = 'specflux', onProgress } = {}
+) {
   const totalSamples = channelData.length;
   if (totalSamples === 0) return [];
 
@@ -305,6 +364,8 @@ export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onPro
   if (numFrames <= 0) {
     return [{ start: 0, end: totalSamples / sampleRate }];
   }
+
+  const effectiveMethod = DETECTION_METHODS.has(method) ? method : 'specflux';
 
   normalizePeak(channelData, 0.99);
 
@@ -317,7 +378,7 @@ export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onPro
   const im = new Float32Array(WINDOW_SIZE);
   let magnitude = new Float32Array(halfSize);
   let prevMagnitude = new Float32Array(halfSize);
-  const flux = new Float32Array(numFrames);
+  const detection = new Float32Array(numFrames);
 
   for (let frame = 0; frame < numFrames; frame++) {
     const offset = frame * HOP_SIZE;
@@ -326,17 +387,33 @@ export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onPro
       im[i] = 0;
     }
 
+    // frameEnergy needs the windowed real samples as they are *before* the
+    // FFT below overwrites re/im in place with the transform.
+    const energyValue = effectiveMethod === 'energy' ? frameEnergy(re) : 0;
+
     fft(re, im);
 
     for (let i = 0; i < halfSize; i++) {
       magnitude[i] = Math.hypot(re[i], im[i]);
     }
 
-    // Frame 0 has no previous frame to compare against -- prevMagnitude
-    // starts all-zero, so without this guard spectralFlux would score frame
-    // 0's full spectral energy as a rise, registering a fake onset right at
-    // (or ~10ms into) any signal that starts sounding at sample 0.
-    flux[frame] = frame === 0 ? 0 : spectralFlux(magnitude, prevMagnitude);
+    switch (effectiveMethod) {
+      case 'hfc':
+        detection[frame] = highFrequencyContent(magnitude);
+        break;
+      case 'energy':
+        detection[frame] = energyValue;
+        break;
+      case 'specflux':
+      default:
+        // Frame 0 has no previous frame to compare against -- prevMagnitude
+        // starts all-zero, so without this guard spectralFlux would score
+        // frame 0's full spectral energy as a rise, registering a fake
+        // onset right at (or ~10ms into) any signal that starts sounding at
+        // sample 0.
+        detection[frame] = frame === 0 ? 0 : spectralFlux(magnitude, prevMagnitude);
+        break;
+    }
 
     // Ping-pong the magnitude buffers instead of copying.
     const tmp = prevMagnitude;
@@ -351,8 +428,8 @@ export function detectOnsets(channelData, sampleRate, { sensitivity = 0.5, onPro
     }
   }
 
-  const threshold = adaptiveThreshold(flux, { window: 5, sensitivity });
-  const peakFrames = pickPeaks(flux, threshold);
+  const threshold = adaptiveThreshold(detection, { window: 5, sensitivity });
+  const peakFrames = pickPeaks(detection, threshold);
 
   // Frame index -> sample index, compensating for the window's center: a
   // spectral event detected at frame f actually sits windowSize/2 samples
