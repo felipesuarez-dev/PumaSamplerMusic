@@ -3,6 +3,7 @@ import { createStore, buildKeyCombo, formatTime, parseTime } from './state.js';
 import { createWebSocketClient } from './ws-client.js';
 import { createAudioEngine } from './audio-engine.js';
 import { createVideoDisplay } from './video-display.js';
+import { createMediaDisplay } from './media-display.js';
 import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
 import { createSessionManager } from './session.js';
@@ -32,6 +33,16 @@ const ws = createWebSocketClient();
 const audio = createAudioEngine();
 window.addEventListener('audioworkletfallback', () => showToast(t('toast.pitchFallbackActive'), 'info'));
 const videoDisplay = createVideoDisplay(document.getElementById('video-player'));
+function getMediaInfo(videoId) {
+  return store.get().videos.find((v) => v.videoId === videoId);
+}
+const mediaDisplay = createMediaDisplay({
+  videoDisplay,
+  audio,
+  waveformCanvas: document.getElementById('center-waveform-canvas'),
+  rulerCanvas: document.getElementById('center-waveform-ruler'),
+  getMediaInfo,
+});
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
 let padEditorActiveTab = 'general';
@@ -603,7 +614,7 @@ function findPadMissingKey() {
 // Global stop
 function stopAll() {
   audio.stopAll();
-  videoDisplay.stop();
+  mediaDisplay.stop();
   showToast(t('toast.allStopped'), 'info');
 }
 
@@ -715,9 +726,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     const startInput = document.getElementById('pad-start');
     const endInput = document.getElementById('pad-end');
-    const previewVideo = videoDisplay.getVideo();
-    if (!previewVideo || !startInput || !endInput) return;
-    const time = previewVideo.currentTime;
+    if (!startInput || !endInput) return;
+    const { currentTime: time } = mediaDisplay.getPlaybackState();
     const end = parseTime(endInput.value);
     startInput.value = formatTime(time);
     endInput.value = formatTime(Math.max(time + 0.1, end));
@@ -727,9 +737,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     const startInput = document.getElementById('pad-start');
     const endInput = document.getElementById('pad-end');
-    const previewVideo = videoDisplay.getVideo();
-    if (!previewVideo || !startInput || !endInput) return;
-    const time = previewVideo.currentTime;
+    if (!startInput || !endInput) return;
+    const { currentTime: time } = mediaDisplay.getPlaybackState();
     const start = parseTime(startInput.value);
     endInput.value = formatTime(Math.max(time, start + 0.1));
     if (editorWaveform) editorWaveform.setSegment(parseTime(startInput.value), parseTime(endInput.value));
@@ -1029,7 +1038,7 @@ const pads = createPads(document.getElementById('pad-grid'), {
       audio.stop(position);
       // Only stop the main video if no other pad is still playing.
       if (audio.getActivePositions().length === 0) {
-        videoDisplay.stop();
+        mediaDisplay.stop();
       }
     }
     ws.send('pad:release', { position, videoId: data?.videoId });
@@ -1040,7 +1049,7 @@ const pads = createPads(document.getElementById('pad-grid'), {
   onBeforeChange(positions) {
     positions.forEach((p) => audio.stop(p));
     if (audio.getActivePositions().length === 0) {
-      videoDisplay.stop();
+      mediaDisplay.stop();
     }
   },
   onAfterSwap(from, to, targetWasOccupied) {
@@ -1400,13 +1409,13 @@ async function triggerPad(position, data) {
   // Show the loading spinner (delay-gated) across the whole load: audio decode
   // here + video buffering in playSegment. The token flows into playSegment so
   // it owns the success-clear; the error paths clear it themselves.
-  const loadToken = videoDisplay.setLoading(true);
+  const loadToken = mediaDisplay.setLoading(true);
 
   try {
     await audio.loadAudio(data.videoId, audioUrl);
   } catch (err) {
     showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
-    videoDisplay.setLoading(false, loadToken);
+    mediaDisplay.setLoading(false, loadToken);
     return;
   }
 
@@ -1434,7 +1443,7 @@ async function triggerPad(position, data) {
     });
   } catch (err) {
     showToast(t('toast.playbackFailed', { message: err.message }), 'error');
-    videoDisplay.setLoading(false, loadToken);
+    mediaDisplay.setLoading(false, loadToken);
     return;
   }
 
@@ -1444,14 +1453,14 @@ async function triggerPad(position, data) {
   // since reversed audio audibly starts from that end of the slice; real
   // video reverse is out of scope for this pad FX.
   if (data.reverse) {
-    videoDisplay.showFrame({
+    mediaDisplay.showFrame({
       videoId: data.videoId,
       url: videoUrl,
       time: data.end,
       loadToken,
     });
   } else {
-    videoDisplay.playSegment({
+    mediaDisplay.playSegment({
       videoId: data.videoId,
       url: videoUrl,
       start: data.start,
@@ -1481,11 +1490,40 @@ function renderPadEditor(position, data) {
   }
 
   const videos = store.get().videos;
+  const youtubeVideos = videos.filter((v) => (v.source || 'youtube') !== 'local');
+  const localAudioMedia = videos.filter((v) => (v.source || 'youtube') === 'local' && (v.mediaKind || 'video') === 'audio');
+  const localVideoMedia = videos.filter((v) => (v.source || 'youtube') === 'local' && (v.mediaKind || 'video') === 'video');
+
+  // Source type isn't stored on the pad itself -- it's inferred from whatever
+  // media its videoId currently points to, so it stays correct even if that
+  // media's source/mediaKind changed since the pad was last saved.
+  const currentMediaInfo = data?.videoId ? getMediaInfo(data.videoId) : null;
+  const sourceType = data?.videoId ? ((currentMediaInfo?.source || 'youtube') === 'local' ? 'local' : 'youtube') : '';
+
+  // With no local media there's nothing to choose between, so the source-type
+  // selector is omitted entirely and the editor behaves like the original
+  // YouTube-only version: the video selector is always shown (type = youtube).
+  const hasLocalMedia = localAudioMedia.length > 0 || localVideoMedia.length > 0;
+  const effectiveSourceType = hasLocalMedia ? sourceType : 'youtube';
+
+  const mediaOption = (v) => `<option value="${v.videoId}" ${data?.videoId === v.videoId ? 'selected' : ''}>${escapeHtml(v.title || v.videoId)}</option>`;
+
+  // A disabled placeholder is only shown as the initial selection when it's
+  // marked selected; otherwise the browser auto-selects the first real option.
+  // Mark it selected whenever no real option matches the pad's current videoId.
+  const videoSelected = youtubeVideos.some((v) => v.videoId === data?.videoId);
+  const localSelected =
+    localAudioMedia.some((v) => v.videoId === data?.videoId) ||
+    localVideoMedia.some((v) => v.videoId === data?.videoId);
+
   const videoOptions =
-    `<option value="" disabled ${!data?.videoId ? 'selected' : ''}>${t('editor.selectVideo')}</option>` +
-    videos
-      .map((v) => `<option value="${v.videoId}" ${data?.videoId === v.videoId ? 'selected' : ''}>${escapeHtml(v.title || v.videoId)}</option>`)
-      .join('');
+    `<option value="" disabled ${videoSelected ? '' : 'selected'}>${t('editor.selectVideo')}</option>` +
+    youtubeVideos.map(mediaOption).join('');
+
+  const localMediaOptions =
+    `<option value="" disabled ${localSelected ? '' : 'selected'}>${t('editor.selectMedia')}</option>` +
+    (localAudioMedia.length ? `<optgroup label="${t('local.kindAudio')}">${localAudioMedia.map(mediaOption).join('')}</optgroup>` : '') +
+    (localVideoMedia.length ? `<optgroup label="${t('local.kindVideo')}">${localVideoMedia.map(mediaOption).join('')}</optgroup>` : '');
 
   const previewPct = Math.round(previewVolume * 100);
   const padPct = Math.round((data?.volume ?? 0.2) / 2 * 100);
@@ -1508,10 +1546,24 @@ function renderPadEditor(position, data) {
           ${data?.key ? t('editor.keyValue', { key: escapeHtml(data.key) }) : t('editor.clickPressKey')}
         </div>
       </div>
+      ${hasLocalMedia ? `
       <div class="form-row">
+        <label>${t('editor.sourceTypeField')}</label>
+        <select id="pad-source-type">
+          <option value="" disabled ${!sourceType ? 'selected' : ''}>${t('editor.sourceTypePlaceholder')}</option>
+          <option value="youtube" ${effectiveSourceType === 'youtube' ? 'selected' : ''}>${t('editor.sourceYouTube')}</option>
+          <option value="local" ${effectiveSourceType === 'local' ? 'selected' : ''}>${t('editor.sourceLocal')}</option>
+        </select>
+      </div>` : ''}
+      <div class="form-row" id="pad-video-row" ${effectiveSourceType === 'youtube' ? '' : 'hidden'}>
         <label>${t('editor.videoField')} <span class="help-icon" data-i18n-tooltip="tip.video" data-tooltip="${t('tip.video')}">?</span></label>
         <select id="pad-video">${videoOptions}</select>
       </div>
+      ${hasLocalMedia ? `
+      <div class="form-row" id="pad-local-media-row" ${effectiveSourceType === 'local' ? '' : 'hidden'}>
+        <label>${t('editor.localMediaField')}</label>
+        <select id="pad-local-media">${localMediaOptions}</select>
+      </div>` : ''}
       <div class="form-row">
         <label>${t('editor.triggerModeField')} <span class="help-icon" data-i18n-tooltip="tip.triggerMode" data-tooltip="${t('tip.triggerMode')}">?</span></label>
         <select id="pad-trigger-mode">
@@ -1608,7 +1660,7 @@ function renderPadEditor(position, data) {
       autoCommitPad(position, { start: segment.start, end: segment.end });
     },
     onSeek: (time) => {
-      videoDisplay.seek(time);
+      mediaDisplay.seek(time);
       if (editorWaveform) editorWaveform.setPlayhead(time);
       updatePreviewTime();
     },
@@ -1620,7 +1672,7 @@ function renderPadEditor(position, data) {
 
   if (data?.videoId) {
     loadEditorWaveform(data.videoId, data.start ?? 0, data.end ?? 0);
-    videoDisplay.load(data.videoId, api.getVideoUrl(data.videoId));
+    mediaDisplay.load(data.videoId, api.getVideoUrl(data.videoId));
   }
 
   updateWaveformStatus(data?.start ?? 0, data?.end ?? 0);
@@ -1643,10 +1695,9 @@ async function loadEditorWaveform(videoId, start, end) {
 
 function updatePreviewTime() {
   const timeEl = document.getElementById('preview-time');
-  const video = videoDisplay.getVideo();
-  if (timeEl && video) {
-    timeEl.textContent = formatTime(video.currentTime);
-  }
+  if (!timeEl) return;
+  const { currentTime } = mediaDisplay.getPlaybackState();
+  timeEl.textContent = formatTime(currentTime);
 }
 
 function updateWaveformStatus(start, end) {
@@ -1657,13 +1708,13 @@ function updateWaveformStatus(start, end) {
 }
 
 function syncPlayhead(videoId) {
-  const video = videoDisplay.getVideo();
-  if (videoDisplay.getVideoId() !== videoId) return; // otro pad tomó el video compartido
-  if (video && editorWaveform) {
-    editorWaveform.setPlayhead(video.currentTime);
+  if (mediaDisplay.getMediaId() !== videoId) return; // otro pad tomó el media compartido
+  const { currentTime, paused } = mediaDisplay.getPlaybackState();
+  if (editorWaveform) {
+    editorWaveform.setPlayhead(currentTime);
     updatePreviewTime();
   }
-  if (video && !video.paused) {
+  if (!paused) {
     requestAnimationFrame(() => syncPlayhead(videoId));
   }
 }
@@ -1711,7 +1762,11 @@ function initEditorListeners(position) {
   }
 
   const keyCapture = document.getElementById('pad-key-capture');
+  const sourceTypeSelect = document.getElementById('pad-source-type');
+  const videoRowEl = document.getElementById('pad-video-row');
+  const localMediaRowEl = document.getElementById('pad-local-media-row');
   const videoSelect = document.getElementById('pad-video');
+  const localMediaSelect = document.getElementById('pad-local-media');
   const startInput = document.getElementById('pad-start');
   const endInput = document.getElementById('pad-end');
   const volumeInput = document.getElementById('pad-volume');
@@ -1764,19 +1819,43 @@ function initEditorListeners(position) {
     window.addEventListener('keydown', handler, { once: true });
   });
 
-  videoSelect.addEventListener('change', async () => {
-    const videoId = videoSelect.value;
-    if (videoId) {
-      videoDisplay.load(videoId, api.getVideoUrl(videoId));
-      await loadEditorWaveform(videoId, 0, 0);
-      if (editorWaveform) {
-        const segment = editorWaveform.getSegment();
-        startInput.value = formatTime(0);
-        endInput.value = formatTime(segment.end);
-        autoCommitPad(position, { videoId, start: 0, end: segment.end });
-      }
+  if (sourceTypeSelect) {
+    sourceTypeSelect.addEventListener('change', () => {
+      const type = sourceTypeSelect.value;
+      if (videoRowEl) videoRowEl.hidden = type !== 'youtube';
+      if (localMediaRowEl) localMediaRowEl.hidden = type !== 'local';
+    });
+  }
+
+  // Reads the currently-selected media id from whichever select is active
+  // for the current source type -- #pad-video is hidden/stale once "local"
+  // is picked, so playPreview/saveBtn must not always read videoSelect.
+  function selectedMediaId() {
+    if (sourceTypeSelect && sourceTypeSelect.value === 'local') {
+      return localMediaSelect ? localMediaSelect.value : '';
     }
-  });
+    return videoSelect.value;
+  }
+
+  // Shared by both the YouTube and Local media selects -- the facade decides
+  // how to route videoId (video element vs. waveform), so this doesn't need
+  // to know or care which selector fired.
+  async function handleMediaSelected(videoId) {
+    if (!videoId) return;
+    mediaDisplay.load(videoId, api.getVideoUrl(videoId));
+    await loadEditorWaveform(videoId, 0, 0);
+    if (editorWaveform) {
+      const segment = editorWaveform.getSegment();
+      startInput.value = formatTime(0);
+      endInput.value = formatTime(segment.end);
+      autoCommitPad(position, { videoId, start: 0, end: segment.end });
+    }
+  }
+
+  videoSelect.addEventListener('change', () => handleMediaSelected(videoSelect.value));
+  if (localMediaSelect) {
+    localMediaSelect.addEventListener('change', () => handleMediaSelected(localMediaSelect.value));
+  }
 
   function updateSegmentFromInputs() {
     let start = parseTime(startInput.value);
@@ -1827,8 +1906,11 @@ function initEditorListeners(position) {
   function applyPreviewVolume(vol) {
     previewVolume = Math.max(0, Math.min(1, vol));
     localStorage.setItem(PREVIEW_VOLUME_STORAGE, String(previewVolume));
-    const previewVideo = videoDisplay.getVideo();
-    if (previewVideo) previewVideo.volume = previewVolume;
+    mediaDisplay.setVolume(previewVolume);
+    // Also nudges the audio-mode scratch voice (Trim preview on local audio)
+    // live, in real time -- a safe no-op if no such voice is currently
+    // playing (audio-engine.js:669-676).
+    audio.setVoiceVolume(0, previewVolume);
   }
   if (previewVolumeInput) {
     previewVolumeInput.addEventListener('input', () => {
@@ -1903,14 +1985,14 @@ function initEditorListeners(position) {
 
   // Preview transport
   async function playPreview() {
-    const videoId = videoSelect.value;
+    const videoId = selectedMediaId();
     if (!videoId) return;
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
 
     playBtn.disabled = true;
     pauseBtn.disabled = true;
     try {
-      const ok = await videoDisplay.playSegment({
+      const ok = await mediaDisplay.playSegment({
         videoId,
         url: api.getVideoUrl(videoId),
         start: segment.start,
@@ -1932,14 +2014,14 @@ function initEditorListeners(position) {
   }
 
   function pausePreview() {
-    videoDisplay.pause();
+    mediaDisplay.pause();
     setTransportState(false);
   }
 
   function stopPreview() {
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
-    videoDisplay.pause();
-    videoDisplay.seek(segment.start);
+    mediaDisplay.pause();
+    mediaDisplay.seek(segment.start);
     setTransportState(false);
     if (editorWaveform) editorWaveform.setPlayhead(segment.start);
     updatePreviewTime();
@@ -1951,9 +2033,7 @@ function initEditorListeners(position) {
 
   // Mark in/out
   setInBtn.addEventListener('click', () => {
-    const previewVideo = videoDisplay.getVideo();
-    if (!previewVideo) return;
-    const time = previewVideo.currentTime;
+    const { currentTime: time } = mediaDisplay.getPlaybackState();
     const end = parseTime(endInput.value);
     startInput.value = formatTime(time);
     endInput.value = formatTime(Math.max(time + 0.1, end));
@@ -1961,9 +2041,7 @@ function initEditorListeners(position) {
   });
 
   setOutBtn.addEventListener('click', () => {
-    const previewVideo = videoDisplay.getVideo();
-    if (!previewVideo) return;
-    const time = previewVideo.currentTime;
+    const { currentTime: time } = mediaDisplay.getPlaybackState();
     const start = parseTime(startInput.value);
     endInput.value = formatTime(Math.max(time, start + 0.1));
     updateSegmentFromInputs();
@@ -1980,7 +2058,7 @@ function initEditorListeners(position) {
       position,
       key,
       label: document.getElementById('pad-label').value || `PAD ${position}`,
-      videoId: videoSelect.value,
+      videoId: selectedMediaId(),
       start: segment.start,
       end: segment.end,
       volume: parseFloat(document.getElementById('pad-volume').value),
@@ -2012,6 +2090,11 @@ let maxCacheGb = 5;
 let videoPage = 1;
 let videoSearchTerm = '';
 const VIDEO_PAGE_SIZE = 8;
+// Local media tab — separate state from the YouTube tab above, so switching
+// tabs never resets the other tab's search term/page.
+let localPage = 1;
+let localSearchTerm = '';
+const LOCAL_PAGE_SIZE = 8;
 
 async function refreshVideos() {
   try {
@@ -2019,6 +2102,7 @@ async function refreshVideos() {
     if (typeof serverMaxCacheGb === 'number') maxCacheGb = serverMaxCacheGb;
     store.set({ videos, activeDownloads: active });
     renderVideoList();
+    renderLocalList();
     updateCacheUsage();
   } catch (err) {
     showToast(t('toast.videosLoadFailed', { message: err.message }), 'error');
@@ -2063,7 +2147,8 @@ function classifyErrorBucket({ code, error } = {}) {
 
 function renderVideoList() {
   const list = document.getElementById('video-list');
-  const { videos, activeDownloads } = store.get();
+  const { videos: allVideos, activeDownloads } = store.get();
+  const videos = allVideos.filter((v) => (v.source || 'youtube') !== 'local');
   list.innerHTML = '';
 
   // The store already carries completed downloads once they're saved, but
@@ -2253,6 +2338,210 @@ function renderVideoPager(totalPages) {
       renderVideoList();
     });
   }
+}
+
+// Local media tab — clone of renderVideoList/renderVideoPager without the
+// activeDownloads branch (uploads are processed synchronously by the server,
+// so there's no in-progress/queued state to render for them).
+function renderLocalList() {
+  const list = document.getElementById('local-media-list');
+  if (!list) return;
+  const { videos } = store.get();
+  list.innerHTML = '';
+
+  const localVideos = videos.filter((v) => (v.source || 'youtube') === 'local');
+  const filtered = localSearchTerm
+    ? localVideos.filter((v) => (v.title || v.videoId).toLowerCase().includes(localSearchTerm))
+    : localVideos;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / LOCAL_PAGE_SIZE));
+  localPage = Math.min(localPage, totalPages);
+  const pageItems = filtered.slice((localPage - 1) * LOCAL_PAGE_SIZE, localPage * LOCAL_PAGE_SIZE);
+
+  if (pageItems.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'video-empty';
+    empty.textContent = t('local.empty');
+    list.appendChild(empty);
+  }
+
+  for (const video of pageItems) {
+    const li = document.createElement('li');
+    li.className = 'video-item';
+
+    const kind = video.mediaKind === 'audio' ? 'audio' : 'video';
+    const kindLabel = t(kind === 'audio' ? 'local.kindAudio' : 'local.kindVideo');
+    // Slicing works off the extracted opus regardless of kind, so both audio
+    // and video local media get the Slice button, same as YouTube videos.
+    const sliceBtnHtml = `<button type="button" class="video-slice-btn" data-slice-id="${video.videoId}" data-i18n-title="slicer.openTitle" title="${t('slicer.openTitle')}"><span class="material-symbols-outlined">content_cut</span></button>`;
+
+    li.innerHTML = `
+      <div class="video-item-info">
+        <span class="video-item-title">${escapeHtml(video.title || video.videoId)}</span>
+        <span class="video-item-meta">${formatTime(video.duration || 0)} · ${video.videoId}</span>
+      </div>
+      <span class="media-kind-badge media-kind-badge-${kind}">${escapeHtml(kindLabel)}</span>
+      ${sliceBtnHtml}
+      <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
+    `;
+
+    // Same rationale as renderVideoList: attacker-controlled title, set via
+    // the DOM API instead of string interpolation.
+    const infoEl = li.querySelector('.video-item-info');
+    if (infoEl) {
+      infoEl.classList.add('has-tip');
+      const detail = [video.title || video.videoId, formatTime(video.duration || 0)];
+      if (video.sizeBytes) detail.push(formatBytes(video.sizeBytes));
+      detail.push(video.videoId);
+      infoEl.dataset.tooltip = detail.join('\n');
+    }
+
+    const sliceBtn = li.querySelector('[data-slice-id]');
+    if (sliceBtn) {
+      sliceBtn.addEventListener('click', () => {
+        if (librarySidenavToggle && librarySidenavToggle.isCollapsed()) librarySidenavToggle.expand();
+        slicer.openForVideo(video.videoId);
+      });
+    }
+
+    li.querySelector('button[data-id]').addEventListener('click', async () => {
+      try {
+        await api.deleteVideo(video.videoId);
+        audio.unload(video.videoId);
+        slicer.handleVideoRemoved(video.videoId);
+        showToast(t('toast.videoRemoved', { name: video.title || video.videoId }), 'success');
+        localPage = 1;
+        await refreshVideos();
+      } catch (err) {
+        showToast(t('toast.removeFailed', { message: err.message }), 'error');
+      }
+    });
+
+    list.appendChild(li);
+  }
+
+  renderLocalPager(totalPages);
+}
+
+function renderLocalPager(totalPages) {
+  const pager = document.getElementById('local-pager');
+  if (!pager) return;
+
+  if (totalPages <= 1) {
+    pager.hidden = true;
+    pager.innerHTML = '';
+    return;
+  }
+
+  pager.hidden = false;
+  pager.innerHTML = `
+    <button type="button" class="btn btn-secondary btn-pager" id="local-page-prev" title="${t('video.pagePrev')}" aria-label="${t('video.pagePrev')}" ${localPage <= 1 ? 'disabled' : ''}>&lsaquo;</button>
+    <span class="video-pager-info">${t('video.pageInfo', { page: localPage, total: totalPages })}</span>
+    <button type="button" class="btn btn-secondary btn-pager" id="local-page-next" title="${t('video.pageNext')}" aria-label="${t('video.pageNext')}" ${localPage >= totalPages ? 'disabled' : ''}>&rsaquo;</button>
+  `;
+
+  const prevBtn = document.getElementById('local-page-prev');
+  const nextBtn = document.getElementById('local-page-next');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      localPage = Math.max(1, localPage - 1);
+      renderLocalList();
+    });
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      localPage = Math.min(totalPages, localPage + 1);
+      renderLocalList();
+    });
+  }
+}
+
+// Library tabs (YouTube / Local) -- imitates the activateTab closure pattern
+// used for the Pad Editor's tabs (initEditorListeners) rather than reusing
+// it directly: that's a local closure over editorEl, not an importable util.
+function initLibraryTabs() {
+  const youtubeBtn = document.getElementById('library-tab-youtube');
+  const localBtn = document.getElementById('library-tab-local');
+  const youtubePanel = document.getElementById('library-panel-youtube');
+  const localPanel = document.getElementById('library-panel-local');
+  if (!youtubeBtn || !localBtn || !youtubePanel || !localPanel) return;
+
+  function activate(tab) {
+    const isLocal = tab === 'local';
+    youtubeBtn.classList.toggle('active', !isLocal);
+    youtubeBtn.setAttribute('aria-pressed', String(!isLocal));
+    localBtn.classList.toggle('active', isLocal);
+    localBtn.setAttribute('aria-pressed', String(isLocal));
+    youtubePanel.hidden = isLocal;
+    localPanel.hidden = !isLocal;
+  }
+
+  youtubeBtn.addEventListener('click', () => activate('youtube'));
+  localBtn.addEventListener('click', () => activate('local'));
+}
+initLibraryTabs();
+
+// Local media search — same pattern as the YouTube tab's #video-search.
+document.getElementById('local-search')?.addEventListener('input', (e) => {
+  localSearchTerm = e.target.value.trim().toLowerCase();
+  localPage = 1;
+  renderLocalList();
+});
+
+// Local media upload — click-through hidden file input, same pattern as
+// #btn-import-session (index.html).
+// Local media upload. The visible picker button opens the hidden file input;
+// selecting a file shows its name + size and uploads immediately (no separate
+// upload button). Browsers only expose the file name, never the real path.
+const MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024; // 4 GB
+const localUploadInput = document.getElementById('local-upload-input');
+const uploadPicker = document.getElementById('upload-picker');
+const uploadPickerText = document.getElementById('upload-picker-text');
+const uploadFileSize = document.getElementById('upload-file-size');
+if (uploadPicker && localUploadInput) {
+  const resetPicker = () => {
+    uploadPickerText.textContent = t('upload.filePlaceholder');
+    uploadFileSize.hidden = true;
+    uploadFileSize.textContent = '';
+  };
+
+  uploadPicker.addEventListener('click', () => localUploadInput.click());
+  localUploadInput.addEventListener('change', async () => {
+    const file = localUploadInput.files && localUploadInput.files[0];
+    localUploadInput.value = '';
+    if (!file) return;
+
+    if (file.size === 0) {
+      showToast(t('upload.emptyFile'), 'error');
+      resetPicker();
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      showToast(t('upload.tooLarge'), 'error');
+      resetPicker();
+      return;
+    }
+
+    uploadPickerText.textContent = file.name;
+    uploadFileSize.textContent = formatBytes(file.size);
+    uploadFileSize.hidden = false;
+
+    uploadPicker.disabled = true;
+    uploadPicker.classList.add('loading');
+    try {
+      await api.uploadMedia(file);
+      showToast(t('upload.success'), 'success');
+      localPage = 1;
+      await refreshVideos();
+    } catch (err) {
+      const message = err.status === 413 ? t('upload.tooLarge') : t('upload.failed', { message: err.message });
+      showToast(message, 'error');
+    } finally {
+      uploadPicker.disabled = false;
+      uploadPicker.classList.remove('loading');
+      resetPicker();
+    }
+  });
 }
 
 // Add video form

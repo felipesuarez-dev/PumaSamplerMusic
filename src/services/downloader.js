@@ -226,6 +226,15 @@ async function runDownload({ videoId, url, callbacks }) {
             };
             await videoStore.saveInfo(videoId, info);
 
+            // Wired here (rather than pre-download): removeOldestIfNeeded
+            // was previously exported but never called anywhere, so
+            // maxCacheGb was silently unenforced. Trimming post-finalize
+            // keeps the guarantee "local uploads are never evicted" simple —
+            // eviction only ever runs right after new content lands.
+            await videoStore.removeOldestIfNeeded(0).catch((err) => {
+              console.warn(`Cache eviction check failed for ${videoId}:`, err.message);
+            });
+
             state.status = STATUS.READY;
             state.progress = 100;
             notify(callbacks, 'download:ready', { videoId, info });

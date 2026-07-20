@@ -51,6 +51,43 @@ export const api = {
     return `${API_BASE}/api/videos/${videoId}/file`;
   },
 
+  // NOT routed through request() above -- it hardcodes Content-Type:
+  // application/json, which would break the multipart boundary the browser
+  // needs to set itself for FormData.
+  async uploadMedia(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE}/api/videos/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      const err = new Error(error.error || `HTTP ${response.status}`);
+      err.status = response.status;
+      throw err;
+    }
+    return response.json();
+  },
+
+  // Also bypasses request(): the body here is a raw opus byte buffer, not
+  // JSON, so this sends application/octet-stream instead.
+  async restoreLocalAudio(videoId, bytes, title) {
+    const query = title ? `?title=${encodeURIComponent(title)}` : '';
+    const response = await fetch(`${API_BASE}/api/videos/${videoId}/restore-audio${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }));
+      const err = new Error(error.error || `HTTP ${response.status}`);
+      err.status = response.status;
+      throw err;
+    }
+    return response.json();
+  },
+
   listSessions() {
     return request('/api/sessions');
   },

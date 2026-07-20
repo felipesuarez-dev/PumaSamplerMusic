@@ -20,7 +20,12 @@ async function inflateRaw(bytes) {
   return new Uint8Array(buffer);
 }
 
-async function readZipEntryText(file, entryName) {
+// Shared by readZipEntryText and readZipEntryBytes -- scans the central
+// directory for `entryName` and returns its decompressed raw bytes. Kept
+// separate from the two thin wrappers below so the binary variant (needed to
+// pull a media manifest's opus files back out of an export ZIP) doesn't have
+// to duplicate this parsing.
+async function readZipEntryRaw(file, entryName) {
   const buf = await file.arrayBuffer();
   const view = new DataView(buf);
   const bytes = new Uint8Array(buf);
@@ -69,22 +74,29 @@ async function readZipEntryText(file, entryName) {
       const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
       const compressedData = bytes.slice(dataStart, dataStart + compressedSize);
 
-      let rawBytes;
       if (compressionMethod === 0) {
-        rawBytes = compressedData;
+        return compressedData;
       } else if (compressionMethod === 8) {
-        rawBytes = await inflateRaw(compressedData);
-      } else {
-        throw new Error(t('error.zipUnsupportedCompression', { method: compressionMethod }));
+        return inflateRaw(compressedData);
       }
-
-      return decoder.decode(rawBytes);
+      throw new Error(t('error.zipUnsupportedCompression', { method: compressionMethod }));
     }
 
     offset += 46 + nameLen + extraLen + commentLen;
   }
 
   throw new Error(t('error.zipEntryNotFound', { entry: entryName }));
+}
+
+async function readZipEntryText(file, entryName) {
+  const rawBytes = await readZipEntryRaw(file, entryName);
+  return new TextDecoder().decode(rawBytes);
+}
+
+// Binary variant of readZipEntryText -- used to pull a local media's opus
+// bytes back out of a session export ZIP for restore-on-import.
+async function readZipEntryBytes(file, entryName) {
+  return readZipEntryRaw(file, entryName);
 }
 
 export function createSessionManager(options = {}) {
@@ -141,28 +153,102 @@ export function createSessionManager(options = {}) {
   // isn't already in the video store (e.g. evicted from cache, or cleared
   // via "Clear cache"). Shared by both load() and importFromZip() so a
   // session's videos come back regardless of how it was opened.
-  async function reconcileSessionVideos(session) {
+  //
+  // `{ file, manifest }` are both optional: load() (no ZIP available) calls
+  // this with neither, so every missing id falls back to the YouTube
+  // re-download flow below -- which is also what happens for a manifest-less
+  // ZIP (predating the media library) or for any missing id the manifest
+  // doesn't otherwise mark as `source: 'local'`. Only importFromZip() passes
+  // both, letting missing local media be offered a restore from the ZIP.
+  async function reconcileSessionVideos(session, { file, manifest } = {}) {
     const videoIds = [...new Set((session.pads || []).map((p) => p.videoId).filter(Boolean))];
     if (videoIds.length === 0) return;
 
-    const failed = [];
-    try {
-      const { videos: known } = await api.listVideos();
-      const knownIds = new Set(known.map((v) => v.videoId));
-      for (const videoId of videoIds) {
-        if (knownIds.has(videoId)) continue;
-        try {
-          await api.addVideo(`https://youtu.be/${videoId}`);
-        } catch (err) {
-          console.error(`Failed to reconcile video ${videoId}:`, err);
-          failed.push(videoId);
-        }
+    const manifestById = new Map();
+    if (Array.isArray(manifest)) {
+      for (const entry of manifest) {
+        if (entry && entry.videoId) manifestById.set(entry.videoId, entry);
       }
+    }
+
+    let known;
+    try {
+      const result = await api.listVideos();
+      known = result.videos;
     } catch (err) {
       console.error('Failed to reconcile session videos:', err);
+      return;
+    }
+    const knownIds = new Set(known.map((v) => v.videoId));
+    const missingIds = videoIds.filter((id) => !knownIds.has(id));
+    if (missingIds.length === 0) return;
+
+    const localMissing = [];
+    const youtubeMissing = [];
+    for (const videoId of missingIds) {
+      const entry = manifestById.get(videoId);
+      if (manifest && entry && entry.source === 'local') {
+        localMissing.push(entry);
+      } else {
+        youtubeMissing.push(videoId);
+      }
+    }
+
+    const failed = [];
+    for (const videoId of youtubeMissing) {
+      try {
+        await api.addVideo(`https://youtu.be/${videoId}`);
+      } catch (err) {
+        console.error(`Failed to reconcile video ${videoId}:`, err);
+        failed.push(videoId);
+      }
     }
     if (failed.length > 0) {
       showToast(t('toast.sessionImportVideosFailed', { count: failed.length }), 'warning');
+    }
+
+    if (localMissing.length === 0) return;
+
+    if (!file) {
+      // Nothing to restore from without a ZIP on hand (shouldn't normally be
+      // reachable -- a manifest only exists when a ZIP was just read -- kept
+      // as a defensive warn-only fallback).
+      const list = localMissing.map((e) => e.title || e.videoId).join(', ');
+      showToast(t('import.localSkipped', { count: localMissing.length, list }), 'warning');
+      return;
+    }
+
+    // confirm() can't relabel its buttons, so the prompt text itself spells
+    // out OK = Restore / Cancel = Skip (same precedent as the overwrite
+    // confirm above).
+    const promptList = localMissing.map((e) => e.title || e.videoId).join('\n');
+    const restore = window.confirm(t('import.localMissingPrompt', { list: promptList }));
+
+    if (!restore) {
+      const skippedList = localMissing.map((e) => e.title || e.videoId).join(', ');
+      showToast(t('import.localSkipped', { count: localMissing.length, list: skippedList }), 'warning');
+      return;
+    }
+
+    let restoredCount = 0;
+    const restoreFailed = [];
+    for (const entry of localMissing) {
+      try {
+        const bytes = await readZipEntryBytes(file, `audio/${entry.videoId}.opus`);
+        await api.restoreLocalAudio(entry.videoId, bytes, entry.title || entry.videoId);
+        restoredCount += 1;
+      } catch (err) {
+        console.error(`Failed to restore local media ${entry.videoId}:`, err);
+        restoreFailed.push(entry.title || entry.videoId);
+      }
+    }
+
+    showToast(
+      t('import.localRestored', { restored: restoredCount, total: localMissing.length }),
+      restoredCount === localMissing.length ? 'success' : 'warning',
+    );
+    if (restoreFailed.length > 0) {
+      showToast(t('import.localSkipped', { count: restoreFailed.length, list: restoreFailed.join(', ') }), 'warning');
     }
   }
 
@@ -200,7 +286,18 @@ export function createSessionManager(options = {}) {
       showToast(t('toast.sessionImported', { name: saved.name }), 'success');
       await refreshList(); // sets select.value from currentSession
       if (onSessionLoad) onSessionLoad(saved);
-      await reconcileSessionVideos(saved);
+
+      // media.json is optional -- only present in ZIPs exported after the
+      // media library was added. Its absence just means every missing id
+      // falls back to the plain YouTube reconcile flow.
+      let manifest = null;
+      try {
+        const manifestJson = await readZipEntryText(file, 'media.json');
+        manifest = JSON.parse(manifestJson);
+      } catch {
+        manifest = null;
+      }
+      await reconcileSessionVideos(saved, { file, manifest });
 
       return saved;
     } catch (err) {

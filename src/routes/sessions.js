@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import archiver from 'archiver';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { validateSession, sanitizeFilename } from '../utils/validation.js';
 import * as sessionStore from '../services/session-store.js';
 import * as videoStore from '../services/video-store.js';
+import { ffmpegToWav } from '../services/local-media.js';
 
 const router = Router();
 
@@ -73,16 +77,55 @@ router.get('/:name/export', async (req, res) => {
     archive.append(JSON.stringify(session, null, 2), { name: 'session.json' });
 
     const videoIds = [...new Set((session.pads || []).map((pad) => pad.videoId).filter(Boolean))];
-    for (const videoId of videoIds) {
-      if (await videoStore.exists(videoId)) {
-        archive.file(videoStore.getAudioFilePath(videoId), { name: `audio/${videoId}.opus` });
-      }
-    }
 
-    await archive.finalize();
+    // Response headers already went out with archive.pipe(res)'s first
+    // flush, so a mid-stream error can't be turned into a clean error
+    // response — the finally below is what guarantees the temp dir is
+    // cleaned up regardless (throw, client abort, or normal completion).
+    const tmpDir = await mkdtemp(join(tmpdir(), 'puma-export-'));
+    let aborted = false;
+    res.on('close', () => { aborted = true; });
+
+    try {
+      const manifest = [];
+      for (const videoId of videoIds) {
+        if (aborted) break;
+        if (!(await videoStore.exists(videoId))) continue;
+
+        const info = await videoStore.getInfo(videoId);
+        manifest.push({
+          videoId,
+          title: info?.title,
+          source: info?.source || 'youtube',
+          mediaKind: info?.mediaKind || 'video',
+          duration: info?.duration,
+        });
+
+        const opusPath = videoStore.getAudioFilePath(videoId);
+        archive.file(opusPath, { name: `audio/${videoId}.opus` });
+
+        const wavPath = join(tmpDir, `${videoId}.wav`);
+        const ok = await ffmpegToWav(opusPath, wavPath);
+        if (ok) {
+          archive.file(wavPath, { name: `audio/${videoId}.wav` });
+        }
+      }
+
+      archive.append(JSON.stringify(manifest, null, 2), { name: 'media.json' });
+      await archive.finalize();
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   } catch (err) {
     console.error('Failed to export session:', err.message);
-    res.status(500).json({ error: err.message });
+    // archive.pipe(res) may have already flushed headers before this throws
+    // (e.g. mkdtemp failing mid-stream) -- calling res.json() at that point
+    // would throw ERR_HTTP_HEADERS_SENT as an unhandled rejection.
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.destroy(err);
+    }
   }
 });
 

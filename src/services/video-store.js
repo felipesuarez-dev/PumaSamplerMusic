@@ -1,4 +1,5 @@
 import { readdir, stat, unlink, rename, access, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { config } from '../utils/config.js';
 
@@ -62,11 +63,39 @@ export async function saveInfo(videoId, info) {
     title: info.title || videoId,
     duration: info.duration || 0,
     sizeBytes: info.sizeBytes || 0,
+    // Defaults keep pre-existing YouTube-only sessions/entries readable:
+    // an info.json written before this field existed has neither key, so
+    // reads must resolve to the same 'youtube'/'video' behavior as before.
+    source: info.source || 'youtube',
+    mediaKind: info.mediaKind || 'video',
     ready: true,
     updatedAt: Date.now(),
   };
   await writeFile(infoPath, JSON.stringify(normalized, null, 2), 'utf8');
   return normalized;
+}
+
+const LOCAL_ID_LENGTH = 11;
+const LOCAL_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+
+function randomLocalId() {
+  const bytes = randomBytes(LOCAL_ID_LENGTH);
+  let id = '';
+  for (let i = 0; i < LOCAL_ID_LENGTH; i++) {
+    id += LOCAL_ID_ALPHABET[bytes[i] % LOCAL_ID_ALPHABET.length];
+  }
+  return id;
+}
+
+// Generates an 11-char id matching isValidMediaId (same shape as a YouTube
+// video id, on purpose — see validation.js), retrying against getInfo() on
+// the astronomically unlikely on-disk collision.
+export async function generateLocalId() {
+  let id = randomLocalId();
+  while (await getInfo(id)) {
+    id = randomLocalId();
+  }
+  return id;
 }
 
 export async function list() {
@@ -160,9 +189,13 @@ export async function removeOldestIfNeeded(requiredBytes) {
   }
 
   const videos = await list();
+  // Local uploads are never auto-evicted by the LRU cache — that cache
+  // exists to reclaim space from re-downloadable YouTube content, not to
+  // silently delete files the user explicitly uploaded.
+  const evictable = videos.filter((video) => video.source !== 'local');
   let freed = 0;
 
-  for (const video of [...videos].reverse()) {
+  for (const video of [...evictable].reverse()) {
     if (currentSize - freed + requiredBytes <= config.maxCacheBytes) {
       break;
     }
@@ -257,6 +290,21 @@ export async function finalizeVideo(videoId, videoSource, audioSource) {
 
   await rename(videoSource, finalVideo);
   await rename(audioSource, finalAudio);
+
+  try {
+    await rm(tempDir, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+}
+
+// Audio-only counterpart of finalizeVideo — a local audio upload (or a
+// restored opus from a session-export ZIP) has no mp4 to move.
+export async function finalizeAudioOnly(videoId, audioSourcePath) {
+  const finalAudio = getAudioFilePath(videoId);
+  const tempDir = getTempDir(videoId);
+
+  await rename(audioSourcePath, finalAudio);
 
   try {
     await rm(tempDir, { recursive: true, force: true });

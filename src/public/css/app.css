@@ -1486,6 +1486,49 @@ button.is-proxied {
   display: none;
 }
 
+/* Audio-only local media (no video track) shows a waveform instead of the
+   <video>/placeholder/time-overlay — see media-display.js's .audio-mode
+   toggle. #video-placeholder is targeted by ID (rather than by class, like
+   the two rules above) so this reliably outranks the adjacent-sibling rules
+   above regardless of whether a video src was ever set: both of those tie
+   with this rule on class/attribute count, but include the `video` element
+   itself, which would otherwise win the tiebreak. */
+.video-display.audio-mode video,
+.video-display.audio-mode .video-time-overlay {
+  display: none;
+}
+
+.video-display.audio-mode #video-placeholder {
+  display: none;
+}
+
+.video-display.audio-mode #center-waveform {
+  display: flex;
+}
+
+#center-waveform {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+#center-waveform .waveform-ruler {
+  width: 100%;
+  height: 22px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+#center-waveform canvas:not(.waveform-ruler) {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: block;
+}
+
 /* Loading overlay — shown (via .visible class, not the hidden attribute) while
    heavy/uncached media buffers. */
 .video-loading-overlay {
@@ -2132,11 +2175,103 @@ button.is-proxied {
   flex: 1;
 }
 
+/* YouTube/Local tab bar — reuses .slicer-mode-toggle/.slicer-mode-btn (see
+   further below) for the segmented pill look instead of its own styling. */
+.library-tab-bar {
+  margin-bottom: 14px;
+}
+
 .video-library {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* The class rule above sets an explicit display, which would otherwise beat
+   the [hidden] attribute (UA display:none has lower specificity). Restore it
+   so tab-switching (and the pad-editor rows below) can hide via [hidden]. */
+.video-library[hidden],
+.form-row[hidden] {
+  display: none;
+}
+
+.upload-row {
+  margin-bottom: 14px;
+}
+
+.upload-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.upload-picker:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.upload-picker:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.upload-picker.loading {
+  border-style: solid;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.upload-picker-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-picker-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.upload-file-size {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.media-kind-badge {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.media-kind-badge-video {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-light));
+  color: var(--accent);
+}
+
+.media-kind-badge-audio {
+  background: color-mix(in srgb, var(--success, #2ecc71) 18%, var(--surface-light));
+  color: var(--success, #2ecc71);
 }
 
 .video-search {
@@ -3096,10 +3231,14 @@ button.is-proxied {
 
 /* The takeover replaces the whole rail's normal content with its own
    header/waveform/results — hide the regular chrome instead of reparenting
-   or duplicating it. */
+   or duplicating it. .video-library matches both the YouTube and Local
+   panels (they share the class), and the tab bar + cache footer are listed
+   explicitly since the media library split them out from the panels. */
 .library-sidenav.slicer-takeover .library-sidenav-toggle,
 .library-sidenav.slicer-takeover > .library-sidenav-body > .library-sidenav-header,
-.library-sidenav.slicer-takeover > .library-sidenav-body > .video-library {
+.library-sidenav.slicer-takeover > .library-sidenav-body > .library-tab-bar,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .video-library,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .cache-footer {
   display: none;
 }
 

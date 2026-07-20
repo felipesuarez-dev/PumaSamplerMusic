@@ -146,7 +146,7 @@
         <div class="pads-sidenav-body auto-scroll" id="pads-sidenav-body">
           <div class="library-sidenav-header">
             <h3 class="panel-title" data-i18n="pads.toggleLabel">PADS</h3>
-            <button type="button" class="panel-swap-btn" id="pads-swap-btn" data-i18n-title="pads.swapTitle" title="Swap places with the Video Library" aria-label="Swap places with the Video Library"><span class="material-symbols-outlined">swap_horiz</span></button>
+            <button type="button" class="panel-swap-btn" id="pads-swap-btn" data-i18n-title="pads.swapTitle" title="Swap places with the Media Library" aria-label="Swap places with the Media Library"><span class="material-symbols-outlined">swap_horiz</span></button>
           </div>
           <div class="pad-area">
             <div class="pad-toolbar">
@@ -381,6 +381,13 @@
             <span class="loading-spinner loading-spinner-lg"></span>
             <p data-i18n="video.loading">Loading…</p>
           </div>
+          <!-- Shown instead of the <video> for audio-only media (local
+               uploads with no video track) — see media-display.js's
+               .audio-mode toggle on this container. -->
+          <div id="center-waveform">
+            <canvas id="center-waveform-ruler" class="waveform-ruler"></canvas>
+            <canvas id="center-waveform-canvas"></canvas>
+          </div>
         </div>
 
         <section class="panel collapsible-box" id="pad-editor-panel">
@@ -400,18 +407,23 @@
       </section>
 
       <aside class="library-sidenav" id="library-sidenav">
-        <button id="library-sidenav-toggle" class="library-sidenav-toggle collapse-toggle" data-i18n-title="library.toggleTitle" title="Toggle Video Library" aria-label="Toggle Video Library" aria-expanded="false" aria-controls="library-sidenav-body">
-          <span data-i18n="library.toggleLabel">Videos</span>
+        <button id="library-sidenav-toggle" class="library-sidenav-toggle collapse-toggle" data-i18n-title="library.toggleTitle" title="Toggle Media Library" aria-label="Toggle Media Library" aria-expanded="false" aria-controls="library-sidenav-body">
+          <span data-i18n="library.toggleLabel">MEDIA</span>
           <span class="chev">▾</span>
         </button>
 
         <div class="library-sidenav-body auto-scroll" id="library-sidenav-body">
           <div class="library-sidenav-header">
-            <h3 class="panel-title" data-i18n="panel.videoLibraryTitle">Video Library</h3>
+            <h3 class="panel-title" data-i18n="panel.videoLibraryTitle">Media Library</h3>
             <button type="button" class="panel-swap-btn" id="library-swap-btn" data-i18n-title="library.swapTitle" title="Swap places with PADS" aria-label="Swap places with PADS"><span class="material-symbols-outlined">swap_horiz</span></button>
           </div>
 
-          <div class="video-library">
+          <div class="library-tab-bar slicer-mode-toggle" role="group" aria-label="Media source">
+            <button type="button" class="slicer-mode-btn active" id="library-tab-youtube" aria-pressed="true" data-i18n="library.tabYouTube">YouTube</button>
+            <button type="button" class="slicer-mode-btn" id="library-tab-local" aria-pressed="false" data-i18n="library.tabLocal">Local</button>
+          </div>
+
+          <div class="video-library" id="library-panel-youtube">
             <form id="add-video-form" class="add-video-form">
               <input type="url" id="video-url" data-i18n-placeholder="video.urlPlaceholder" placeholder="https://youtube.com/watch?v=..." required>
               <div class="add-video-actions">
@@ -424,10 +436,27 @@
               <!-- Videos populated by JS -->
             </ul>
             <div class="video-pager" id="video-pager" hidden></div>
-            <div class="cache-footer">
-              <span class="cache-usage" id="cache-usage"></span>
-              <button type="button" class="btn btn-secondary btn-clear-cache" id="btn-clear-cache" data-i18n="video.clearCache">Clear cache</button>
+          </div>
+
+          <div class="video-library" id="library-panel-local" hidden>
+            <div class="upload-row">
+              <input type="file" id="local-upload-input" accept="audio/*,video/*" hidden>
+              <button type="button" class="upload-picker" id="upload-picker" aria-controls="local-upload-input">
+                <span class="upload-picker-text" id="upload-picker-text" data-i18n="upload.filePlaceholder">Upload a file…</span>
+                <span class="material-symbols-outlined upload-picker-icon">upload_file</span>
+              </button>
+              <div class="upload-file-size" id="upload-file-size" hidden></div>
             </div>
+            <input type="text" id="local-search" class="video-search" data-i18n-placeholder="local.searchPlaceholder" placeholder="Search local media…" autocomplete="off">
+            <ul id="local-media-list" class="video-list auto-scroll">
+              <!-- Local media populated by JS -->
+            </ul>
+            <div class="video-pager" id="local-pager" hidden></div>
+          </div>
+
+          <div class="cache-footer">
+            <span class="cache-usage" id="cache-usage"></span>
+            <button type="button" class="btn btn-secondary btn-clear-cache" id="btn-clear-cache" data-i18n="video.clearCache">Clear cache</button>
           </div>
 
           <div class="slicer-panel" id="slicer-panel">

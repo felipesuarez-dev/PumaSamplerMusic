@@ -20,6 +20,16 @@ export function sanitizeFilename(name) {
   return name.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+const MEDIA_ID_PATTERN = /^[a-zA-Z0-9_-]{11}$/;
+
+// Shared shape check for any media id (YouTube video id or generated local
+// media id — both are 11 chars of [A-Za-z0-9_-]). Used by validateSession
+// below and by the videos router to reject path-traversal payloads before
+// any filesystem path is built from req.params.id.
+export function isValidMediaId(id) {
+  return typeof id === 'string' && MEDIA_ID_PATTERN.test(id);
+}
+
 export function validateKey(key) {
   if (typeof key !== 'string' || key.length === 0 || key.length > 30) {
     return false;
@@ -85,7 +95,7 @@ export function validateSession(session) {
 
     if (!pad.videoId || typeof pad.videoId !== 'string') {
       errors.push(`videoId is required for pad ${pad.position || '?'}`);
-    } else if (!/^[a-zA-Z0-9_-]{11}$/.test(pad.videoId)) {
+    } else if (!isValidMediaId(pad.videoId)) {
       errors.push(`Invalid videoId for pad ${pad.position || '?'}`);
     }
 
