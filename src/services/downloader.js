@@ -123,7 +123,7 @@ export async function queueDownload(url, callbacks = {}) {
 }
 
 async function processQueue() {
-  const maxConcurrent = parseInt(process.env.MAX_CONCURRENT_DOWNLOADS || '2', 10);
+  const maxConcurrent = config.maxConcurrentDownloads;
 
   while (runningCount < maxConcurrent && queue.length > 0) {
     const item = queue.shift();

@@ -10,6 +10,19 @@ import { ffmpegToWav } from '../services/local-media.js';
 
 const router = Router();
 
+// Small hand-rolled concurrency pool: runs `worker` over `items` with at
+// most `limit` in flight at once. No new dependency needed for this.
+async function runPool(items, limit, worker) {
+  let i = 0;
+  async function next() {
+    while (i < items.length) {
+      const item = items[i++];
+      await worker(item);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next));
+}
+
 router.get('/', async (_req, res) => {
   try {
     const sessions = await sessionStore.list();
@@ -88,6 +101,7 @@ router.get('/:name/export', async (req, res) => {
 
     try {
       const manifest = [];
+      const exportable = [];
       for (const videoId of videoIds) {
         if (aborted) break;
         if (!(await videoStore.exists(videoId))) continue;
@@ -104,12 +118,20 @@ router.get('/:name/export', async (req, res) => {
         const opusPath = videoStore.getAudioFilePath(videoId);
         archive.file(opusPath, { name: `audio/${videoId}.opus` });
 
+        exportable.push({ videoId, opusPath });
+      }
+
+      // Bounded-concurrency WAV transcodes: entries land in the zip in
+      // completion order rather than strict sequential order, which is
+      // harmless since zip entry order isn't semantic.
+      await runPool(exportable, 2, async ({ videoId, opusPath }) => {
+        if (aborted) return;
         const wavPath = join(tmpDir, `${videoId}.wav`);
         const ok = await ffmpegToWav(opusPath, wavPath);
-        if (ok) {
+        if (ok && !aborted) {
           archive.file(wavPath, { name: `audio/${videoId}.wav` });
         }
-      }
+      });
 
       archive.append(JSON.stringify(manifest, null, 2), { name: 'media.json' });
       await archive.finalize();

@@ -14,7 +14,6 @@ const router = Router();
 
 // Mirrors downloader's MAX_CONCURRENT_DOWNLOADS pattern: without a cap, N
 // simultaneous uploads means N concurrent ffmpeg processes with no ceiling.
-const MAX_CONCURRENT_UPLOADS = 2;
 let activeUploads = 0;
 
 // Runs before ANY /:id* route handler builds a filesystem path. Closes the
@@ -75,7 +74,7 @@ router.post('/', async (req, res) => {
 });
 
 router.post('/upload', async (req, res) => {
-  if (activeUploads >= MAX_CONCURRENT_UPLOADS) {
+  if (activeUploads >= config.maxConcurrentUploads) {
     return res.status(429).json({ error: 'Too many concurrent uploads, please retry shortly' });
   }
   activeUploads++;

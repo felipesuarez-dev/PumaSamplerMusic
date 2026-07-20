@@ -19,6 +19,7 @@ let server;
 let baseUrl;
 
 const VIDEO_ID = 'fixtureOpus'; // 11 chars, matches isValidMediaId shape
+const MULTI_VIDEO_IDS = ['fixtureOpu2', 'fixtureOpu3', 'fixtureOpu4']; // 11 chars each
 
 function run(cmd, args) {
   return new Promise((resolve, reject) => {
@@ -58,6 +59,31 @@ before(async () => {
   await sessionStore.save({
     name: 'export-test-session',
     pads: [{ position: 1, key: 'a', start: 0, end: 0.3, videoId: VIDEO_ID }],
+  });
+
+  for (const [index, videoId] of MULTI_VIDEO_IDS.entries()) {
+    const multiOpusPath = videoStore.getAudioFilePath(videoId);
+    await run('ffmpeg', ['-y', '-f', 'lavfi', '-i', 'anullsrc=r=8000:cl=mono', '-t', '0.3', '-c:a', 'libopus', multiOpusPath]);
+    const multiSizeBytes = (await stat(multiOpusPath)).size;
+
+    await videoStore.saveInfo(videoId, {
+      title: `Fixture Track ${index + 1}`,
+      duration: 0.3,
+      sizeBytes: multiSizeBytes,
+      source: 'local',
+      mediaKind: 'audio',
+    });
+  }
+
+  await sessionStore.save({
+    name: 'export-multi-test-session',
+    pads: MULTI_VIDEO_IDS.map((videoId, index) => ({
+      position: index + 1,
+      key: String.fromCharCode('a'.charCodeAt(0) + index),
+      start: 0,
+      end: 0.3,
+      videoId,
+    })),
   });
 
   const app = express();
@@ -100,4 +126,22 @@ test('GET /:name/export produces a zip with session.json, media.json, opus and w
     mediaKind: 'audio',
     duration: 0.3,
   }]);
+});
+
+test('GET /:name/export produces opus and wav entries for every video with bounded-concurrency transcoding', async () => {
+  const res = await fetch(`${baseUrl}/api/sessions/export-multi-test-session/export`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'application/zip');
+
+  const zipPath = join(workDir, 'export-multi.zip');
+  const buffer = Buffer.from(await res.arrayBuffer());
+  await writeFile(zipPath, buffer);
+
+  const listing = await run('unzip', ['-l', zipPath]);
+  assert.match(listing, /session\.json/);
+  assert.match(listing, /media\.json/);
+  for (const videoId of MULTI_VIDEO_IDS) {
+    assert.match(listing, new RegExp(`audio/${videoId}\\.opus`));
+    assert.match(listing, new RegExp(`audio/${videoId}\\.wav`));
+  }
 });

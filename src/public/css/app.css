@@ -1462,7 +1462,7 @@ button.is-proxied {
 
 .video-placeholder {
   position: absolute;
-  display: none;
+  display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
@@ -1478,27 +1478,19 @@ button.is-proxied {
   opacity: 0.25;
 }
 
-.video-display video:not([src]) + .video-placeholder {
-  display: flex;
-}
-
-.video-display video[src] + .video-placeholder {
+/* .has-media is toggled by video-display.js's load()/unload() once a src is
+   actually assigned/cleared, so the placeholder shows only while nothing is
+   loaded (audio-mode also hides it in favor of the waveform below). */
+.video-display.has-media .video-placeholder,
+.video-display.audio-mode .video-placeholder {
   display: none;
 }
 
 /* Audio-only local media (no video track) shows a waveform instead of the
    <video>/placeholder/time-overlay — see media-display.js's .audio-mode
-   toggle. #video-placeholder is targeted by ID (rather than by class, like
-   the two rules above) so this reliably outranks the adjacent-sibling rules
-   above regardless of whether a video src was ever set: both of those tie
-   with this rule on class/attribute count, but include the `video` element
-   itself, which would otherwise win the tiebreak. */
+   toggle. */
 .video-display.audio-mode video,
 .video-display.audio-mode .video-time-overlay {
-  display: none;
-}
-
-.video-display.audio-mode #video-placeholder {
   display: none;
 }
 

@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process';
 import { stat, rm } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import * as videoStore from './video-store.js';
+import { runMediaProcess } from './media-process.js';
 
 // Thrown when ffprobe finds no audio stream in the uploaded file. Everything
 // downstream (audio-engine, slicer, export) assumes the opus file exists, so
@@ -15,41 +15,22 @@ export class NoAudioStreamError extends Error {
   }
 }
 
-function runFfprobe(filePath) {
-  return new Promise((resolve, reject) => {
-    const args = ['-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', filePath];
-    const proc = spawn('ffprobe', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
+async function runFfprobe(filePath) {
+  const args = ['-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', filePath];
+  const { code, stdout, stderr } = await runMediaProcess('ffprobe', args, { captureStdout: true });
 
-    proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(stderr.trim() || `ffprobe exited with code ${code}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (err) {
-        reject(new Error(`Failed to parse ffprobe output: ${err.message}`));
-      }
-    });
-
-    proc.on('error', (err) => reject(err));
-  });
+  if (code !== 0) {
+    throw new Error(stderr.trim() || `ffprobe exited with code ${code}`);
+  }
+  try {
+    return JSON.parse(stdout);
+  } catch (err) {
+    throw new Error(`Failed to parse ffprobe output: ${err.message}`);
+  }
 }
 
 function runFfmpeg(args) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-
-    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    proc.on('close', (code) => resolve({ code, stderr }));
-    proc.on('error', (err) => reject(err));
-  });
+  return runMediaProcess('ffmpeg', args);
 }
 
 // Probes an arbitrary media file for the facts processUpload/restore-audio
@@ -97,23 +78,17 @@ function stripExtension(name) {
 // session export route). Never throws — returns false on ffmpeg failure so
 // the caller can skip that one wav while the opus in the archive is
 // unaffected.
-export function ffmpegToWav(inputPath, outputPath) {
-  return new Promise((resolve) => {
-    const proc = spawn('ffmpeg', ['-y', '-i', inputPath, outputPath], { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = '';
-
-    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    proc.on('close', (code) => {
-      if (code !== 0) {
-        console.error(`ffmpeg wav transcode failed for ${inputPath}:`, stderr.trim());
-      }
-      resolve(code === 0);
-    });
-    proc.on('error', (err) => {
-      console.error(`ffmpeg wav transcode failed for ${inputPath}:`, err.message);
-      resolve(false);
-    });
-  });
+export async function ffmpegToWav(inputPath, outputPath) {
+  try {
+    const { code, stderr } = await runFfmpeg(['-y', '-i', inputPath, outputPath]);
+    if (code !== 0) {
+      console.error(`ffmpeg wav transcode failed for ${inputPath}:`, stderr.trim());
+    }
+    return code === 0;
+  } catch (err) {
+    console.error(`ffmpeg wav transcode failed for ${inputPath}:`, err.message);
+    return false;
+  }
 }
 
 // Pipeline for a freshly uploaded file: probe -> (remux+extract | transcode)

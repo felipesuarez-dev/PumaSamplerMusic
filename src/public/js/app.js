@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { createStore, buildKeyCombo, formatTime, parseTime } from './state.js';
+import { createStore, buildKeyCombo, formatTime, parseTime, isLocalMedia, mediaKindOf } from './state.js';
 import { createWebSocketClient } from './ws-client.js';
 import { createAudioEngine } from './audio-engine.js';
 import { createVideoDisplay } from './video-display.js';
@@ -1490,15 +1490,15 @@ function renderPadEditor(position, data) {
   }
 
   const videos = store.get().videos;
-  const youtubeVideos = videos.filter((v) => (v.source || 'youtube') !== 'local');
-  const localAudioMedia = videos.filter((v) => (v.source || 'youtube') === 'local' && (v.mediaKind || 'video') === 'audio');
-  const localVideoMedia = videos.filter((v) => (v.source || 'youtube') === 'local' && (v.mediaKind || 'video') === 'video');
+  const youtubeVideos = videos.filter((v) => !isLocalMedia(v));
+  const localAudioMedia = videos.filter((v) => isLocalMedia(v) && mediaKindOf(v) === 'audio');
+  const localVideoMedia = videos.filter((v) => isLocalMedia(v) && mediaKindOf(v) === 'video');
 
   // Source type isn't stored on the pad itself -- it's inferred from whatever
   // media its videoId currently points to, so it stays correct even if that
   // media's source/mediaKind changed since the pad was last saved.
   const currentMediaInfo = data?.videoId ? getMediaInfo(data.videoId) : null;
-  const sourceType = data?.videoId ? ((currentMediaInfo?.source || 'youtube') === 'local' ? 'local' : 'youtube') : '';
+  const sourceType = data?.videoId ? (isLocalMedia(currentMediaInfo) ? 'local' : 'youtube') : '';
 
   // With no local media there's nothing to choose between, so the source-type
   // selector is omitted entirely and the editor behaves like the original
@@ -2146,47 +2146,116 @@ function classifyErrorBucket({ code, error } = {}) {
 }
 
 function renderVideoList() {
-  const list = document.getElementById('video-list');
+  renderMediaList({
+    listId: 'video-list',
+    pagerId: 'video-pager',
+    idPrefix: 'video',
+    filterFn: (v) => !isLocalMedia(v),
+    pageSize: VIDEO_PAGE_SIZE,
+    emptyKey: 'video.emptySearch',
+    emptyRequiresNonEmptyAll: true,
+    getPage: () => videoPage,
+    setPage: (page) => { videoPage = page; },
+    getSearchTerm: () => videoSearchTerm,
+    includeActiveDownloads: true,
+    includeKindBadge: false,
+    rerender: renderVideoList,
+  });
+}
+
+// Local media tab — shares renderMediaList/renderPager with the YouTube tab
+// below; includeActiveDownloads/includeKindBadge gate the bits that differ
+// (uploads are processed synchronously by the server, so there's no
+// in-progress/queued state to render for them).
+function renderLocalList() {
+  renderMediaList({
+    listId: 'local-media-list',
+    pagerId: 'local-pager',
+    idPrefix: 'local',
+    filterFn: (v) => isLocalMedia(v),
+    pageSize: LOCAL_PAGE_SIZE,
+    emptyKey: 'local.empty',
+    emptyRequiresNonEmptyAll: false,
+    getPage: () => localPage,
+    setPage: (page) => { localPage = page; },
+    getSearchTerm: () => localSearchTerm,
+    includeActiveDownloads: false,
+    includeKindBadge: true,
+    rerender: renderLocalList,
+  });
+}
+
+// Shared renderer behind renderVideoList/renderLocalList above. Handles
+// filtering, search, pagination and per-item markup/listeners; getPage/
+// setPage/getSearchTerm are closures over each tab's own module-level
+// bindings (videoPage/localPage/...), not snapshots, so pager clicks and
+// re-renders stay in sync with the live state.
+function renderMediaList({
+  listId,
+  pagerId,
+  idPrefix,
+  filterFn,
+  pageSize,
+  emptyKey,
+  emptyRequiresNonEmptyAll,
+  getPage,
+  setPage,
+  getSearchTerm,
+  includeActiveDownloads,
+  includeKindBadge,
+  rerender,
+}) {
+  const list = document.getElementById(listId);
+  if (!list) return;
   const { videos: allVideos, activeDownloads } = store.get();
-  const videos = allVideos.filter((v) => (v.source || 'youtube') !== 'local');
+  const videos = allVideos.filter(filterFn);
   list.innerHTML = '';
 
-  // The store already carries completed downloads once they're saved, but
-  // activeDownloads keeps a 'ready' entry around for a 30s cleanup window
-  // (see downloader.js). Without this dedupe, that entry would render as a
-  // ghost second row (videoId as title) until the window closes.
-  const readyIds = new Set(videos.map((v) => v.videoId));
+  // Base items are always 'ready' -- the store only carries completed media.
+  const readyVideos = videos.map((v) => ({ ...v, status: 'ready' }));
 
-  const all = [
-    ...videos.map((v) => ({ ...v, status: 'ready' })),
-    ...activeDownloads.filter((a) => !readyIds.has(a.videoId)).map((a) => ({
-      videoId: a.videoId,
-      title: a.videoId,
-      duration: 0,
-      status: a.status,
-      progress: a.progress,
-      error: a.error,
-      code: a.code,
-      url: a.url,
-      retryAttempt: a.retryAttempt,
-      retryMax: a.retryMax,
-    })),
-  ];
+  let all;
+  if (includeActiveDownloads) {
+    // The store already carries completed downloads once they're saved, but
+    // activeDownloads keeps a 'ready' entry around for a 30s cleanup window
+    // (see downloader.js). Without this dedupe, that entry would render as a
+    // ghost second row (videoId as title) until the window closes.
+    const readyIds = new Set(videos.map((v) => v.videoId));
+    all = [
+      ...readyVideos,
+      ...activeDownloads.filter((a) => !readyIds.has(a.videoId)).map((a) => ({
+        videoId: a.videoId,
+        title: a.videoId,
+        duration: 0,
+        status: a.status,
+        progress: a.progress,
+        error: a.error,
+        code: a.code,
+        url: a.url,
+        retryAttempt: a.retryAttempt,
+        retryMax: a.retryMax,
+      })),
+    ];
+  } else {
+    all = readyVideos;
+  }
 
   // Filter by the search term (matches title or videoId) before paginating, so
-  // the pager reflects the filtered set. videoSearchTerm is already lowercased.
-  const filtered = videoSearchTerm
-    ? all.filter((v) => (v.title || v.videoId).toLowerCase().includes(videoSearchTerm))
+  // the pager reflects the filtered set. The search term is already lowercased.
+  const searchTerm = getSearchTerm();
+  const filtered = searchTerm
+    ? all.filter((v) => (v.title || v.videoId).toLowerCase().includes(searchTerm))
     : all;
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / VIDEO_PAGE_SIZE));
-  videoPage = Math.min(videoPage, totalPages);
-  const pageItems = filtered.slice((videoPage - 1) * VIDEO_PAGE_SIZE, videoPage * VIDEO_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.min(getPage(), totalPages);
+  setPage(page);
+  const pageItems = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  if (pageItems.length === 0 && all.length > 0) {
+  if (pageItems.length === 0 && (!emptyRequiresNonEmptyAll || all.length > 0)) {
     const empty = document.createElement('li');
     empty.className = 'video-empty';
-    empty.textContent = t('video.emptySearch');
+    empty.textContent = t(emptyKey);
     list.appendChild(empty);
   }
 
@@ -2194,41 +2263,52 @@ function renderVideoList() {
     const li = document.createElement('li');
     li.className = 'video-item';
 
-    let statusHtml;
-    if (video.status === 'downloading') {
-      statusHtml = `<span class="status downloading"><span class="loading-spinner"></span>${Math.round(video.progress || 0)}%</span>`;
-    } else if (video.status === 'extracting') {
-      // Same spinner treatment as downloading/retrying — this is a normal
-      // in-progress phase (local audio extraction), not a failure.
-      statusHtml = `<span class="status extracting"><span class="loading-spinner"></span>${t('video.status.extracting')}</span>`;
-    } else if (video.status === 'retrying') {
-      // Same spinner as 'downloading' — this reads as self-healing in
-      // progress, not as a failure, so it deliberately avoids the error look.
-      const label = t('video.statusRetrying', { attempt: video.retryAttempt, max: video.retryMax });
-      statusHtml = `<span class="status retrying"><span class="loading-spinner"></span>${label}</span>`;
-    } else if (video.status === 'error') {
-      const fullError = video.error || '';
-      const bucket = classifyErrorBucket(video);
-      const label = bucket === 'rateLimit' ? t('video.errorRateLimit')
-        : bucket === 'blocked' ? t('video.errorBlocked')
-        : bucket === 'unavailable' ? t('video.errorUnavailable')
-        : t('video.errorGeneric');
-      // Retry doesn't apply to UNAVAILABLE — that bucket is a terminal
-      // classification (private/removed/region-locked), retrying it just
-      // re-runs the same failure.
-      const retryBtn = bucket === 'unavailable'
-        ? ''
-        : `<button type="button" class="link-btn" data-retry-cta>${t('common.retry')}</button>`;
-      statusHtml = `
-        <div class="video-item-status-wrap">
-          <span class="status error" title="${escapeHtml(fullError)}">${label}</span>
-          ${retryBtn}
-        </div>
-      `;
-    } else {
-      statusHtml = `<span class="status ${video.status}">${statusLabel(video.status)}</span>`;
+    let statusHtml = '';
+    if (includeActiveDownloads) {
+      if (video.status === 'downloading') {
+        statusHtml = `<span class="status downloading"><span class="loading-spinner"></span>${Math.round(video.progress || 0)}%</span>`;
+      } else if (video.status === 'extracting') {
+        // Same spinner treatment as downloading/retrying — this is a normal
+        // in-progress phase (local audio extraction), not a failure.
+        statusHtml = `<span class="status extracting"><span class="loading-spinner"></span>${t('video.status.extracting')}</span>`;
+      } else if (video.status === 'retrying') {
+        // Same spinner as 'downloading' — this reads as self-healing in
+        // progress, not as a failure, so it deliberately avoids the error look.
+        const label = t('video.statusRetrying', { attempt: video.retryAttempt, max: video.retryMax });
+        statusHtml = `<span class="status retrying"><span class="loading-spinner"></span>${label}</span>`;
+      } else if (video.status === 'error') {
+        const fullError = video.error || '';
+        const bucket = classifyErrorBucket(video);
+        const label = bucket === 'rateLimit' ? t('video.errorRateLimit')
+          : bucket === 'blocked' ? t('video.errorBlocked')
+          : bucket === 'unavailable' ? t('video.errorUnavailable')
+          : t('video.errorGeneric');
+        // Retry doesn't apply to UNAVAILABLE — that bucket is a terminal
+        // classification (private/removed/region-locked), retrying it just
+        // re-runs the same failure.
+        const retryBtn = bucket === 'unavailable'
+          ? ''
+          : `<button type="button" class="link-btn" data-retry-cta>${t('common.retry')}</button>`;
+        statusHtml = `
+          <div class="video-item-status-wrap">
+            <span class="status error" title="${escapeHtml(fullError)}">${label}</span>
+            ${retryBtn}
+          </div>
+        `;
+      } else {
+        statusHtml = `<span class="status ${video.status}">${statusLabel(video.status)}</span>`;
+      }
     }
 
+    let kindBadgeHtml = '';
+    if (includeKindBadge) {
+      const kind = mediaKindOf(video);
+      const kindLabel = t(kind === 'audio' ? 'local.kindAudio' : 'local.kindVideo');
+      kindBadgeHtml = `<span class="media-kind-badge media-kind-badge-${kind}">${escapeHtml(kindLabel)}</span>`;
+    }
+
+    // Slicing works off the extracted opus regardless of kind, so both audio
+    // and video local media get the Slice button, same as YouTube videos.
     const sliceBtnHtml = video.status === 'ready'
       ? `<button type="button" class="video-slice-btn" data-slice-id="${video.videoId}" data-i18n-title="slicer.openTitle" title="${t('slicer.openTitle')}"><span class="material-symbols-outlined">content_cut</span></button>`
       : '';
@@ -2239,6 +2319,7 @@ function renderVideoList() {
         <span class="video-item-meta">${formatTime(video.duration || 0)} · ${video.videoId}</span>
       </div>
       ${statusHtml}
+      ${kindBadgeHtml}
       ${sliceBtnHtml}
       <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
     `;
@@ -2294,7 +2375,7 @@ function renderVideoList() {
         audio.unload(video.videoId);
         slicer.handleVideoRemoved(video.videoId);
         showToast(t('toast.videoRemoved', { name: video.title || video.videoId }), 'success');
-        videoPage = 1;
+        setPage(1);
         await refreshVideos();
       } catch (err) {
         showToast(t('toast.removeFailed', { message: err.message }), 'error');
@@ -2304,11 +2385,11 @@ function renderVideoList() {
     list.appendChild(li);
   }
 
-  renderVideoPager(totalPages);
+  renderPager({ pagerId, idPrefix, getPage, setPage, totalPages, rerender });
 }
 
-function renderVideoPager(totalPages) {
-  const pager = document.getElementById('video-pager');
+function renderPager({ pagerId, idPrefix, getPage, setPage, totalPages, rerender }) {
+  const pager = document.getElementById(pagerId);
   if (!pager) return;
 
   if (totalPages <= 1) {
@@ -2317,141 +2398,26 @@ function renderVideoPager(totalPages) {
     return;
   }
 
+  const page = getPage();
   pager.hidden = false;
   pager.innerHTML = `
-    <button type="button" class="btn btn-secondary btn-pager" id="video-page-prev" title="${t('video.pagePrev')}" aria-label="${t('video.pagePrev')}" ${videoPage <= 1 ? 'disabled' : ''}>&lsaquo;</button>
-    <span class="video-pager-info">${t('video.pageInfo', { page: videoPage, total: totalPages })}</span>
-    <button type="button" class="btn btn-secondary btn-pager" id="video-page-next" title="${t('video.pageNext')}" aria-label="${t('video.pageNext')}" ${videoPage >= totalPages ? 'disabled' : ''}>&rsaquo;</button>
+    <button type="button" class="btn btn-secondary btn-pager" id="${idPrefix}-page-prev" title="${t('video.pagePrev')}" aria-label="${t('video.pagePrev')}" ${page <= 1 ? 'disabled' : ''}>&lsaquo;</button>
+    <span class="video-pager-info">${t('video.pageInfo', { page, total: totalPages })}</span>
+    <button type="button" class="btn btn-secondary btn-pager" id="${idPrefix}-page-next" title="${t('video.pageNext')}" aria-label="${t('video.pageNext')}" ${page >= totalPages ? 'disabled' : ''}>&rsaquo;</button>
   `;
 
-  const prevBtn = document.getElementById('video-page-prev');
-  const nextBtn = document.getElementById('video-page-next');
+  const prevBtn = document.getElementById(`${idPrefix}-page-prev`);
+  const nextBtn = document.getElementById(`${idPrefix}-page-next`);
   if (prevBtn) {
     prevBtn.addEventListener('click', () => {
-      videoPage = Math.max(1, videoPage - 1);
-      renderVideoList();
+      setPage(Math.max(1, getPage() - 1));
+      rerender();
     });
   }
   if (nextBtn) {
     nextBtn.addEventListener('click', () => {
-      videoPage = Math.min(totalPages, videoPage + 1);
-      renderVideoList();
-    });
-  }
-}
-
-// Local media tab — clone of renderVideoList/renderVideoPager without the
-// activeDownloads branch (uploads are processed synchronously by the server,
-// so there's no in-progress/queued state to render for them).
-function renderLocalList() {
-  const list = document.getElementById('local-media-list');
-  if (!list) return;
-  const { videos } = store.get();
-  list.innerHTML = '';
-
-  const localVideos = videos.filter((v) => (v.source || 'youtube') === 'local');
-  const filtered = localSearchTerm
-    ? localVideos.filter((v) => (v.title || v.videoId).toLowerCase().includes(localSearchTerm))
-    : localVideos;
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / LOCAL_PAGE_SIZE));
-  localPage = Math.min(localPage, totalPages);
-  const pageItems = filtered.slice((localPage - 1) * LOCAL_PAGE_SIZE, localPage * LOCAL_PAGE_SIZE);
-
-  if (pageItems.length === 0) {
-    const empty = document.createElement('li');
-    empty.className = 'video-empty';
-    empty.textContent = t('local.empty');
-    list.appendChild(empty);
-  }
-
-  for (const video of pageItems) {
-    const li = document.createElement('li');
-    li.className = 'video-item';
-
-    const kind = video.mediaKind === 'audio' ? 'audio' : 'video';
-    const kindLabel = t(kind === 'audio' ? 'local.kindAudio' : 'local.kindVideo');
-    // Slicing works off the extracted opus regardless of kind, so both audio
-    // and video local media get the Slice button, same as YouTube videos.
-    const sliceBtnHtml = `<button type="button" class="video-slice-btn" data-slice-id="${video.videoId}" data-i18n-title="slicer.openTitle" title="${t('slicer.openTitle')}"><span class="material-symbols-outlined">content_cut</span></button>`;
-
-    li.innerHTML = `
-      <div class="video-item-info">
-        <span class="video-item-title">${escapeHtml(video.title || video.videoId)}</span>
-        <span class="video-item-meta">${formatTime(video.duration || 0)} · ${video.videoId}</span>
-      </div>
-      <span class="media-kind-badge media-kind-badge-${kind}">${escapeHtml(kindLabel)}</span>
-      ${sliceBtnHtml}
-      <button data-id="${video.videoId}" title="${t('common.remove')}">×</button>
-    `;
-
-    // Same rationale as renderVideoList: attacker-controlled title, set via
-    // the DOM API instead of string interpolation.
-    const infoEl = li.querySelector('.video-item-info');
-    if (infoEl) {
-      infoEl.classList.add('has-tip');
-      const detail = [video.title || video.videoId, formatTime(video.duration || 0)];
-      if (video.sizeBytes) detail.push(formatBytes(video.sizeBytes));
-      detail.push(video.videoId);
-      infoEl.dataset.tooltip = detail.join('\n');
-    }
-
-    const sliceBtn = li.querySelector('[data-slice-id]');
-    if (sliceBtn) {
-      sliceBtn.addEventListener('click', () => {
-        if (librarySidenavToggle && librarySidenavToggle.isCollapsed()) librarySidenavToggle.expand();
-        slicer.openForVideo(video.videoId);
-      });
-    }
-
-    li.querySelector('button[data-id]').addEventListener('click', async () => {
-      try {
-        await api.deleteVideo(video.videoId);
-        audio.unload(video.videoId);
-        slicer.handleVideoRemoved(video.videoId);
-        showToast(t('toast.videoRemoved', { name: video.title || video.videoId }), 'success');
-        localPage = 1;
-        await refreshVideos();
-      } catch (err) {
-        showToast(t('toast.removeFailed', { message: err.message }), 'error');
-      }
-    });
-
-    list.appendChild(li);
-  }
-
-  renderLocalPager(totalPages);
-}
-
-function renderLocalPager(totalPages) {
-  const pager = document.getElementById('local-pager');
-  if (!pager) return;
-
-  if (totalPages <= 1) {
-    pager.hidden = true;
-    pager.innerHTML = '';
-    return;
-  }
-
-  pager.hidden = false;
-  pager.innerHTML = `
-    <button type="button" class="btn btn-secondary btn-pager" id="local-page-prev" title="${t('video.pagePrev')}" aria-label="${t('video.pagePrev')}" ${localPage <= 1 ? 'disabled' : ''}>&lsaquo;</button>
-    <span class="video-pager-info">${t('video.pageInfo', { page: localPage, total: totalPages })}</span>
-    <button type="button" class="btn btn-secondary btn-pager" id="local-page-next" title="${t('video.pageNext')}" aria-label="${t('video.pageNext')}" ${localPage >= totalPages ? 'disabled' : ''}>&rsaquo;</button>
-  `;
-
-  const prevBtn = document.getElementById('local-page-prev');
-  const nextBtn = document.getElementById('local-page-next');
-  if (prevBtn) {
-    prevBtn.addEventListener('click', () => {
-      localPage = Math.max(1, localPage - 1);
-      renderLocalList();
-    });
-  }
-  if (nextBtn) {
-    nextBtn.addEventListener('click', () => {
-      localPage = Math.min(totalPages, localPage + 1);
-      renderLocalList();
+      setPage(Math.min(totalPages, getPage() + 1));
+      rerender();
     });
   }
 }

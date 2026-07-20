@@ -27,6 +27,14 @@ export function formatTime(seconds) {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
 }
 
+export function isLocalMedia(v) {
+  return (v?.source || 'youtube') === 'local';
+}
+
+export function mediaKindOf(v) {
+  return v?.mediaKind === 'audio' ? 'audio' : 'video';
+}
+
 export function buildKeyCombo(e) {
   const modifiers = [];
   if (e.ctrlKey) modifiers.push('ctrl');

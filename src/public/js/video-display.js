@@ -51,6 +51,7 @@ export function createVideoDisplay(element, options = {}) {
     video.src = url;
     video.load();
     currentVideoId = videoId;
+    if (displayEl) displayEl.classList.add('has-media');
   }
 
   function unload() {
@@ -61,6 +62,7 @@ export function createVideoDisplay(element, options = {}) {
     clearStopTimer();
     video.removeEventListener('timeupdate', updateOverlay);
     overlay.textContent = '00:00.000';
+    if (displayEl) displayEl.classList.remove('has-media');
   }
 
   function clearStopTimer() {
@@ -178,6 +180,5 @@ export function createVideoDisplay(element, options = {}) {
     pause,
     stop,
     getVideo: () => video,
-    getVideoId: () => currentVideoId,
   };
 }

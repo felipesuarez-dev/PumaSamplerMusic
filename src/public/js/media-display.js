@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { createWaveform } from './waveform.js';
+import { mediaKindOf } from './state.js';
 
 // Facade that routes the shared center display between the <video> element
 // (YouTube videos and local video uploads) and a waveform (local audio-only
@@ -35,8 +36,7 @@ export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerC
   let clockPlaying = false;
 
   function kindOf(videoId) {
-    const info = getMediaInfo(videoId);
-    return info && info.mediaKind === 'audio' ? 'audio' : 'video';
+    return mediaKindOf(getMediaInfo(videoId));
   }
 
   function stopClock() {

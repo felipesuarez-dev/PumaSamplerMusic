@@ -1,15 +1,20 @@
 const API_BASE = '';
 
+async function throwIfNotOk(response) {
+  if (response.ok) return;
+  const error = await response.json().catch(() => ({ error: response.statusText }));
+  const err = new Error(error.error || `HTTP ${response.status}`);
+  err.status = response.status;
+  throw err;
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.error || `HTTP ${response.status}`);
-  }
+  await throwIfNotOk(response);
 
   if (response.status === 204) return null;
   return response.json();
@@ -61,12 +66,7 @@ export const api = {
       method: 'POST',
       body: formData,
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: response.statusText }));
-      const err = new Error(error.error || `HTTP ${response.status}`);
-      err.status = response.status;
-      throw err;
-    }
+    await throwIfNotOk(response);
     return response.json();
   },
 
@@ -79,12 +79,7 @@ export const api = {
       headers: { 'Content-Type': 'application/octet-stream' },
       body: bytes,
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: response.statusText }));
-      const err = new Error(error.error || `HTTP ${response.status}`);
-      err.status = response.status;
-      throw err;
-    }
+    await throwIfNotOk(response);
     return response.json();
   },
 

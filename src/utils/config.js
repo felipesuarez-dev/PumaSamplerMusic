@@ -6,6 +6,7 @@ const port = parseInt(env.PORT || '4070', 10);
 const dataDir = env.DATA_DIR || '/data';
 const maxCacheGb = parseFloat(env.MAX_CACHE_GB || '10');
 const maxConcurrentDownloads = parseInt(env.MAX_CONCURRENT_DOWNLOADS || '2', 10);
+const maxConcurrentUploads = parseInt(env.MAX_CONCURRENT_UPLOADS || '2', 10);
 const maxUploadMb = parseInt(env.MAX_UPLOAD_MB || '4096', 10);
 
 const videosDir = join(dataDir, 'videos');
@@ -28,6 +29,7 @@ export const config = {
   sessionsDir,
   maxCacheBytes: Math.floor(maxCacheGb * 1024 * 1024 * 1024),
   maxConcurrentDownloads,
+  maxConcurrentUploads,
   maxUploadMb,
   nodeEnv: env.NODE_ENV || 'development',
   allowedHosts: (env.ALLOWED_HOSTS || '').split(',').filter(Boolean),
