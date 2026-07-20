@@ -121,17 +121,21 @@ router.get('/:name/export', async (req, res) => {
         exportable.push({ videoId, opusPath });
       }
 
-      // Bounded-concurrency WAV transcodes: entries land in the zip in
-      // completion order rather than strict sequential order, which is
-      // harmless since zip entry order isn't semantic.
+      // Bounded-concurrency WAV transcodes, but wavs are appended to the zip
+      // in original `exportable` order (completion order can differ under
+      // concurrency) once the whole pool has settled, so the archive byte
+      // layout is deterministic for a given session.
+      const wavPaths = new Map();
       await runPool(exportable, 2, async ({ videoId, opusPath }) => {
         if (aborted) return;
         const wavPath = join(tmpDir, `${videoId}.wav`);
         const ok = await ffmpegToWav(opusPath, wavPath);
-        if (ok && !aborted) {
-          archive.file(wavPath, { name: `audio/${videoId}.wav` });
-        }
+        if (ok && !aborted) wavPaths.set(videoId, wavPath);
       });
+      for (const { videoId } of exportable) {
+        const wavPath = wavPaths.get(videoId);
+        if (wavPath) archive.file(wavPath, { name: `audio/${videoId}.wav` });
+      }
 
       archive.append(JSON.stringify(manifest, null, 2), { name: 'media.json' });
       await archive.finalize();

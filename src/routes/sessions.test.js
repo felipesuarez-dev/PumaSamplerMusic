@@ -144,4 +144,11 @@ test('GET /:name/export produces opus and wav entries for every video with bound
     assert.match(listing, new RegExp(`audio/${videoId}\\.opus`));
     assert.match(listing, new RegExp(`audio/${videoId}\\.wav`));
   }
+
+  // wav entries appear in session (pad) order, not transcode-completion order,
+  // so a given session always produces a byte-identical archive layout.
+  const wavPositions = MULTI_VIDEO_IDS.map((id) => listing.indexOf(`audio/${id}.wav`));
+  for (let i = 1; i < wavPositions.length; i++) {
+    assert.ok(wavPositions[i] > wavPositions[i - 1], 'wav entries should be in session order');
+  }
 });
