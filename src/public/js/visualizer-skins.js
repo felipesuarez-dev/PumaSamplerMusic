@@ -61,14 +61,19 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
 
   // Rough loudness 0..1 from frequency data, used to speed up the vinyl and
   // energize the bubbles. Returns 0 when there's no analyser/signal yet.
+  // Averages only the lower ~60% of bins: the upper bins sit near zero for
+  // most material, and including them (as this used to) diluted the mean so
+  // heavily that bubbles never spawned. drawBars restricts bins for the same
+  // reason.
   function loudness() {
     const analyser = getAnalyser();
     if (!analyser) return 0;
     ensureBuffers(analyser);
     analyser.getByteFrequencyData(freqData);
+    const usable = Math.max(1, Math.floor(freqData.length * 0.6));
     let sum = 0;
-    for (let i = 0; i < freqData.length; i++) sum += freqData[i];
-    return sum / (freqData.length * 255);
+    for (let i = 0; i < usable; i++) sum += freqData[i];
+    return sum / (usable * 255);
   }
 
   function clear() {
@@ -90,9 +95,16 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
       ensureBuffers(analyser);
       analyser.getByteTimeDomainData(timeData);
       const slice = w / timeData.length;
+      // Amplitude gain: real program material (post compressor+soft-clip) peaks
+      // well below full scale, so the raw -1..1 sample drawn at h/2.4 looked
+      // tiny/flat. Multiply by GAIN and clamp so loud transients fill the height
+      // without spilling off-canvas.
+      const GAIN = 2.8;
+      const amp = h * 0.45;
       for (let i = 0; i < timeData.length; i++) {
         const v = timeData[i] / 128 - 1; // -1..1
-        const y = h / 2 + (v * h) / 2.4;
+        const scaled = Math.max(-1, Math.min(1, v * GAIN));
+        const y = h / 2 + scaled * amp;
         const x = i * slice;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
@@ -138,9 +150,12 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     const dpr = window.devicePixelRatio || 1;
     clear();
     const level = loudness();
-    // Spawn a few bubbles proportional to loudness, capped so it never floods.
-    if (level > 0.04 && particles.length < 80) {
-      const n = Math.round(level * 4);
+    // Spawn bubbles proportional to loudness, capped so it never floods. Gate
+    // low and guarantee at least one bubble once it passes: the old
+    // Math.round(level*4) truncated to 0 until level>=0.125, so bubbles almost
+    // never appeared.
+    if (level > 0.02 && particles.length < 80) {
+      const n = Math.max(1, Math.round(level * 8));
       for (let i = 0; i < n; i++) {
         particles.push({
           x: Math.random() * w,
