@@ -2,6 +2,7 @@ import { formatTime } from './state.js';
 import { t } from './i18n.js';
 import { buildPeakCache as buildPeakCacheFromSamples, selectLevel as selectPeakLevel } from './waveform-peaks.js';
 import { MIN_SLICE_SECONDS } from './slicer-core.js';
+import { WAVEFORM_STYLE_EVENT } from './waveform-style.js';
 
 // Deferral window between a single click's audition and it being cancelled
 // by a following dblclick (see onClick/onDblClick).
@@ -48,6 +49,13 @@ export function createWaveform(canvas, options = {}) {
   // IN/OUT labels, handles) and its hit-testing are disabled entirely. Used
   // by views that only need waveform + markers, no start/end selection.
   const selectionEnabled = options.selectionEnabled !== false;
+
+  // Render style for the waveform body: 'classic' (per-pixel min/max envelope,
+  // the original look) or 'bars' (thicker rounded vertical bars with gaps, a
+  // Serato/Ableton-style blocky look). Only the body rendering differs -- the
+  // selection overlay, markers, playhead and hit-testing are identical. Swapped
+  // live via setStyle() from the Settings toggle.
+  let style = options.style === 'bars' ? 'bars' : 'classic';
 
   // Opt-in marker drag/add/delete interactivity, off by default so every
   // existing consumer (the pad editor's Trim tab) is completely unaffected.
@@ -399,6 +407,15 @@ export function createWaveform(canvas, options = {}) {
 
     if (samples.length === 0) return;
 
+    // Bars style: aggregate the per-pixel envelope into thicker rounded bars
+    // with gaps. Same {yMin,yMax} extents, just drawn as filled pills instead
+    // of the per-pixel stroke. Returns early so the classic fill/stroke below
+    // is skipped.
+    if (style === 'bars') {
+      drawWaveformBars(samples, yOffset, color);
+      return;
+    }
+
     // Fill (if provided)
     if (fillColor) {
       ctx.fillStyle = fillColor;
@@ -423,6 +440,49 @@ export function createWaveform(canvas, options = {}) {
       ctx.lineTo(s.x, s.yMax);
     }
     ctx.stroke();
+  }
+
+  // Bars renderer: groups the per-pixel samples into fixed-width bars separated
+  // by gaps, each drawn as a rounded pill spanning that bar's min..max envelope
+  // (a minimum height keeps near-silence visible). Falls back to a plain rect
+  // where ctx.roundRect isn't available.
+  function drawWaveformBars(samples, yOffset, color) {
+    const dpr = window.devicePixelRatio || 1;
+    const barW = Math.max(2, Math.round(2 * dpr));
+    const gap = Math.max(1, Math.round(dpr));
+    const stepPx = barW + gap;
+    const minH = 1.5 * dpr;
+    const radius = barW / 2;
+    const canRound = typeof ctx.roundRect === 'function';
+
+    ctx.fillStyle = color;
+    for (let i = 0; i < samples.length; i += stepPx) {
+      // Widest envelope across the columns this bar covers: topmost yMin and
+      // bottommost yMax, so a bar never under-represents a transient it spans.
+      let top = Infinity;
+      let bottom = -Infinity;
+      const cols = Math.min(barW, samples.length - i);
+      for (let j = i; j < i + cols; j++) {
+        if (samples[j].yMin < top) top = samples[j].yMin;
+        if (samples[j].yMax > bottom) bottom = samples[j].yMax;
+      }
+      if (top === Infinity) continue;
+      let h = bottom - top;
+      let y = top;
+      if (h < minH) {
+        // Center a minimum-height bar on the midpoint of the (tiny) envelope.
+        y = (top + bottom) / 2 - minH / 2;
+        h = minH;
+      }
+      const x = samples[i].x;
+      ctx.beginPath();
+      if (canRound) {
+        ctx.roundRect(x, y, barW, h, radius);
+      } else {
+        ctx.rect(x, y, barW, h);
+      }
+      ctx.fill();
+    }
   }
 
   function drawHandle(x, height) {
@@ -748,6 +808,7 @@ export function createWaveform(canvas, options = {}) {
     canvas.removeEventListener('click', onClick);
     canvas.removeEventListener('dblclick', onDblClick);
     canvas.removeEventListener('contextmenu', onContextMenu);
+    window.removeEventListener(WAVEFORM_STYLE_EVENT, onStyleEvent);
     clearTimeout(clickTimer);
   }
 
@@ -919,6 +980,23 @@ export function createWaveform(canvas, options = {}) {
   window.addEventListener('resize', resize);
   resize();
 
+  // Live style swap for the Settings toggle: no-op (no redraw) when unchanged
+  // so a broadcast to every instance is cheap. Only the body render differs, so
+  // a plain draw() is enough -- no buffer/peak-cache work.
+  function setStyle(next) {
+    const normalized = next === 'bars' ? 'bars' : 'classic';
+    if (normalized === style) return;
+    style = normalized;
+    draw();
+  }
+
+  // Self-subscribe to the app-wide style broadcast so a Settings change
+  // re-styles every live instance without the modal holding references to them.
+  function onStyleEvent(e) {
+    setStyle(e.detail);
+  }
+  window.addEventListener(WAVEFORM_STYLE_EVENT, onStyleEvent);
+
   return {
     setAudioBuffer,
     setLoading,
@@ -926,6 +1004,7 @@ export function createWaveform(canvas, options = {}) {
     setSegment,
     setPlayhead,
     setMarkers,
+    setStyle,
     getSegment,
     getZoomLevel,
     zoomIn: () => zoomInAt(canvas.width / 2),

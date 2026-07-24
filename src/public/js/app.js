@@ -6,6 +6,7 @@ import { createVideoDisplay } from './video-display.js';
 import { createMediaDisplay } from './media-display.js';
 import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
+import { getWaveformStyle, setWaveformStyle } from './waveform-style.js';
 import { createSessionManager } from './session.js';
 import { createSlicer } from './slicer.js';
 import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
@@ -369,6 +370,13 @@ function openSettingsModal() {
       </div>
     </div>
     <div class="settings-section">
+      <label class="settings-label" for="settings-waveform-style">${t('settings.waveformStyle')}</label>
+      <select id="settings-waveform-style" class="session-modal-select">
+        <option value="classic">${t('settings.waveformClassic')}</option>
+        <option value="bars">${t('settings.waveformBars')}</option>
+      </select>
+    </div>
+    <div class="settings-section">
       <label class="settings-toggle-row">
         <input type="checkbox" id="settings-autosave-enabled">
         <span class="settings-label">${t('settings.autosaveLabel')}</span>
@@ -423,6 +431,12 @@ function openSettingsModal() {
     localStorage.setItem(AUTOSAVE_INTERVAL_STORAGE, String(n));
     autosaveIntervalEl.value = String(n);
     refreshAutosave();
+  });
+
+  const waveformStyleEl = modal.querySelector('#settings-waveform-style');
+  waveformStyleEl.value = getWaveformStyle();
+  waveformStyleEl.addEventListener('change', () => {
+    setWaveformStyle(waveformStyleEl.value);
   });
 
   const valueEl = modal.querySelector('#settings-font-value');
@@ -1651,6 +1665,7 @@ function renderPadEditor(position, data) {
   if (editorWaveform) editorWaveform.destroy();
   editorWaveform = createWaveform(canvas, {
     rulerCanvas,
+    style: getWaveformStyle(),
     onChange: (segment) => {
       const startInput = document.getElementById('pad-start');
       const endInput = document.getElementById('pad-end');

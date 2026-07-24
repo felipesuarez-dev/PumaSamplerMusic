@@ -1,5 +1,6 @@
 import { api } from './api.js';
 import { createWaveform } from './waveform.js';
+import { getWaveformStyle } from './waveform-style.js';
 import { mediaKindOf } from './state.js';
 
 // Facade that routes the shared center display between the <video> element
@@ -20,6 +21,7 @@ export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerC
   const waveform = createWaveform(waveformCanvas, {
     rulerCanvas,
     selectionEnabled: false,
+    style: getWaveformStyle(),
   });
 
   let currentMediaId = null;

@@ -1,4 +1,5 @@
 import { createWaveform } from './waveform.js';
+import { getWaveformStyle } from './waveform-style.js';
 import { formatTime } from './state.js';
 import {
   boundariesToSlices,
@@ -167,6 +168,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     if (waveform) return waveform;
     waveform = createWaveform(canvas, {
       selectionEnabled: false,
+      style: getWaveformStyle(),
       rulerCanvas,
       markersEditable: true,
       markerMinGapSeconds: MIN_SLICE_SECONDS,
