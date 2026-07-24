@@ -3250,8 +3250,15 @@ button.is-proxied {
 .library-sidenav.slicer-takeover #slicer-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   height: 100%;
+}
+
+/* Help "?" next to the panel title. flex:0 0 auto so it keeps its size beside
+   the flex:1 video title; the shared tooltip positioner already flips the
+   bubble below (.tip-below) when the icon sits too close to the top edge. */
+.slicer-title-help {
+  flex: 0 0 auto;
 }
 
 .slicer-panel-header {
@@ -3396,6 +3403,30 @@ button.is-proxied {
   gap: 10px;
   flex-shrink: 0;
   flex-wrap: wrap;
+}
+
+/* Restore [hidden] on the controls rows: the author `display:flex` above beats
+   the UA `[hidden]{display:none}` (same-origin specificity is irrelevant across
+   origins, author wins), so without this BOTH the onset and grid rows render at
+   once — stacking two rows and pushing Generate + results off the panel. This
+   mirrors the same [hidden] restore already done for .video-library/.form-row
+   above (see the note near .video-library[hidden]). */
+.slicer-controls-row[hidden] {
+  display: none;
+}
+
+/* Compact two-line grid for the onset/grid controls so the sensitivity slider
+   (and method/divisions selects) don't stretch across the full-width takeover
+   or wrap into 3 lines. The slider is capped instead of flex:1-greedy, so the
+   Generate button and Beats/Divisions stay close instead of being pushed down.
+   `:not([hidden])` keeps the id-specificity rule from re-showing a hidden row. */
+#slicer-onset-controls:not([hidden]),
+#slicer-grid-controls:not([hidden]) {
+  display: grid;
+  grid-template-columns: max-content minmax(110px, 300px) max-content max-content;
+  align-items: center;
+  justify-content: start;
+  gap: 8px 12px;
 }
 
 .slicer-controls-row label {

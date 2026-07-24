@@ -170,6 +170,9 @@ export const dictionaries = {
     'tip.slicerPreviewVolume': 'Volume of the slice preview inside the Auto-Slicer only, from 0% to 200%. Does not affect how PADs play live.',
     'tip.slicerGrid': 'Grid mode: slices the audio into equal parts from a beat count and divisions per beat, instead of detecting onsets. Also shows the implied BPM for that beat count over the track length.',
     'tip.slicerMethod': 'How transients are detected. Spectral Flux works well overall; High Frequency favors bright hits like cymbals and hi-hats; Energy favors loud, percussive hits.',
+    'tip.slicerModeOnsets': 'Onsets mode: automatically detects transients (hits, notes, drum onsets) and places a slice boundary at each one. Best for drum breaks and rhythmic material.',
+    'tip.slicerModeGrid': 'Grid mode: divides the track into equal slices from a beat count and divisions per beat, ignoring the actual audio content. Best for loops with a known, steady tempo.',
+    'tip.slicerHelp': 'How to use the Auto-Slicer:\n1. The waveform of the loaded track is shown at the top.\n2. Pick a mode — Onsets (auto-detect hits) or Grid (equal beat divisions).\n3. In Onsets, adjust Sensitivity and Method; in Grid, set Beats and Divisions.\n4. Press Generate Slices to place the slice boundaries.\n5. Fine-tune on the waveform: drag a marker to move it, double-click to add one, right-click to delete it.\n6. Preview each slice, then assign slices to PADs — or start a new session with the selected slices.',
 
     'cache.confirmTitle': 'Clear the video cache?',
     'cache.confirmBody': 'This deletes every downloaded video and audio file. Sessions that reference them are not deleted — the next time you play or load one, its videos will download again automatically.',
@@ -520,6 +523,9 @@ export const dictionaries = {
     'tip.slicerPreviewVolume': 'Volumen de la previsualización de cortes dentro del Auto-Slicer únicamente, de 0% a 200%. No afecta cómo se reproducen los PADs en vivo.',
     'tip.slicerGrid': 'Modo cuadrícula: corta el audio en partes iguales a partir de una cantidad de beats y divisiones por beat, en lugar de detectar onsets. También muestra el BPM implícito para esa cantidad de beats en la duración de la pista.',
     'tip.slicerMethod': 'Cómo se detectan los transitorios. Spectral Flux funciona bien en general; Altas frecuencias favorece golpes brillantes como platillos y hi-hats; Energía favorece golpes fuertes y percusivos.',
+    'tip.slicerModeOnsets': 'Modo Onsets: detecta automáticamente los transitorios (golpes, notas, ataques de batería) y coloca un límite de corte en cada uno. Ideal para breaks de batería y material rítmico.',
+    'tip.slicerModeGrid': 'Modo Cuadrícula: divide la pista en cortes iguales a partir de una cantidad de beats y divisiones por beat, sin mirar el contenido del audio. Ideal para loops con un tempo conocido y estable.',
+    'tip.slicerHelp': 'Cómo usar el Auto-Slicer:\n1. Arriba se muestra la forma de onda de la pista cargada.\n2. Elegí un modo — Onsets (detecta golpes) o Cuadrícula (divisiones iguales por beat).\n3. En Onsets ajustá Sensibilidad y Método; en Cuadrícula definí Beats y Divisiones.\n4. Presioná Generar cortes para colocar los límites de los cortes.\n5. Ajustá en la forma de onda: arrastrá un marcador para moverlo, doble clic para agregar uno, clic derecho para borrarlo.\n6. Previsualizá cada corte y asigná los cortes a los PADs — o creá una nueva sesión con los cortes seleccionados.',
 
     'cache.confirmTitle': '¿Vaciar el caché de videos?',
     'cache.confirmBody': 'Esto elimina todos los archivos de video y audio descargados. Las sesiones que los referencian no se eliminan: la próxima vez que reproduzcas o cargues una, sus videos se volverán a descargar automáticamente.',

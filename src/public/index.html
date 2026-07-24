@@ -459,7 +459,8 @@
 
           <div class="slicer-panel" id="slicer-panel">
             <div class="slicer-panel-header">
-              <h3 class="panel-title" data-i18n="slicer.title">Auto-Slicer</h3>
+              <h3 class="panel-title" data-i18n="slicer.title" id="slicer-panel-title">Auto-Slicer</h3>
+              <span class="help-icon slicer-title-help" id="slicer-help-icon" data-i18n-tooltip="tip.slicerHelp" data-tooltip="How to use the Auto-Slicer: load a track, pick Onsets or Grid, adjust the controls, press Generate Slices, fine-tune the markers on the waveform, then assign the slices to PADs.">?</span>
               <span class="slicer-video-title" id="slicer-video-title"></span>
               <div class="slicer-preview-volume-group">
                 <label for="slicer-preview-volume" class="slicer-preview-volume-label" data-i18n="slicer.previewVolume">Preview volume</label>
@@ -476,8 +477,8 @@
             </div>
 
             <div class="slicer-mode-toggle" role="group" aria-label="Slicing mode">
-              <button type="button" class="slicer-mode-btn active" id="slicer-mode-onsets" aria-pressed="true" data-i18n="slicer.modeOnsets">Onsets</button>
-              <button type="button" class="slicer-mode-btn" id="slicer-mode-grid" aria-pressed="false" data-i18n="slicer.modeGrid">Grid</button>
+              <button type="button" class="slicer-mode-btn active has-tip" id="slicer-mode-onsets" aria-pressed="true" data-i18n="slicer.modeOnsets" data-i18n-tooltip="tip.slicerModeOnsets" data-tooltip="Onsets mode: automatically detects transients and places a slice boundary at each one.">Onsets</button>
+              <button type="button" class="slicer-mode-btn has-tip" id="slicer-mode-grid" aria-pressed="false" data-i18n="slicer.modeGrid" data-i18n-tooltip="tip.slicerModeGrid" data-tooltip="Grid mode: divides the track into equal slices from a beat count and divisions per beat.">Grid</button>
             </div>
 
             <div class="slicer-controls-row" id="slicer-onset-controls">
