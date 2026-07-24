@@ -3568,18 +3568,23 @@ button.is-proxied {
   display: none;
 }
 
-/* Compact two-line grid for the onset/grid controls so the sensitivity slider
-   (and method/divisions selects) don't stretch across the full-width takeover
-   or wrap into 3 lines. The slider is capped instead of flex:1-greedy, so the
-   Generate button and Beats/Divisions stay close instead of being pushed down.
-   `:not([hidden])` keeps the id-specificity rule from re-showing a hidden row. */
-#slicer-onset-controls:not([hidden]),
-#slicer-grid-controls:not([hidden]) {
-  display: grid;
-  grid-template-columns: max-content minmax(110px, 300px) max-content max-content;
+/* One-line controls: the active mode's controls row and the Generate button
+   share a single row (the takeover is full-width, so there's room). Wraps only
+   if the viewport is genuinely too narrow. In Manual Chops every child is
+   [hidden] so the line collapses to zero height. */
+.slicer-controls-line {
+  display: flex;
   align-items: center;
-  justify-content: start;
-  gap: 8px 12px;
+  gap: 20px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Sensitivity slider is capped (not flex:1-greedy) so the method select and the
+   Generate button sit to its right on the same line. */
+#slicer-onset-controls input[type='range'] {
+  flex: 0 0 140px;
+  min-width: 140px;
 }
 
 .slicer-controls-row label {
@@ -3593,12 +3598,24 @@ button.is-proxied {
   min-width: 120px;
 }
 
-.slicer-sensitivity-value {
-  min-width: 38px;
+/* Editable sensitivity value: a small number input styled like the old
+   read-only span but typeable for an exact value. */
+input.slicer-sensitivity-value {
+  flex: 0 0 auto;
+  width: 56px;
   text-align: right;
   font-family: ui-monospace, 'SF Mono', Menlo, monospace;
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  outline: none;
+}
+
+input.slicer-sensitivity-value:focus {
+  border-color: var(--accent);
 }
 
 /* Method select (onset row) and divisions select (grid row) -- fixed width

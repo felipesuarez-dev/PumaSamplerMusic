@@ -363,8 +363,20 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     togglePreview(index, currentSlices[index]);
   }
 
+  // Reflects the slider into the editable number input. Setting .value
+  // programmatically does not fire 'input', so this never loops with
+  // onSensitivityNumberInput below.
   function updateSensitivityLabel() {
-    sensitivityValueEl.textContent = parseFloat(sensitivityInput.value).toFixed(2);
+    sensitivityValueEl.value = parseFloat(sensitivityInput.value).toFixed(2);
+  }
+
+  // The reverse direction: typing an exact value drives the slider (the range
+  // stays the source of truth read by startAnalysis). Clamped to [0, 1].
+  function onSensitivityNumberInput() {
+    const v = parseFloat(sensitivityValueEl.value);
+    if (!Number.isFinite(v)) return;
+    const clamped = Math.max(0, Math.min(1, v));
+    sensitivityInput.value = String(clamped);
   }
 
   // Updates the module-scoped gain from the slider, refreshes the value
@@ -1074,6 +1086,12 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   closeBtn.addEventListener('click', close);
 
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
+  sensitivityValueEl.addEventListener('input', onSensitivityNumberInput);
+  // Normalize/clamp the displayed number when the user commits (blur/enter).
+  sensitivityValueEl.addEventListener('change', () => {
+    onSensitivityNumberInput();
+    updateSensitivityLabel();
+  });
   previewVolumeInput.addEventListener('input', updatePreviewVolume);
 
   modeOnsetsBtn.addEventListener('click', () => {
