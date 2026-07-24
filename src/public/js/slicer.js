@@ -145,9 +145,14 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // onset analysis result). Cleared on video switch and on close teardown.
   let undoStack = [];
 
-  // One analysis per video, cached in memory only (never per-pad) — reopening
-  // a video restores its last generated slices without re-running the worker.
-  const cache = new Map(); // videoId -> { sensitivity, slices, mode, gridBeats, gridDivisions, method }
+  // One analysis per video PER ENTRY MODE, cached in memory only (never
+  // per-pad) — reopening restores that mode's last state without re-running the
+  // worker. Keyed by videoId + entryMode so Auto-Slicer and Manual Chops keep
+  // fully independent state (cuts made in one never leak into the other).
+  const cache = new Map(); // `${videoId}::${entryMode}` -> { sensitivity, slices, mode, gridBeats, gridDivisions, method }
+  function cacheKey(videoId = currentVideoId, mode = entryMode) {
+    return `${videoId}::${mode}`;
+  }
   let currentSlices = [];
   const assignedMap = new Map(); // sliceIndex -> pad position, for the currently open video
   const selected = new Set(); // sliceIndex, for "new session with selected"
@@ -198,7 +203,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   function applyBoundaries(boundaries) {
     currentSlices = boundariesToSlices(boundaries);
     if (waveform) waveform.setMarkers(boundaries);
-    cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), slices: currentSlices });
+    cache.set(cacheKey(), { ...(cache.get(cacheKey()) || {}), slices: currentSlices });
     renderResultsList();
   }
 
@@ -260,7 +265,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // push time the cache still holds the config that produced the CURRENT
     // (pre-mutation) currentSlices, since every push site's cache.set(...)
     // with the NEW config runs AFTER this call (generateGrid, finishAnalysis).
-    const prev = cache.get(currentVideoId) || {};
+    const prev = cache.get(cacheKey()) || {};
     undoStack.push({
       slices: currentSlices.map((s) => ({ ...s })),
       indexShifting,
@@ -314,12 +319,12 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // otherwise stay stale in the cache until the next Generate, so a video
     // switch away and back wouldn't reflect the undone state.
     if (currentVideoId) {
-      const merged = { ...(cache.get(currentVideoId) || {}), mode: entry.mode };
+      const merged = { ...(cache.get(cacheKey()) || {}), mode: entry.mode };
       if (entry.gridBeats !== undefined) merged.gridBeats = entry.gridBeats;
       if (entry.gridDivisions !== undefined) merged.gridDivisions = entry.gridDivisions;
       if (entry.sensitivity !== undefined) merged.sensitivity = entry.sensitivity;
       if (entry.method !== undefined) merged.method = entry.method;
-      cache.set(currentVideoId, merged);
+      cache.set(cacheKey(), merged);
     }
   }
 
@@ -385,7 +390,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     modeGridBtn.classList.toggle('active', isGrid);
     modeGridBtn.setAttribute('aria-pressed', String(isGrid));
     if (currentVideoId) {
-      cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), mode });
+      cache.set(cacheKey(), { ...(cache.get(cacheKey()) || {}), mode });
     }
   }
 
@@ -479,8 +484,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     assignedMap.clear();
     selected.clear();
     applyBoundaries(computeGridBoundaries(duration, beats, divisions));
-    cache.set(currentVideoId, {
-      ...(cache.get(currentVideoId) || {}),
+    cache.set(cacheKey(), {
+      ...(cache.get(cacheKey()) || {}),
       mode: 'grid',
       gridBeats: beats,
       gridDivisions: divisions,
@@ -759,7 +764,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // fresh Generate restores whatever slices (possibly none) existed prior
     // to this analysis.
     pushUndoSnapshot(true);
-    cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), sensitivity, method, slices });
+    cache.set(cacheKey(), { ...(cache.get(cacheKey()) || {}), sensitivity, method, slices });
     currentSlices = slices;
     assignedMap.clear();
     selected.clear();
@@ -908,7 +913,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // a video whose only history is a grid generate has gridBeats/gridDivisions
     // but no sensitivity/method, and vice versa -- so each is only applied to
     // its input when actually defined, instead of stamping "undefined" in.
-    const cached = cache.get(videoId);
+    const cached = cache.get(cacheKey(videoId));
     sensitivityInput.value = String(cached && cached.sensitivity !== undefined ? cached.sensitivity : DEFAULT_SENSITIVITY);
     methodSelect.value = cached && cached.method !== undefined ? cached.method : DEFAULT_METHOD;
     gridBeatsInput.value = String(cached && cached.gridBeats !== undefined ? cached.gridBeats : DEFAULT_GRID_BEATS);
@@ -1054,7 +1059,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // the waveform/preview, so this just skips the usual close-confirm modal
   // and tells the user why the panel closed.
   function handleVideoRemoved(videoId) {
-    cache.delete(videoId);
+    // Both entry-mode variants must go — the video's audio is gone server-side.
+    cache.delete(cacheKey(videoId, 'auto'));
+    cache.delete(cacheKey(videoId, 'manual'));
     if (open && currentVideoId === videoId) {
       performClose();
       showToast(t('slicer.videoRemoved'), 'info');
