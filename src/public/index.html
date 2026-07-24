@@ -476,7 +476,7 @@
               <canvas id="slicer-waveform-canvas"></canvas>
             </div>
 
-            <div class="slicer-mode-toggle" role="group" aria-label="Slicing mode">
+            <div class="slicer-mode-toggle" id="slicer-mode-toggle" role="group" aria-label="Slicing mode">
               <button type="button" class="slicer-mode-btn active has-tip" id="slicer-mode-onsets" aria-pressed="true" data-i18n="slicer.modeOnsets" data-i18n-tooltip="tip.slicerModeOnsets" data-tooltip="Onsets mode: automatically detects transients and places a slice boundary at each one.">Onsets</button>
               <button type="button" class="slicer-mode-btn has-tip" id="slicer-mode-grid" aria-pressed="false" data-i18n="slicer.modeGrid" data-i18n-tooltip="tip.slicerModeGrid" data-tooltip="Grid mode: divides the track into equal slices from a beat count and divisions per beat.">Grid</button>
             </div>
@@ -514,9 +514,14 @@
               <span class="help-icon" data-i18n-tooltip="tip.slicerGrid" data-tooltip="Slices the audio into equal parts from a beat count and divisions per beat, instead of detecting onsets. Also shows the implied BPM for that beat count over the track length.">?</span>
             </div>
 
-            <div class="slicer-controls-row">
+            <div class="slicer-controls-row" id="slicer-generate-row">
               <button type="button" class="btn" id="slicer-generate-btn" data-i18n="slicer.generate">Generate Slices</button>
               <span class="help-icon" data-i18n-tooltip="tip.slicerGenerate" data-tooltip="Runs onset detection on the full track in the background and marks a slice boundary at each detected onset.">?</span>
+            </div>
+
+            <div class="slicer-controls-row slicer-manual-controls" id="slicer-manual-controls" hidden>
+              <span class="slicer-manual-hint" data-i18n="chops.hint">Double-click the waveform to add a cut · drag to move · right-click to delete</span>
+              <button type="button" class="btn btn-secondary" id="slicer-manual-clear" data-i18n="chops.clearCuts">Clear cuts</button>
             </div>
 
             <div class="slicer-overlay" id="slicer-overlay">

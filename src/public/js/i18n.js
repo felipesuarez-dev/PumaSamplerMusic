@@ -173,6 +173,11 @@ export const dictionaries = {
     'tip.slicerModeOnsets': 'Onsets mode: automatically detects transients (hits, notes, drum onsets) and places a slice boundary at each one. Best for drum breaks and rhythmic material.',
     'tip.slicerModeGrid': 'Grid mode: divides the track into equal slices from a beat count and divisions per beat, ignoring the actual audio content. Best for loops with a known, steady tempo.',
     'tip.slicerHelp': 'How to use the Auto-Slicer:\n1. The waveform of the loaded track is shown at the top.\n2. Pick a mode — Onsets (auto-detect hits) or Grid (equal beat divisions).\n3. In Onsets, adjust Sensitivity and Method; in Grid, set Beats and Divisions.\n4. Press Generate Slices to place the slice boundaries.\n5. Fine-tune on the waveform: drag a marker to move it, double-click to add one, right-click to delete it.\n6. Preview each slice, then assign slices to PADs — or start a new session with the selected slices.',
+    'chops.title': 'Manual Chops',
+    'chops.hint': 'Double-click the waveform to add a cut · drag to move · right-click to delete',
+    'chops.clearCuts': 'Clear cuts',
+    'chops.openTitle': 'Chop this track by hand — place your own cuts and load them onto the PADs',
+    'tip.chopsHelp': 'What is a chop?\nA chop (or slice) is a section of the track cut out between two points and mapped to a PAD, so each PAD plays a different piece of the audio.\n\nHow to chop by hand:\n1. The whole track starts as a single slice.\n2. Double-click the waveform where you want a cut — a good cut sits right on the transient (the attack of a hit or note).\n3. Drag a cut to fine-tune it; each cut snaps to the nearest zero-crossing so slices don\'t click.\n4. Right-click a cut to remove it. Ctrl+Z undoes the last change.\n5. Preview each chop, then assign it to a PAD — or start a new session with the selected chops.',
 
     'cache.confirmTitle': 'Clear the video cache?',
     'cache.confirmBody': 'This deletes every downloaded video and audio file. Sessions that reference them are not deleted — the next time you play or load one, its videos will download again automatically.',
@@ -526,6 +531,11 @@ export const dictionaries = {
     'tip.slicerModeOnsets': 'Modo Onsets: detecta automáticamente los transitorios (golpes, notas, ataques de batería) y coloca un límite de corte en cada uno. Ideal para breaks de batería y material rítmico.',
     'tip.slicerModeGrid': 'Modo Cuadrícula: divide la pista en cortes iguales a partir de una cantidad de beats y divisiones por beat, sin mirar el contenido del audio. Ideal para loops con un tempo conocido y estable.',
     'tip.slicerHelp': 'Cómo usar el Auto-Slicer:\n1. Arriba se muestra la forma de onda de la pista cargada.\n2. Elegí un modo — Onsets (detecta golpes) o Cuadrícula (divisiones iguales por beat).\n3. En Onsets ajustá Sensibilidad y Método; en Cuadrícula definí Beats y Divisiones.\n4. Presioná Generar cortes para colocar los límites de los cortes.\n5. Ajustá en la forma de onda: arrastrá un marcador para moverlo, doble clic para agregar uno, clic derecho para borrarlo.\n6. Previsualizá cada corte y asigná los cortes a los PADs — o creá una nueva sesión con los cortes seleccionados.',
+    'chops.title': 'Chops manuales',
+    'chops.hint': 'Doble clic en la forma de onda para agregar un corte · arrastrá para mover · clic derecho para borrar',
+    'chops.clearCuts': 'Limpiar cortes',
+    'chops.openTitle': 'Chopear esta pista a mano — colocá tus propios cortes y cargalos a los PADs',
+    'tip.chopsHelp': '¿Qué es un chop?\nUn chop (o corte) es una sección de la pista recortada entre dos puntos y asignada a un PAD, para que cada PAD reproduzca una parte distinta del audio.\n\nCómo chopear a mano:\n1. La pista entera arranca como un solo corte.\n2. Doble clic en la forma de onda donde querés un corte — un buen corte cae justo sobre el transitorio (el ataque de un golpe o nota).\n3. Arrastrá un corte para ajustarlo; cada corte se pega al cruce por cero más cercano para que los cortes no clickeen.\n4. Clic derecho sobre un corte para quitarlo. Ctrl+Z deshace el último cambio.\n5. Previsualizá cada chop y asignalo a un PAD — o creá una nueva sesión con los chops seleccionados.',
 
     'cache.confirmTitle': '¿Vaciar el caché de videos?',
     'cache.confirmBody': 'Esto elimina todos los archivos de video y audio descargados. Las sesiones que los referencian no se eliminan: la próxima vez que reproduzcas o cargues una, sus videos se volverán a descargar automáticamente.',

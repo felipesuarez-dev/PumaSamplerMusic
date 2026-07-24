@@ -89,6 +89,14 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const resultsHintEl = document.getElementById('slicer-results-hint');
   const listEl = document.getElementById('slicer-slice-list');
   const newSessionBtn = document.getElementById('slicer-new-session-btn');
+  // Manual-chops entry: the same panel opened without the auto controls. These
+  // are toggled as a group by applyEntryMode() so nothing auto-related shows.
+  const panelTitleEl = document.getElementById('slicer-panel-title');
+  const helpIconEl = document.getElementById('slicer-help-icon');
+  const modeToggleEl = document.getElementById('slicer-mode-toggle');
+  const generateRowEl = document.getElementById('slicer-generate-row');
+  const manualControlsEl = document.getElementById('slicer-manual-controls');
+  const manualClearBtn = document.getElementById('slicer-manual-clear');
 
   // Bail out gracefully if the shell markup isn't present (e.g. a stale
   // index.html during incremental rollout) instead of throwing on every
@@ -96,6 +104,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   if (!sidenav || !canvas || !overlayEl || !listEl) {
     return {
       openForVideo() {},
+      openForVideoManual() {},
       isOpen: () => false,
       close() {},
       handleVideoRemoved() {},
@@ -123,6 +132,12 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // Generate takes. Persisted per video in the cache entry (merged, never
   // replacing sensitivity/slices/method/gridBeats/gridDivisions).
   let mode = DEFAULT_MODE;
+
+  // 'auto' or 'manual' -- how the panel was opened. Orthogonal to `mode`:
+  // 'auto' is the Auto-Slicer (Onsets/Grid controls + Generate); 'manual' is
+  // the Manual Chops entry, which hides all the auto controls and lets the
+  // user place cuts on the waveform by hand. applyEntryMode() owns visibility.
+  let entryMode = 'auto';
 
   // Bounded undo history of currentSlices snapshots, pushed right before a
   // mutation is known to happen (marker drag/add/delete, grid generate,
@@ -270,19 +285,25 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       assignedMap.clear();
       selected.clear();
     }
-    if (entry.mode !== mode) {
-      setMode(entry.mode);
-    }
-    if (entry.mode === 'grid') {
-      if (entry.gridBeats !== undefined) gridBeatsInput.value = entry.gridBeats;
-      if (entry.gridDivisions !== undefined) gridDivisionsInput.value = entry.gridDivisions;
-      updateGridBpmLabel();
-    } else if (entry.mode === 'onsets') {
-      if (entry.sensitivity !== undefined) {
-        sensitivityInput.value = entry.sensitivity;
-        updateSensitivityLabel();
+    // Manual entry hides every auto control, so restoring the auto-config
+    // inputs (and calling setMode, which un-hides an onset/grid row) would
+    // resurrect chrome that should stay hidden. In manual, only the slices
+    // themselves are undone.
+    if (entryMode !== 'manual') {
+      if (entry.mode !== mode) {
+        setMode(entry.mode);
       }
-      if (entry.method !== undefined) methodSelect.value = entry.method;
+      if (entry.mode === 'grid') {
+        if (entry.gridBeats !== undefined) gridBeatsInput.value = entry.gridBeats;
+        if (entry.gridDivisions !== undefined) gridDivisionsInput.value = entry.gridDivisions;
+        updateGridBpmLabel();
+      } else if (entry.mode === 'onsets') {
+        if (entry.sensitivity !== undefined) {
+          sensitivityInput.value = entry.sensitivity;
+          updateSensitivityLabel();
+        }
+        if (entry.method !== undefined) methodSelect.value = entry.method;
+      }
     }
     applyBoundaries(slicesToBoundaries(entry.slices));
     // Persist the restored config back into the cache -- applyBoundaries
@@ -364,6 +385,46 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     if (currentVideoId) {
       cache.set(currentVideoId, { ...(cache.get(currentVideoId) || {}), mode });
     }
+  }
+
+  // Shows/hides the auto-only chrome (mode toggle, onset/grid rows, Generate)
+  // vs the manual toolbar, and swaps the panel title + help tooltip. Called on
+  // every open so switching between the Auto and Manual scissors on the same
+  // video re-dresses the shared panel. In auto it defers row visibility to
+  // setMode(mode); in manual it force-hides both auto rows.
+  function applyEntryMode() {
+    const isManual = entryMode === 'manual';
+    if (modeToggleEl) modeToggleEl.hidden = isManual;
+    if (generateRowEl) generateRowEl.hidden = isManual;
+    if (manualControlsEl) manualControlsEl.hidden = !isManual;
+    if (isManual) {
+      onsetControlsEl.hidden = true;
+      gridControlsEl.hidden = true;
+    } else {
+      setMode(mode);
+    }
+    const titleKey = isManual ? 'chops.title' : 'slicer.title';
+    const helpKey = isManual ? 'tip.chopsHelp' : 'tip.slicerHelp';
+    if (panelTitleEl) {
+      panelTitleEl.dataset.i18n = titleKey;
+      panelTitleEl.textContent = t(titleKey);
+    }
+    if (helpIconEl) {
+      helpIconEl.dataset.i18nTooltip = helpKey;
+      helpIconEl.dataset.tooltip = t(helpKey);
+    }
+  }
+
+  // Manual toolbar action: collapse every cut back to a single whole-track
+  // slice so the user can start chopping again from scratch. Same undo/preview
+  // hygiene as generateGrid().
+  function clearManualCuts() {
+    if (!currentVideoId || !currentAudioBuffer) return;
+    stopPreview();
+    pushUndoSnapshot(true);
+    assignedMap.clear();
+    selected.clear();
+    applyBoundaries([0, currentAudioBuffer.duration]);
   }
 
   // Single place that flips the analyzing flag, so the mode toggle is always
@@ -776,7 +837,17 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       waveform.setAudioBuffer(buffer);
       currentAudioBuffer = buffer;
       updateGridBpmLabel();
-      if (cachedSlices.length) waveform.setMarkers(slicesToBoundaries(cachedSlices));
+      if (cachedSlices.length) {
+        waveform.setMarkers(slicesToBoundaries(cachedSlices));
+      } else if (entryMode === 'manual') {
+        // Seed a single whole-track slice so the [0, duration] anchors exist
+        // for double-click insertBoundary() to work. Not written to the cache,
+        // so reopening in Auto still starts empty. Once the user places cuts,
+        // applyBoundaries() takes over caching.
+        currentSlices = [{ start: 0, end: buffer.duration }];
+        waveform.setMarkers([0, buffer.duration]);
+        renderResultsList();
+      }
     } catch (err) {
       if (currentVideoId !== videoId || !waveform) return;
       waveform.setEmpty(t('waveform.noAudioTrack'));
@@ -784,12 +855,16 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }
   }
 
-  function openForVideo(videoId) {
+  function openForVideo(videoId, requestedEntry = 'auto') {
     // Re-opening while the exit animation is still playing: finish the
     // pending teardown synchronously so the two states can't overlap.
     if (closing) finishClose();
 
-    if (open && currentVideoId === videoId) return;
+    // The guard now also compares entryMode: clicking the Manual scissors on a
+    // video already open in Auto (or vice versa) must re-dress the panel, not
+    // early-return.
+    if (open && currentVideoId === videoId && entryMode === requestedEntry) return;
+    entryMode = requestedEntry === 'manual' ? 'manual' : 'auto';
 
     if (open) {
       // Switching videos mid-session: whatever was running belongs to the
@@ -838,11 +913,20 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     gridDivisionsInput.value = String(cached && cached.gridDivisions !== undefined ? cached.gridDivisions : DEFAULT_GRID_DIVISIONS);
     currentSlices = cached ? cached.slices : [];
     setMode(cached && cached.mode !== undefined ? cached.mode : DEFAULT_MODE);
+    // After setMode has set the auto row visibility, applyEntryMode overrides
+    // it for manual (hiding both rows + the toggle/Generate, showing the manual
+    // toolbar) and swaps the title/help.
+    applyEntryMode();
     updateSensitivityLabel();
     updateGridBpmLabel();
     renderResultsList();
 
     loadWaveformAudio(videoId, cached ? cached.slices : []);
+  }
+
+  // Manual Chops entry point: same panel, opened without the auto controls.
+  function openForVideoManual(videoId) {
+    openForVideo(videoId, 'manual');
   }
 
   function finishClose() {
@@ -864,6 +948,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     undoStack.length = 0;
     assignedMap.clear();
     selected.clear();
+    entryMode = 'auto';
   }
 
   function performClose() {
@@ -1023,6 +1108,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
   cancelBtn.addEventListener('click', () => cancelWorker());
 
+  if (manualClearBtn) manualClearBtn.addEventListener('click', clearManualCuts);
+
   newSessionBtn.addEventListener('click', () => {
     if (selected.size === 0 || !currentVideoId) return;
     const indices = Array.from(selected).sort((a, b) => a - b);
@@ -1058,5 +1145,5 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     });
   });
 
-  return { openForVideo, isOpen, close, handleVideoRemoved };
+  return { openForVideo, openForVideoManual, isOpen, close, handleVideoRemoved };
 }

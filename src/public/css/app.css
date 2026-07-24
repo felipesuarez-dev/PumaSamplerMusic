@@ -3492,6 +3492,15 @@ button.is-proxied {
   font-variant-numeric: tabular-nums;
 }
 
+/* Manual Chops toolbar: a muted usage hint that grows, with the Clear button
+   sitting at the end of the same row. */
+.slicer-manual-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 /* Blocking overlay during analysis — same visual language as
    .video-loading-overlay, scoped to this panel instead of the video area. */
 .slicer-overlay {
