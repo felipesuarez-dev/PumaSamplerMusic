@@ -913,7 +913,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     methodSelect.value = cached && cached.method !== undefined ? cached.method : DEFAULT_METHOD;
     gridBeatsInput.value = String(cached && cached.gridBeats !== undefined ? cached.gridBeats : DEFAULT_GRID_BEATS);
     gridDivisionsInput.value = String(cached && cached.gridDivisions !== undefined ? cached.gridDivisions : DEFAULT_GRID_DIVISIONS);
-    currentSlices = cached ? cached.slices : [];
+    // A cache entry can exist with a mode but no slices (e.g. the user opened
+    // the video, switched Onsets/Grid tabs -- which caches the mode -- then
+    // closed without generating). Guard so renderResultsList's currentSlices
+    // .length never dereferences undefined on reopen.
+    currentSlices = (cached && cached.slices) ? cached.slices : [];
     setMode(cached && cached.mode !== undefined ? cached.mode : DEFAULT_MODE);
     // After setMode has set the auto row visibility, applyEntryMode overrides
     // it for manual (hiding both rows + the toggle/Generate, showing the manual
@@ -923,7 +927,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     updateGridBpmLabel();
     renderResultsList();
 
-    loadWaveformAudio(videoId, cached ? cached.slices : []);
+    loadWaveformAudio(videoId, (cached && cached.slices) ? cached.slices : []);
   }
 
   // Manual Chops entry point: same panel, opened without the auto controls.

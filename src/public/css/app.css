@@ -3514,6 +3514,12 @@ button.is-proxied {
   flex-shrink: 0;
 }
 
+/* Restore [hidden] over the author display:flex (same origin-precedence issue
+   as .slicer-controls-row) so Manual Chops mode can hide the whole toggle. */
+.slicer-mode-toggle[hidden] {
+  display: none;
+}
+
 .slicer-mode-btn {
   background: transparent;
   border: 1px solid var(--border);
