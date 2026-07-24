@@ -271,21 +271,54 @@ export function createAudioEngine() {
     }
   }
 
-  async function loadAudio(videoId, url) {
+  // onProgress(fraction 0..1) is optional and only reports the DOWNLOAD phase
+  // (the only phase with measurable progress -- decodeAudioData is atomic).
+  // A cache hit returns instantly without reporting. signal is an optional
+  // AbortSignal so a caller (the slicer's load overlay) can cancel a download.
+  async function loadAudio(videoId, url, onProgress, signal) {
     if (buffers.has(videoId)) {
       return buffers.get(videoId);
     }
 
     const ctx = await init();
-    const response = await fetch(url);
+    const response = await fetch(url, signal ? { signal } : undefined);
     if (!response.ok) {
       throw new Error(`Failed to load audio: ${response.status}`);
     }
-    const arrayBuffer = await response.arrayBuffer();
+
+    const arrayBuffer = await readWithProgress(response, onProgress);
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
     buffers.set(videoId, audioBuffer);
     return audioBuffer;
+  }
+
+  // Streams the response body so download progress is measurable against
+  // Content-Length. Falls back to response.arrayBuffer() (indeterminate) when
+  // the body isn't readable or the length is unknown -- same decoded result
+  // either way, so existing callers that pass no onProgress are unaffected.
+  async function readWithProgress(response, onProgress) {
+    const total = Number(response.headers.get('Content-Length')) || 0;
+    if (!onProgress || !total || !response.body || !response.body.getReader) {
+      return response.arrayBuffer();
+    }
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      onProgress(Math.min(1, received / total));
+    }
+    const merged = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return merged.buffer;
   }
 
   // Reverse playback needs its own AudioBuffer (AudioBufferSourceNode has no

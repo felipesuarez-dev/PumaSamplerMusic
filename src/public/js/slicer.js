@@ -101,6 +101,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const manualClearBtn = document.getElementById('slicer-manual-clear');
   const manualPlayBtn = document.getElementById('slicer-manual-play');
   const timeOverlayEl = document.getElementById('slicer-time-overlay');
+  const overlayCaptionEl = document.getElementById('slicer-overlay-caption');
 
   // Bail out gracefully if the shell markup isn't present (e.g. a stale
   // index.html during incremental rollout) instead of throwing on every
@@ -124,6 +125,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   let gen = 0;
   let analyzing = false;
   let closeModalOpen = false;
+  // Load-phase state: `loading` while a track is downloading/decoding/rendering
+  // (the overlay is reused, blocking the panel); `loadAbort` lets the overlay's
+  // Cancel button abort an in-flight download.
+  let loading = false;
+  let loadAbort = null;
 
   // The decoded buffer backing the waveform, retained here because
   // startAnalysis only ever transfers a disposable copy of the channel data
@@ -895,6 +901,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const myGen = gen;
     setAnalyzing(true);
     setProgress(0);
+    setOverlayCaption('slicer.analyzing');
     showOverlay();
 
     const sensitivity = parseFloat(sensitivityInput.value);
@@ -940,12 +947,46 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     );
   }
 
+  // Sets the shared overlay caption (also used by onset analysis). Keeps the
+  // data-i18n attr in sync so a locale switch re-translates it.
+  function setOverlayCaption(key) {
+    if (!overlayCaptionEl) return;
+    overlayCaptionEl.dataset.i18n = key;
+    overlayCaptionEl.textContent = t(key);
+  }
+
+  // Resolves after the browser has painted: a single rAF fires BEFORE the
+  // repaint, so a lone rAF wouldn't let the "Rendering…" caption show before
+  // the synchronous peak build blocks the main thread. Double-rAF does.
+  function nextPaint() {
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
   async function loadWaveformAudio(videoId, cachedSlices) {
     const wf = ensureWaveform();
     wf.setLoading();
+    loading = true;
+    loadAbort = new AbortController();
+    setProgress(0);
+    setOverlayCaption('slicer.loadingDownload');
+    // Delay-gate: only reveal the blocking overlay if the load is actually
+    // slow, so a cached re-open (audio.loadAudio returns instantly) never
+    // flashes it. Mirrors video-display.js's 150ms spinner gate.
+    const showTimer = setTimeout(() => { if (loading) showOverlay(); }, 150);
     try {
-      const buffer = await audio.loadAudio(videoId, api.getAudioUrl(videoId));
+      const buffer = await audio.loadAudio(
+        videoId,
+        api.getAudioUrl(videoId),
+        (f) => { if (currentVideoId === videoId) setProgress(f); },
+        loadAbort.signal,
+      );
       if (currentVideoId !== videoId || !waveform) return; // switched away mid-load
+      // Download done; the synchronous peak build (setAudioBuffer) is about to
+      // block. Show "Rendering…" and wait for a real paint before blocking.
+      setOverlayCaption('slicer.loadingRender');
+      setProgress(1);
+      await nextPaint();
+      if (currentVideoId !== videoId || !waveform) return;
       waveform.setAudioBuffer(buffer);
       currentAudioBuffer = buffer;
       updateGridBpmLabel();
@@ -961,9 +1002,18 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         renderResultsList();
       }
     } catch (err) {
-      if (currentVideoId !== videoId || !waveform) return;
-      waveform.setEmpty(t('waveform.noAudioTrack'));
-      showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
+      if (err && err.name === 'AbortError') {
+        wf.setEmpty(t('waveform.selectVideo')); // user cancelled the load
+      } else if (currentVideoId === videoId && waveform) {
+        waveform.setEmpty(t('waveform.noAudioTrack'));
+        showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
+      }
+    } finally {
+      clearTimeout(showTimer);
+      loading = false;
+      loadAbort = null;
+      hideOverlay();
+      setOverlayCaption('slicer.analyzing'); // restore default for onset analysis
     }
   }
 
@@ -1237,7 +1287,15 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }
   });
 
-  cancelBtn.addEventListener('click', () => cancelWorker());
+  // The overlay's Cancel serves two phases: aborting an in-flight load, or
+  // cancelling onset analysis. Branch on which is active.
+  cancelBtn.addEventListener('click', () => {
+    if (loading && loadAbort) {
+      loadAbort.abort();
+      return;
+    }
+    cancelWorker();
+  });
 
   if (manualClearBtn) manualClearBtn.addEventListener('click', clearManualCuts);
   if (manualPlayBtn) manualPlayBtn.addEventListener('click', playFullTrack);
