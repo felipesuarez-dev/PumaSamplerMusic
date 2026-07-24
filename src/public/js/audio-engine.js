@@ -217,6 +217,15 @@ export function createAudioEngine() {
     compressor.connect(softClip);
     softClip.connect(ctx.destination);
 
+    // Read-only analysis tap on the post-limiter signal (what the user hears),
+    // for the central visualizer skins. An AnalyserNode is a pure sink -- it
+    // does not need to connect onward, and tapping softClip additively leaves
+    // the audible voice routing untouched.
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+    softClip.connect(analyser);
+
     masterChain = {
       ctx,
       convolver,
@@ -226,6 +235,7 @@ export function createAudioEngine() {
       masterGain,
       compressor,
       softClip,
+      analyser,
     };
 
     // Apply any values that were set before the chain existed.
@@ -699,6 +709,9 @@ export function createAudioEngine() {
     unload,
     getAudioContext: () => audioContext,
     getMasterChain,
+    // Null until the master chain is built (first init/play). The visualizer
+    // treats null as "no signal yet" and degrades gracefully.
+    getAnalyser: () => (masterChain ? masterChain.analyser : null),
     setMasterVolume,
     setMasterDelay,
   };

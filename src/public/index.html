@@ -386,6 +386,12 @@
             <canvas id="center-waveform-ruler" class="waveform-ruler"></canvas>
             <canvas id="center-waveform-canvas"></canvas>
           </div>
+          <!-- Alternate visualizer skins (waveform/bars/vinyl/bubbles) drawn
+               over the video/waveform when the user picks a non-video skin. -->
+          <canvas id="skin-canvas" class="skin-canvas"></canvas>
+          <button type="button" id="skin-toggle-btn" class="skin-toggle-btn" data-i18n-title="skin.title" title="Change what the display shows">
+            <span class="material-symbols-outlined">movie</span>
+          </button>
         </div>
 
         <section class="panel collapsible-box" id="pad-editor-panel">

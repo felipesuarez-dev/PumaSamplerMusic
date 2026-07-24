@@ -1472,6 +1472,98 @@ button.is-proxied {
   text-align: center;
 }
 
+/* Skin overlay: covers the video/waveform (z below the time overlay:10 and
+   loading spinner) only while a non-video skin is active. */
+.skin-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  z-index: 5;
+  background: #0a0c10;
+}
+
+.video-display.skin-active .skin-canvas {
+  display: block;
+}
+
+/* Hide the placeholder while a skin paints, so an empty pad still shows the
+   chosen skin rather than the "add a video" prompt behind it. */
+.video-display.skin-active .video-placeholder {
+  display: none;
+}
+
+.skin-toggle-btn {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.skin-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.skin-toggle-btn .material-symbols-outlined {
+  font-size: 1.2rem;
+}
+
+/* Skin picker popover — same fixed, viewport-clamped pattern as the pad
+   context menu. */
+.skin-menu {
+  position: fixed;
+  z-index: 2500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+}
+
+.skin-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.skin-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.skin-menu button.active {
+  color: var(--accent);
+}
+
+.skin-menu button .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
 .placeholder-logo {
   width: 64px;
   height: 64px;

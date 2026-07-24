@@ -7,6 +7,7 @@ import { createMediaDisplay } from './media-display.js';
 import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
 import { getWaveformStyle, setWaveformStyle } from './waveform-style.js';
+import { createVisualizerSkins, SKIN_ICONS } from './visualizer-skins.js';
 import { createSessionManager } from './session.js';
 import { createSlicer } from './slicer.js';
 import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
@@ -43,6 +44,16 @@ const mediaDisplay = createMediaDisplay({
   waveformCanvas: document.getElementById('center-waveform-canvas'),
   rulerCanvas: document.getElementById('center-waveform-ruler'),
   getMediaInfo,
+});
+const visualizerSkins = createVisualizerSkins({
+  container: document.querySelector('.video-display'),
+  canvas: document.getElementById('skin-canvas'),
+  getAnalyser: () => audio.getAnalyser(),
+  getMediaTitle: () => {
+    const id = mediaDisplay.getMediaId();
+    const info = id ? getMediaInfo(id) : null;
+    return info ? info.title || '' : '';
+  },
 });
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
@@ -984,6 +995,69 @@ function positionMenu(menu, btn) {
   const width = menu.offsetWidth;
   menu.style.top = `${r.bottom + 6}px`;
   menu.style.left = `${Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8))}px`;
+}
+
+// Central-display skin picker. The button lives at the bottom-left of the
+// video surface, so its menu opens upward. Same dismiss-on-outside-click /
+// Escape lifecycle as the pad context menu.
+function initSkinToggle() {
+  const btn = document.getElementById('skin-toggle-btn');
+  if (!btn || !visualizerSkins) return;
+  let menu = null;
+
+  function updateIcon() {
+    const icon = btn.querySelector('.material-symbols-outlined');
+    if (icon) icon.textContent = SKIN_ICONS[visualizerSkins.getSkin()] || 'movie';
+  }
+
+  function closeMenu() {
+    if (!menu) return;
+    if (menu.parentNode) menu.parentNode.removeChild(menu);
+    menu = null;
+    document.removeEventListener('pointerdown', onDismiss, true);
+    window.removeEventListener('keydown', onKeydown);
+  }
+
+  function onDismiss(e) {
+    if (menu && !menu.contains(e.target) && !btn.contains(e.target)) closeMenu();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') closeMenu();
+  }
+
+  function openMenu() {
+    closeMenu();
+    menu = document.createElement('div');
+    menu.className = 'skin-menu';
+    visualizerSkins.getSkins().forEach((name) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      if (name === visualizerSkins.getSkin()) item.classList.add('active');
+      const ic = document.createElement('span');
+      ic.className = 'material-symbols-outlined';
+      ic.textContent = SKIN_ICONS[name] || 'movie';
+      const label = document.createElement('span');
+      label.textContent = t(`skin.${name}`);
+      item.append(ic, label);
+      item.addEventListener('click', () => {
+        visualizerSkins.setSkin(name);
+        updateIcon();
+        closeMenu();
+      });
+      menu.appendChild(item);
+    });
+    document.body.appendChild(menu);
+    // Open upward: the trigger is anchored to the bottom of the display.
+    const r = btn.getBoundingClientRect();
+    const mh = menu.offsetHeight;
+    menu.style.left = `${Math.max(8, r.left)}px`;
+    menu.style.top = `${Math.max(8, r.top - mh - 6)}px`;
+    document.addEventListener('pointerdown', onDismiss, true);
+    window.addEventListener('keydown', onKeydown);
+  }
+
+  btn.addEventListener('click', () => { if (menu) closeMenu(); else openMenu(); });
+  updateIcon();
 }
 
 // Header collapse is persisted (unlike the sidenavs, which always reopen on
@@ -3017,6 +3091,7 @@ const headerMore = initHeaderMoreMenu();
 const gripSession = initGripSessionMenu();
 initGripActions({ localeSwitcher, headerMore, gripSession });
 initTooltipPositioning();
+initSkinToggle();
 applyFontScale(getFontScale());
 refreshAutosave();
 
