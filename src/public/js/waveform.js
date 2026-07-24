@@ -57,6 +57,11 @@ export function createWaveform(canvas, options = {}) {
   // live via setStyle() from the Settings toggle.
   let style = options.style === 'bars' ? 'bars' : 'classic';
 
+  // When true, this instance pins its style and ignores the app-wide style
+  // broadcast (used by the slicer/chops waveform, which must always be bars
+  // regardless of the global Settings preference).
+  const lockStyle = options.lockStyle === true;
+
   // Opt-in marker drag/add/delete interactivity, off by default so every
   // existing consumer (the pad editor's Trim tab) is completely unaffected.
   // The auto-slicer is the only caller that turns this on.
@@ -992,10 +997,11 @@ export function createWaveform(canvas, options = {}) {
 
   // Self-subscribe to the app-wide style broadcast so a Settings change
   // re-styles every live instance without the modal holding references to them.
+  // Locked instances opt out entirely (no dead listener).
   function onStyleEvent(e) {
     setStyle(e.detail);
   }
-  window.addEventListener(WAVEFORM_STYLE_EVENT, onStyleEvent);
+  if (!lockStyle) window.addEventListener(WAVEFORM_STYLE_EVENT, onStyleEvent);
 
   return {
     setAudioBuffer,

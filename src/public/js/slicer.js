@@ -1,5 +1,4 @@
 import { createWaveform } from './waveform.js';
-import { getWaveformStyle } from './waveform-style.js';
 import { formatTime } from './state.js';
 import {
   boundariesToSlices,
@@ -173,7 +172,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     if (waveform) return waveform;
     waveform = createWaveform(canvas, {
       selectionEnabled: false,
-      style: getWaveformStyle(),
+      // Always bars here (locked against the global Settings preference): the
+      // blocky envelope makes it easier to see where the peaks are when placing
+      // cuts, in both Auto-Slicer and Manual Chops.
+      style: 'bars',
+      lockStyle: true,
       rulerCanvas,
       markersEditable: true,
       markerMinGapSeconds: MIN_SLICE_SECONDS,
