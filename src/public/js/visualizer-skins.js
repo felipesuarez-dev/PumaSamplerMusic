@@ -25,6 +25,97 @@ function readStoredSkin() {
   return SKINS.includes(stored) ? stored : 'video';
 }
 
+// --- Pure helpers for the vinyl skin (stateless; safe at module scope) ---
+const TAU = Math.PI * 2;
+
+function hexToRgb(str) {
+  if (typeof str === 'string' && str.charCodeAt(0) === 35) { // '#'
+    let h = str.slice(1);
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    if (h.length === 6) {
+      const n = parseInt(h, 16);
+      if (!Number.isNaN(n)) return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    }
+  }
+  return { r: 255, g: 159, b: 28 }; // graceful fallback accent
+}
+function mixRgb(c, t, a) {
+  return {
+    r: Math.round(c.r + (t.r - c.r) * a),
+    g: Math.round(c.g + (t.g - c.g) * a),
+    b: Math.round(c.b + (t.b - c.b) * a),
+  };
+}
+function rgbStr(c, a) {
+  return a == null ? `rgb(${c.r},${c.g},${c.b})` : `rgba(${c.r},${c.g},${c.b},${a})`;
+}
+function lum(c) { return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255; }
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function fitText(ctx, str, maxW) {
+  if (ctx.measureText(str).width <= maxW) return str;
+  let s = str;
+  while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s.replace(/\s+$/, '') + '…';
+}
+
+// Static turntable tonearm — sells the record player and fills the wide
+// canvas's right-side negative space. Not animated (a real arm barely moves).
+function drawTonearm(ctx, cx, cy, outerR, dpr, ac) {
+  const px = cx + outerR * 1.42;            // pivot (top-right)
+  const py = cy - outerR * 0.72;
+  const restA = -Math.PI * 0.32;            // headshell rests up-right on grooves
+  const rx = cx + Math.cos(restA) * outerR * 0.72;
+  const ry = cy + Math.sin(restA) * outerR * 0.72;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  ctx.lineWidth = 5 * dpr;
+  ctx.beginPath(); ctx.moveTo(px + 2 * dpr, py + 3 * dpr); ctx.lineTo(rx + 2 * dpr, ry + 3 * dpr); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(190,197,208,0.72)';
+  ctx.lineWidth = 3.2 * dpr;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(rx, ry); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(150,157,168,0.72)';
+  ctx.lineWidth = 6 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px - (rx - px) * 0.16, py - (ry - py) * 0.16);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(58,64,74,0.92)';
+  ctx.beginPath(); ctx.arc(px, py, 6 * dpr, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(205,211,220,0.5)';
+  ctx.lineWidth = 1.3 * dpr;
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(rx, ry);
+  ctx.rotate(Math.atan2(ry - py, rx - px));
+  ctx.fillStyle = 'rgba(212,217,226,0.88)';
+  roundRectPath(ctx, -3 * dpr, -4 * dpr, 13 * dpr, 8 * dpr, 2 * dpr);
+  ctx.fill();
+  ctx.fillStyle = rgbStr(ac);
+  ctx.beginPath(); ctx.arc(11 * dpr, 0, 1.6 * dpr, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
 export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle }) {
   const ctx = canvas.getContext('2d');
   let skin = readStoredSkin();
@@ -36,8 +127,97 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   let freqData = null;
   let timeData = null;
 
+  // Vinyl gradient cache (closure-scoped so it resets cleanly on teardown and
+  // never thrashes across instances). Rebuilt by buildVinylCache() whenever the
+  // guard in drawVinyl detects a size/accent/dpr change; resize() forces it via
+  // vinyl.w = 0.
+  const vinyl = { w: 0, h: 0, accent: '', dpr: 0 };
+
   function accent() {
     return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff9f1c';
+  }
+
+  function buildVinylCache(vAccent, dpr) {
+    const w = canvas.width, h = canvas.height;
+    const cx = Math.round(w * 0.44);          // nudged left → tonearm room right
+    const cy = Math.round(h * 0.5);
+    const outerR = Math.min(w, h) * 0.44;      // height-constrained on wide canvas
+    const labelR = outerR * 0.36;
+    const hr = Math.max(2.5 * dpr, labelR * 0.11);
+    const ac = hexToRgb(vAccent);
+    const black = { r: 0, g: 0, b: 0 }, white = { r: 255, g: 255, b: 255 };
+
+    Object.assign(vinyl, { w, h, accent: vAccent, dpr, cx, cy, outerR, labelR, hr, ac });
+    vinyl.textColor = lum(ac) > 0.6 ? 'rgba(22,17,8,0.92)' : 'rgba(255,255,255,0.95)';
+
+    const bg = ctx.createRadialGradient(cx, cy, outerR * 0.15, cx, cy, Math.max(w, h) * 0.78);
+    bg.addColorStop(0, rgbStr(mixRgb(black, ac, 0.14), 0.45));
+    bg.addColorStop(0.45, 'rgba(12,15,22,0.28)');
+    bg.addColorStop(1, 'rgba(6,8,12,0)');
+    vinyl.bg = bg;
+
+    const glow = ctx.createRadialGradient(cx, cy, outerR * 0.2, cx, cy, outerR * 1.5);
+    glow.addColorStop(0, rgbStr(ac, 0.5));
+    glow.addColorStop(1, rgbStr(ac, 0));
+    vinyl.glow = glow;
+
+    const ground = ctx.createRadialGradient(cx, cy + outerR * 0.55, outerR * 0.2, cx, cy + outerR * 0.55, outerR * 1.1);
+    ground.addColorStop(0, 'rgba(0,0,0,0.5)');
+    ground.addColorStop(1, 'rgba(0,0,0,0)');
+    vinyl.ground = ground;
+
+    const body = ctx.createRadialGradient(
+      cx - outerR * 0.18, cy - outerR * 0.18, outerR * 0.04, cx, cy, outerR);
+    body.addColorStop(0.00, '#191d24');
+    body.addColorStop(0.30, '#101319');
+    body.addColorStop(0.70, '#0b0d12');
+    body.addColorStop(0.93, '#0f131a');
+    body.addColorStop(0.975, '#20252f');   // rim catch-light
+    body.addColorStop(1.00, '#05060a');
+    vinyl.body = body;
+
+    const label = ctx.createRadialGradient(
+      cx - labelR * 0.25, cy - labelR * 0.28, labelR * 0.04, cx, cy, labelR);
+    label.addColorStop(0.00, rgbStr(mixRgb(ac, white, 0.32)));
+    label.addColorStop(0.55, rgbStr(ac));
+    label.addColorStop(1.00, rgbStr(mixRgb(ac, black, 0.48)));
+    vinyl.label = label;
+
+    const hole = ctx.createRadialGradient(cx, cy, 0, cx, cy, hr * 1.7);
+    hole.addColorStop(0, '#000');
+    hole.addColorStop(0.62, '#04050700');
+    hole.addColorStop(0.62, 'rgba(4,5,7,0.9)');
+    hole.addColorStop(1, 'rgba(4,5,7,0)');
+    vinyl.hole = hole;
+
+    // Sweeping specular sheen, built once at origin and swept by rotating the
+    // context each frame (never rebuilt per frame). Radial-blob fallback where
+    // conic gradients are unsupported.
+    if (typeof ctx.createConicGradient === 'function') {
+      const sh = ctx.createConicGradient(0, 0, 0);
+      sh.addColorStop(0.00, 'rgba(255,255,255,0)');
+      sh.addColorStop(0.05, 'rgba(255,255,255,0.16)');
+      sh.addColorStop(0.11, 'rgba(255,255,255,0.02)');
+      sh.addColorStop(0.18, 'rgba(255,255,255,0)');
+      sh.addColorStop(0.50, 'rgba(255,255,255,0)');
+      sh.addColorStop(0.55, 'rgba(255,255,255,0.10)');
+      sh.addColorStop(0.62, 'rgba(255,255,255,0.015)');
+      sh.addColorStop(0.68, 'rgba(255,255,255,0)');
+      sh.addColorStop(1.00, 'rgba(255,255,255,0)');
+      vinyl.sheen = sh;
+      vinyl.blob = null;
+    } else {
+      vinyl.sheen = null;
+      const blob = ctx.createRadialGradient(0, -outerR * 0.5, 0, 0, -outerR * 0.5, outerR * 0.6);
+      blob.addColorStop(0, 'rgba(255,255,255,0.12)');
+      blob.addColorStop(1, 'rgba(255,255,255,0)');
+      vinyl.blob = blob;
+    }
+
+    const vig = ctx.createRadialGradient(cx, cy, outerR * 0.6, cx, cy, Math.max(w, h) * 0.72);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(3,4,6,0.55)');
+    vinyl.vignette = vig;
   }
 
   // DPR-aware sizing. Must run whenever the canvas becomes visible: a canvas
@@ -50,6 +230,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     const h = Math.max(1, Math.round(rect.height * dpr));
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
+    vinyl.w = 0; // force the vinyl gradient cache to rebuild at the new size
   }
 
   function ensureBuffers(analyser) {
@@ -184,66 +365,176 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     ctx.globalAlpha = 1;
   }
 
+  // Premium turntable: glossy disc lit top-left, fine grooves, a swept conic
+  // specular sheen (the main motion cue), an accent label with the track title
+  // and spindle hole, a static tonearm, and an ambient wash + vignette to
+  // compose the wide canvas. Subtle level reactivity (bloom + label glow).
   function drawVinyl() {
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = canvas.width, h = canvas.height;
     const dpr = window.devicePixelRatio || 1;
+    const ac2 = accent();
+
+    if (vinyl.w !== w || vinyl.h !== h || vinyl.accent !== ac2 || vinyl.dpr !== dpr) {
+      buildVinylCache(ac2, dpr);
+    }
+    const { cx, cy, outerR, labelR, hr, ac } = vinyl;
+    const level = loudness();
+    const lv = level > 0 ? (level > 1 ? 1 : level) : 0;
+
+    // A record always turns; faster while audio is playing.
+    angle += 0.01 + lv * 0.12;
+
     clear();
-    const cx = w / 2;
-    const cy = h / 2;
-    const radius = Math.min(w, h) * 0.4;
 
-    // A record always turns; it just turns faster while audio is playing.
-    angle += 0.01 + loudness() * 0.12;
+    /* 1. ambient accent wash */
+    ctx.fillStyle = vinyl.bg;
+    ctx.fillRect(0, 0, w, h);
 
-    // Disc body
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#15171d';
-    ctx.fill();
-
-    // Grooves
-    ctx.strokeStyle = 'rgba(139, 149, 168, 0.18)';
-    ctx.lineWidth = 1 * dpr;
-    for (let r = radius * 0.35; r < radius; r += 6 * dpr) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.stroke();
+    /* 1b. subtle level bloom */
+    if (lv > 0.01) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = lv * 0.5;
+      ctx.fillStyle = vinyl.glow;
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
     }
 
-    // A rotating highlight mark so the spin is visible even on a plain disc.
+    /* 2. contact shadow */
+    ctx.fillStyle = vinyl.ground;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + outerR * 0.55, outerR * 1.05, outerR * 0.5, 0, 0, TAU);
+    ctx.fill();
+
+    /* 3. disc body */
+    ctx.fillStyle = vinyl.body;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, 0, TAU);
+    ctx.fill();
+
+    /* 4. grooves */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR * 0.985, 0, TAU);
+    ctx.arc(cx, cy, labelR * 1.02, 0, TAU);
+    ctx.clip('evenodd');
+    const gInner = labelR * 1.05, gOuter = outerR * 0.965;
+    const step = Math.max(1.7 * dpr, (gOuter - gInner) / 90);
+    ctx.lineWidth = Math.max(0.55 * dpr, step * 0.4);
+    for (let r = gInner; r <= gOuter; r += step) {
+      const a = 0.05 + 0.028 * Math.sin(r * 0.45);
+      ctx.strokeStyle = `rgba(255,255,255,${a})`;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1.4 * dpr;
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    for (let i = 0; i < 3; i++) {
+      const r = gInner + (gOuter - gInner) * (0.42 + i * 0.2);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* 5. sweeping sheen (rotate context so the cached gradient sweeps) */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR * 0.985, 0, TAU);
+    ctx.arc(cx, cy, labelR * 1.0, 0, TAU);
+    ctx.clip('evenodd');
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.6 + lv * 0.3;
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    if (vinyl.sheen) {
+      ctx.fillStyle = vinyl.sheen;
+      ctx.beginPath(); ctx.arc(0, 0, outerR, 0, TAU); ctx.fill();
+    } else {
+      ctx.fillStyle = vinyl.blob;
+      ctx.beginPath(); ctx.arc(0, 0, outerR, 0, TAU); ctx.fill();
+      ctx.rotate(Math.PI);
+      ctx.beginPath(); ctx.arc(0, 0, outerR, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+
+    /* 6. rim */
+    ctx.save();
+    ctx.lineWidth = 1.1 * dpr;
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath(); ctx.arc(cx, cy, outerR * 0.985, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 2.4 * dpr;
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, TAU); ctx.stroke();
+    ctx.restore();
+
+    /* 7. label + level glow */
+    ctx.save();
+    if (lv > 0.02) {
+      ctx.shadowColor = rgbStr(ac, 0.55);
+      ctx.shadowBlur = (6 + lv * 20) * dpr;
+    }
+    ctx.fillStyle = vinyl.label;
+    ctx.beginPath(); ctx.arc(cx, cy, labelR, 0, TAU); ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = rgbStr(mixRgb(ac, { r: 0, g: 0, b: 0 }, 0.5), 0.55);
+    ctx.lineWidth = 1 * dpr;
+    ctx.beginPath(); ctx.arc(cx, cy, labelR * 0.97, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, labelR * 0.58, 0, TAU); ctx.stroke();
+    ctx.restore();
+
+    // rotating tick marks near the label rim
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(angle);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
-    ctx.lineWidth = 2 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(radius * 0.34, 0);
-    ctx.lineTo(radius * 0.98, 0);
-    ctx.stroke();
+    ctx.strokeStyle = rgbStr(mixRgb(ac, { r: 0, g: 0, b: 0 }, 0.45), 0.3);
+    ctx.lineWidth = 1 * dpr;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU;
+      const c = Math.cos(a), s = Math.sin(a);
+      ctx.beginPath();
+      ctx.moveTo(c * labelR * 0.86, s * labelR * 0.86);
+      ctx.lineTo(c * labelR * 0.92, s * labelR * 0.92);
+      ctx.stroke();
+    }
     ctx.restore();
 
-    // Center label
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.32, 0, Math.PI * 2);
-    ctx.fillStyle = accent();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx, cy, 3 * dpr, 0, Math.PI * 2);
-    ctx.fillStyle = '#0a0c10';
-    ctx.fill();
-
-    // Track title under the disc
+    /* 8. title + RPM print */
     const title = (getMediaTitle && getMediaTitle()) || '';
     if (title) {
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.font = `${13 * dpr}px ui-monospace, 'SF Mono', Menlo, monospace`;
+      ctx.save();
+      const fs = Math.max(9 * dpr, labelR * 0.24);
+      ctx.font = `600 ${fs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      const maxLen = 42;
-      const shown = title.length > maxLen ? `${title.slice(0, maxLen - 1)}…` : title;
-      ctx.fillText(shown, cx, cy + radius + 10 * dpr);
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = vinyl.textColor;
+      ctx.fillText(fitText(ctx, title, labelR * 1.5), cx, cy - labelR * 0.4);
+      ctx.font = `500 ${Math.max(7 * dpr, labelR * 0.14)}px system-ui, sans-serif`;
+      ctx.globalAlpha = 0.6;
+      ctx.fillText('33 ⅓ RPM', cx, cy + labelR * 0.52);
+      ctx.restore();
     }
+
+    /* 9. spindle hole */
+    ctx.save();
+    ctx.fillStyle = vinyl.hole;
+    ctx.beginPath(); ctx.arc(cx, cy, hr * 1.7, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#020304';
+    ctx.beginPath(); ctx.arc(cx, cy, hr, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 0.8 * dpr;
+    ctx.beginPath(); ctx.arc(cx, cy, hr, Math.PI * 1.15, Math.PI * 1.75); ctx.stroke();
+    ctx.restore();
+
+    /* 10. tonearm */
+    drawTonearm(ctx, cx, cy, outerR, dpr, ac);
+
+    /* 11. vignette */
+    ctx.fillStyle = vinyl.vignette;
+    ctx.fillRect(0, 0, w, h);
   }
 
   function renderFrame() {
