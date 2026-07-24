@@ -2739,10 +2739,29 @@ const slicer = createSlicer({
   t,
 });
 
-// Export session
+// Export session — a context menu of formats. 'package' is the original
+// PumaSampler Session Package; the rest target specific DAWs/samplers. Order
+// mirrors the server-side exporter registry.
+const EXPORT_FORMATS = ['package', 'pss', 'sfz', 'decentsampler', 'mpc', 'fl', 'ableton', 'logic'];
 const exportBtn = document.getElementById('btn-export-session');
 if (exportBtn) {
-  exportBtn.addEventListener('click', async () => {
+  let exportMenu = null;
+
+  function closeExportMenu() {
+    if (!exportMenu) return;
+    if (exportMenu.parentNode) exportMenu.parentNode.removeChild(exportMenu);
+    exportMenu = null;
+    document.removeEventListener('pointerdown', onExportDismiss, true);
+    window.removeEventListener('keydown', onExportKeydown);
+  }
+  function onExportDismiss(e) {
+    if (exportMenu && !exportMenu.contains(e.target) && !exportBtn.contains(e.target)) closeExportMenu();
+  }
+  function onExportKeydown(e) {
+    if (e.key === 'Escape') closeExportMenu();
+  }
+
+  async function runExport(format) {
     const current = sessionManager.getCurrent();
     if (!current?.name) {
       showToast(t('toast.saveOrLoadBeforeExport'), 'error');
@@ -2763,10 +2782,41 @@ if (exportBtn) {
         masterFx: masterFxControls ? masterFxControls.getState() : undefined,
       });
       if (!saved) return;
-      window.open(api.exportSession(saved.name), '_blank');
+      window.open(api.exportSession(saved.name, format), '_blank');
     } catch {
       // sessionManager.save() already showed an error toast.
     }
+  }
+
+  function openExportMenu() {
+    closeExportMenu();
+    exportMenu = document.createElement('div');
+    exportMenu.className = 'pad-context-menu export-format-menu';
+    EXPORT_FORMATS.forEach((fmt) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      const label = document.createElement('span');
+      label.className = 'export-format-label';
+      label.textContent = t(`export.${fmt}`);
+      const desc = document.createElement('span');
+      desc.className = 'export-format-desc';
+      desc.textContent = t(`export.${fmt}Desc`);
+      item.append(label, desc);
+      item.addEventListener('click', () => {
+        closeExportMenu();
+        runExport(fmt);
+      });
+      exportMenu.appendChild(item);
+    });
+    document.body.appendChild(exportMenu);
+    positionMenu(exportMenu, exportBtn);
+    document.addEventListener('pointerdown', onExportDismiss, true);
+    window.addEventListener('keydown', onExportKeydown);
+  }
+
+  exportBtn.addEventListener('click', () => {
+    if (exportMenu) closeExportMenu();
+    else openExportMenu();
   });
 }
 

@@ -102,8 +102,9 @@ export const api = {
     return request(`/api/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
   },
 
-  exportSession(name) {
-    return `${API_BASE}/api/sessions/${encodeURIComponent(name)}/export`;
+  exportSession(name, format) {
+    const url = `${API_BASE}/api/sessions/${encodeURIComponent(name)}/export`;
+    return format ? `${url}?format=${encodeURIComponent(format)}` : url;
   },
 
   getLogs() {

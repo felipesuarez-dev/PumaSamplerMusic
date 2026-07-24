@@ -5,23 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { validateSession, sanitizeFilename } from '../utils/validation.js';
 import * as sessionStore from '../services/session-store.js';
-import * as videoStore from '../services/video-store.js';
-import { ffmpegToWav } from '../services/local-media.js';
+import { getExporter, DEFAULT_EXPORTER } from '../services/exporters/registry.js';
+import { cutPadSlices, fullTrackWavs, EXPORT_SAMPLE_RATE } from '../services/exporters/slice-cutter.js';
 
 const router = Router();
-
-// Small hand-rolled concurrency pool: runs `worker` over `items` with at
-// most `limit` in flight at once. No new dependency needed for this.
-async function runPool(items, limit, worker) {
-  let i = 0;
-  async function next() {
-    while (i < items.length) {
-      const item = items[i++];
-      await worker(item);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, next));
-}
 
 router.get('/', async (_req, res) => {
   try {
@@ -70,13 +57,20 @@ router.get('/:name', async (req, res) => {
 
 router.get('/:name/export', async (req, res) => {
   const { name } = req.params;
+  const format = typeof req.query.format === 'string' ? req.query.format : DEFAULT_EXPORTER;
+  const exporter = getExporter(format);
+  if (!exporter) {
+    return res.status(400).json({ error: `Unknown export format: ${format}` });
+  }
+
   try {
     const session = await sessionStore.load(name);
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const filename = `${sanitizeFilename(name)}.zip`;
+    const ext = exporter.ext || 'zip';
+    const filename = `${sanitizeFilename(name)}.${ext}`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
@@ -87,57 +81,34 @@ router.get('/:name/export', async (req, res) => {
     });
     archive.pipe(res);
 
-    archive.append(JSON.stringify(session, null, 2), { name: 'session.json' });
-
-    const videoIds = [...new Set((session.pads || []).map((pad) => pad.videoId).filter(Boolean))];
-
-    // Response headers already went out with archive.pipe(res)'s first
-    // flush, so a mid-stream error can't be turned into a clean error
-    // response — the finally below is what guarantees the temp dir is
-    // cleaned up regardless (throw, client abort, or normal completion).
+    // Response headers already went out with archive.pipe(res)'s first flush,
+    // so a mid-stream error can't be turned into a clean error response — the
+    // finally below is what guarantees the temp dir is cleaned up regardless
+    // (throw, client abort, or normal completion).
     const tmpDir = await mkdtemp(join(tmpdir(), 'puma-export-'));
     let aborted = false;
     res.on('close', () => { aborted = true; });
+    const isAborted = () => aborted;
+
+    // The per-slice cuts and full-track WAV transcodes are the expensive shared
+    // inputs. Each format only pulls the one it needs, and both are memoized so
+    // repeated getSlices()/getFullWavs() calls within one build never re-run
+    // ffmpeg.
+    let slicesPromise = null;
+    let fullWavsPromise = null;
+    const getSlices = () => (slicesPromise ??= cutPadSlices(session, tmpDir, { sampleRate: EXPORT_SAMPLE_RATE, isAborted }));
+    const getFullWavs = () => (fullWavsPromise ??= fullTrackWavs(session, tmpDir, { sampleRate: EXPORT_SAMPLE_RATE, isAborted }));
 
     try {
-      const manifest = [];
-      const exportable = [];
-      for (const videoId of videoIds) {
-        if (aborted) break;
-        if (!(await videoStore.exists(videoId))) continue;
-
-        const info = await videoStore.getInfo(videoId);
-        manifest.push({
-          videoId,
-          title: info?.title,
-          source: info?.source || 'youtube',
-          mediaKind: info?.mediaKind || 'video',
-          duration: info?.duration,
-        });
-
-        const opusPath = videoStore.getAudioFilePath(videoId);
-        archive.file(opusPath, { name: `audio/${videoId}.opus` });
-
-        exportable.push({ videoId, opusPath });
-      }
-
-      // Bounded-concurrency WAV transcodes, but wavs are appended to the zip
-      // in original `exportable` order (completion order can differ under
-      // concurrency) once the whole pool has settled, so the archive byte
-      // layout is deterministic for a given session.
-      const wavPaths = new Map();
-      await runPool(exportable, 2, async ({ videoId, opusPath }) => {
-        if (aborted) return;
-        const wavPath = join(tmpDir, `${videoId}.wav`);
-        const ok = await ffmpegToWav(opusPath, wavPath);
-        if (ok && !aborted) wavPaths.set(videoId, wavPath);
+      await exporter.build({
+        session,
+        archive,
+        tmpDir,
+        sampleRate: EXPORT_SAMPLE_RATE,
+        isAborted,
+        getSlices,
+        getFullWavs,
       });
-      for (const { videoId } of exportable) {
-        const wavPath = wavPaths.get(videoId);
-        if (wavPath) archive.file(wavPath, { name: `audio/${videoId}.wav` });
-      }
-
-      archive.append(JSON.stringify(manifest, null, 2), { name: 'media.json' });
       await archive.finalize();
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
