@@ -86,9 +86,11 @@ let previewVolume = Number.isNaN(savedPreviewVolume) ? 0.30 : savedPreviewVolume
 
 function formatKeyLabel(key) {
   if (!key) return '?';
-  if (key.length === 1) return key.toUpperCase();
-  if (key === 'escape') return 'ESC';
+  // The special-case checks must come before the single-char check: ' ' has
+  // length 1, so "SPACE" was dead code below it.
   if (key === ' ') return 'SPACE';
+  if (key === 'escape') return 'ESC';
+  if (key.length === 1) return key.toUpperCase();
   return key.toUpperCase();
 }
 
@@ -686,6 +688,38 @@ function initStopKeyCapture(el) {
       window.removeEventListener('keydown', handler);
     };
 
+    window.addEventListener('keydown', handler, { once: true });
+  });
+}
+
+// Dedicated capture for the slicer's cut-at-playhead key. Same click→listen→
+// capture shape as initStopKeyCapture, but writes its own localStorage key
+// (default Space) instead of rebinding the global stop key. slicer.js reads
+// this key at keydown time; nothing else needs a reference.
+const CHOP_KEY_STORAGE = 'puma-slicer-chop-key';
+function initChopKeyCapture(el) {
+  if (!el) return;
+  const current = localStorage.getItem(CHOP_KEY_STORAGE) || ' ';
+  el.textContent = formatKeyLabel(current);
+  el.dataset.key = current;
+  el.addEventListener('click', () => {
+    el.classList.add('listening');
+    el.textContent = t('common.pressKey');
+    isCapturingKey = true;
+    pads.setKeyCapturing(true);
+    const handler = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const combo = buildKeyCombo(e);
+      localStorage.setItem(CHOP_KEY_STORAGE, combo);
+      el.classList.remove('listening');
+      el.textContent = formatKeyLabel(combo);
+      el.dataset.key = combo;
+      isCapturingKey = false;
+      pads.setKeyCapturing(false);
+      showToast(t('toast.chopKeySet', { key: formatKeyLabel(combo) }), 'success');
+      window.removeEventListener('keydown', handler);
+    };
     window.addEventListener('keydown', handler, { once: true });
   });
 }
@@ -3142,6 +3176,7 @@ const gripSession = initGripSessionMenu();
 initGripActions({ localeSwitcher, headerMore, gripSession });
 initTooltipPositioning();
 initSkinToggle();
+initChopKeyCapture(document.getElementById('slicer-chop-key'));
 applyFontScale(getFontScale());
 refreshAutosave();
 

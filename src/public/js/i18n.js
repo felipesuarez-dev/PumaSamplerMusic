@@ -199,9 +199,12 @@ export const dictionaries = {
     'tip.slicerModeGrid': 'Grid mode: divides the track into equal slices from a beat count and divisions per beat, ignoring the actual audio content. Best for loops with a known, steady tempo.',
     'tip.slicerHelp': 'How to use the Auto-Slicer:\n1. The waveform of the loaded track is shown at the top.\n2. Pick a mode — Onsets (auto-detect hits) or Grid (equal beat divisions).\n3. In Onsets, adjust Sensitivity and Method; in Grid, set Beats and Divisions.\n4. Press Generate Slices to place the slice boundaries.\n5. Fine-tune on the waveform: drag a marker to move it, double-click to add one, right-click to delete it.\n6. Preview each slice, then assign slices to PADs — or start a new session with the selected slices.',
     'chops.title': 'Manual Chops',
-    'chops.hint': 'Double-click the waveform to add a cut · drag to move · right-click to delete',
+    'chops.hint': 'Double-click the waveform to add a cut · drag to move · right-click to delete · press the cut key while playing',
     'chops.clearCuts': 'Clear cuts',
+    'chops.playAll': 'Play the whole track',
     'chops.openTitle': 'Chop this track by hand — place your own cuts and load them onto the PADs',
+    'slicer.chopKeyLabel': 'Cut key',
+    'tip.slicerChopKey': 'Press this key while the track is playing to drop a cut exactly at the playhead. Click the box to change it.',
     'tip.chopsHelp': 'What is a chop?\nA chop (or slice) is a section of the track cut out between two points and mapped to a PAD, so each PAD plays a different piece of the audio.\n\nHow to chop by hand:\n1. The whole track starts as a single slice.\n2. Double-click the waveform where you want a cut — a good cut sits right on the transient (the attack of a hit or note).\n3. Drag a cut to fine-tune it; each cut snaps to the nearest zero-crossing so slices don\'t click.\n4. Right-click a cut to remove it. Ctrl+Z undoes the last change.\n5. Preview each chop, then assign it to a PAD — or start a new session with the selected chops.',
 
     'cache.confirmTitle': 'Clear the video cache?',
@@ -262,6 +265,7 @@ export const dictionaries = {
     'toast.padMoved': 'PAD {a} moved to PAD {b}',
 
     'toast.stopKeySet': 'Stop key set to {key}',
+    'toast.chopKeySet': 'Cut key set to {key}',
     'toast.allStopped': 'All stopped',
     'toast.padsResized': 'PADS resized to {n}',
     'toast.videoNotLoaded': 'Video not loaded',
@@ -582,9 +586,12 @@ export const dictionaries = {
     'tip.slicerModeGrid': 'Modo Cuadrícula: divide la pista en cortes iguales a partir de una cantidad de beats y divisiones por beat, sin mirar el contenido del audio. Ideal para loops con un tempo conocido y estable.',
     'tip.slicerHelp': 'Cómo usar el Auto-Slicer:\n1. Arriba se muestra la forma de onda de la pista cargada.\n2. Elegí un modo — Onsets (detecta golpes) o Cuadrícula (divisiones iguales por beat).\n3. En Onsets ajustá Sensibilidad y Método; en Cuadrícula definí Beats y Divisiones.\n4. Presioná Generar cortes para colocar los límites de los cortes.\n5. Ajustá en la forma de onda: arrastrá un marcador para moverlo, doble clic para agregar uno, clic derecho para borrarlo.\n6. Previsualizá cada corte y asigná los cortes a los PADs — o creá una nueva sesión con los cortes seleccionados.',
     'chops.title': 'Chops manuales',
-    'chops.hint': 'Doble clic en la forma de onda para agregar un corte · arrastrá para mover · clic derecho para borrar',
+    'chops.hint': 'Doble clic en la forma de onda para agregar un corte · arrastrá para mover · clic derecho para borrar · apretá la tecla de corte mientras reproduce',
     'chops.clearCuts': 'Limpiar cortes',
+    'chops.playAll': 'Reproducir toda la pista',
     'chops.openTitle': 'Chopear esta pista a mano — colocá tus propios cortes y cargalos a los PADs',
+    'slicer.chopKeyLabel': 'Tecla de corte',
+    'tip.slicerChopKey': 'Apretá esta tecla mientras la pista reproduce para colocar un corte justo en el playhead. Hacé clic en el recuadro para cambiarla.',
     'tip.chopsHelp': '¿Qué es un chop?\nUn chop (o corte) es una sección de la pista recortada entre dos puntos y asignada a un PAD, para que cada PAD reproduzca una parte distinta del audio.\n\nCómo chopear a mano:\n1. La pista entera arranca como un solo corte.\n2. Doble clic en la forma de onda donde querés un corte — un buen corte cae justo sobre el transitorio (el ataque de un golpe o nota).\n3. Arrastrá un corte para ajustarlo; cada corte se pega al cruce por cero más cercano para que los cortes no clickeen.\n4. Clic derecho sobre un corte para quitarlo. Ctrl+Z deshace el último cambio.\n5. Previsualizá cada chop y asignalo a un PAD — o creá una nueva sesión con los chops seleccionados.',
 
     'cache.confirmTitle': '¿Vaciar el caché de videos?',
@@ -645,6 +652,7 @@ export const dictionaries = {
     'toast.padMoved': 'PAD {a} movido al PAD {b}',
 
     'toast.stopKeySet': 'Tecla de stop configurada a {key}',
+    'toast.chopKeySet': 'Tecla de corte configurada a {key}',
     'toast.allStopped': 'Todo detenido',
     'toast.padsResized': 'PADS redimensionados a {n}',
     'toast.videoNotLoaded': 'Video no cargado',

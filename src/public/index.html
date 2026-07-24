@@ -474,12 +474,18 @@
                 <span class="slicer-preview-volume-value" id="slicer-preview-volume-value">50%</span>
                 <span class="help-icon" data-i18n-tooltip="tip.slicerPreviewVolume" data-tooltip="Volume of the slice preview inside the Auto-Slicer only, from 0% to 200%. Does not affect how PADs play live.">?</span>
               </div>
+              <div class="slicer-chop-key-group">
+                <label class="slicer-preview-volume-label" data-i18n="slicer.chopKeyLabel">Cut key</label>
+                <div class="key-capture" id="slicer-chop-key" data-i18n-title="tip.slicerChopKey" title="Key that drops a cut at the playhead while the track plays"></div>
+                <span class="help-icon" data-i18n-tooltip="tip.slicerChopKey" data-tooltip="Press this key while the track is playing to drop a cut exactly at the playhead. Click to change it.">?</span>
+              </div>
               <button type="button" class="slicer-close-btn" id="slicer-close-btn" data-i18n-title="slicer.closeButtonTitle" title="Close Auto-Slicer">&times;</button>
             </div>
 
             <div class="slicer-waveform-container">
               <canvas id="slicer-waveform-ruler" class="waveform-ruler"></canvas>
               <canvas id="slicer-waveform-canvas"></canvas>
+              <div class="slicer-time-overlay" id="slicer-time-overlay">00:00.000</div>
             </div>
 
             <div class="slicer-mode-toggle" id="slicer-mode-toggle" role="group" aria-label="Slicing mode">
@@ -528,6 +534,7 @@
             </div>
 
             <div class="slicer-controls-row slicer-manual-controls" id="slicer-manual-controls" hidden>
+              <button type="button" class="btn btn-transport" id="slicer-manual-play" data-i18n-title="chops.playAll" title="Play the whole track"><span class="material-symbols-outlined">play_arrow</span></button>
               <span class="slicer-manual-hint" data-i18n="chops.hint">Double-click the waveform to add a cut · drag to move · right-click to delete</span>
               <button type="button" class="btn btn-secondary" id="slicer-manual-clear" data-i18n="chops.clearCuts">Clear cuts</button>
             </div>

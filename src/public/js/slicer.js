@@ -1,5 +1,5 @@
 import { createWaveform } from './waveform.js';
-import { formatTime } from './state.js';
+import { formatTime, buildKeyCombo } from './state.js';
 import {
   boundariesToSlices,
   slicesToBoundaries,
@@ -12,6 +12,8 @@ import {
 import { MIN_SLICE_SECONDS, snapToZeroCrossing } from './slicer-core.js';
 
 const CLOSE_SKIP_CONFIRM_KEY = 'puma-slicer-skip-close-confirm';
+const CHOP_KEY_STORAGE = 'puma-slicer-chop-key';
+const DEFAULT_CHOP_KEY = ' '; // Space
 const LONG_AUDIO_THRESHOLD_SEC = 10 * 60;
 const DEFAULT_SENSITIVITY = 0.5;
 const DEFAULT_PREVIEW_VOLUME_PCT = 50;
@@ -97,6 +99,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const generateRowEl = document.getElementById('slicer-generate-row');
   const manualControlsEl = document.getElementById('slicer-manual-controls');
   const manualClearBtn = document.getElementById('slicer-manual-clear');
+  const manualPlayBtn = document.getElementById('slicer-manual-play');
+  const timeOverlayEl = document.getElementById('slicer-time-overlay');
 
   // Bail out gracefully if the shell markup isn't present (e.g. a stale
   // index.html during incremental rollout) instead of throwing on every
@@ -159,6 +163,17 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   let previewingIndex = null;
   let previewTimer = null;
   let previewAnimId = null;
+
+  // Whole-track playback state (Manual Chops "Play" button). Independent of the
+  // per-slice preview above: it plays start→duration and drives a continuous
+  // playhead used both for the time overlay and for the keyboard "cut at
+  // playhead" action.
+  let fullPlaying = false;
+  let fullAnimId = null;
+  let fullTimer = null;
+  // Live playhead time (seconds) shared by both playback paths, so the cut key
+  // can drop a boundary exactly where the track is sounding.
+  let currentPlayheadTime = 0;
   // Session-scoped only (resets to the default on reload) -- gain applied to
   // the preview voice (position 0), slider percent / 100 so 0..200% maps to
   // gain 0..2.
@@ -339,16 +354,34 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     return Boolean(active && (
       active.tagName === 'INPUT' ||
       active.tagName === 'TEXTAREA' ||
-      active.tagName === 'SELECT'
+      active.tagName === 'SELECT' ||
+      active.classList.contains('key-capture')
     ));
   }
 
+  // Registered in the CAPTURE phase (see openForVideo) so the cut key can
+  // preventDefault + stopImmediatePropagation BEFORE the app-wide Space handler
+  // (which toggles the pad-editor preview) and before the page scrolls.
   function handleSlicerKeydown(e) {
     if (isInputFocused()) return;
     const key = e.key ? e.key.toLowerCase() : '';
     if ((e.ctrlKey || e.metaKey) && key === 'z') {
       e.preventDefault();
       undo();
+      return;
+    }
+    // Cut-at-playhead key (configurable, Space by default). Only while the
+    // track is actually playing, so there is a real playhead to cut at.
+    const chopKey = (localStorage.getItem(CHOP_KEY_STORAGE) || DEFAULT_CHOP_KEY).toLowerCase();
+    if (buildKeyCombo(e).toLowerCase() === chopKey) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (fullPlaying || previewingIndex !== null) {
+        // Verbatim insert (no zero-crossing snap) so the cut lands exactly at
+        // the playhead. insertBoundary no-ops if it's within MIN_SLICE_SECONDS
+        // of an existing boundary.
+        handleMarkerAdded(currentPlayheadTime);
+      }
     }
   }
 
@@ -562,6 +595,20 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }
   }
 
+  // Single funnel for the live playhead: updates the shared time (read by the
+  // cut key), moves the waveform playhead, and refreshes the time overlay
+  // (same MM:SS.mmm format as the video display).
+  function setPlayheadTime(time) {
+    // A playhead is always within the track; clamp defensively so a stray
+    // negative/overflow can never reach formatTime (which renders negatives as
+    // garbage) or land a cut at a rejected position.
+    const dur = currentAudioBuffer ? currentAudioBuffer.duration : 0;
+    const clamped = Math.max(0, Math.min(dur || time, time));
+    currentPlayheadTime = clamped;
+    if (waveform) waveform.setPlayhead(clamped);
+    if (timeOverlayEl) timeOverlayEl.textContent = formatTime(clamped);
+  }
+
   // Animates the waveform playhead across the previewing slice for the
   // duration of playback, using wall-clock deltas (performance.now()) rather
   // than an audio-clock query -- good enough for a purely visual cue.
@@ -572,7 +619,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const step = (now) => {
       const elapsedMs = now - startedAt;
       const time = Math.min(slice.end, slice.start + elapsedMs / 1000);
-      if (waveform) waveform.setPlayhead(time);
+      setPlayheadTime(time);
       if (elapsedMs < durationMs) {
         previewAnimId = requestAnimationFrame(step);
       } else {
@@ -591,7 +638,50 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     previewingIndex = null;
   }
 
+  function setManualPlayIcon(playing) {
+    if (!manualPlayBtn) return;
+    manualPlayBtn.innerHTML = playing
+      ? '<span class="material-symbols-outlined">stop</span>'
+      : '<span class="material-symbols-outlined">play_arrow</span>';
+  }
+
+  // Whole-track playback for Manual Chops: plays 0→duration through the scratch
+  // voice (position 0), driving a continuous playhead so the user can drop cuts
+  // with the cut key while listening. Independent of the per-slice preview.
+  function stopFullTrack() {
+    if (!fullPlaying) return;
+    fullPlaying = false;
+    if (fullAnimId !== null) { cancelAnimationFrame(fullAnimId); fullAnimId = null; }
+    clearTimeout(fullTimer);
+    audio.stop(0);
+    setManualPlayIcon(false);
+  }
+
+  function playFullTrack() {
+    if (!currentVideoId || !currentAudioBuffer) return;
+    stopPreview();
+    if (fullPlaying) { stopFullTrack(); return; }
+    const duration = currentAudioBuffer.duration;
+    fullPlaying = true;
+    setManualPlayIcon(true);
+    audio.play(0, { videoId: currentVideoId, start: 0, end: duration, volume: previewVolume }).catch(() => {});
+    const startedAt = performance.now();
+    const step = (now) => {
+      if (!fullPlaying) return;
+      const time = Math.min(duration, (now - startedAt) / 1000);
+      setPlayheadTime(time);
+      if (time < duration) {
+        fullAnimId = requestAnimationFrame(step);
+      } else {
+        stopFullTrack();
+      }
+    };
+    fullAnimId = requestAnimationFrame(step);
+    fullTimer = setTimeout(() => stopFullTrack(), duration * 1000 + 80);
+  }
+
   function togglePreview(index, slice) {
+    stopFullTrack(); // per-slice preview and full-track share voice 0
     if (previewingIndex === index) {
       stopPreview();
       return;
@@ -893,13 +983,18 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       // previous video and must not bleed into the new one.
       cancelWorker();
       stopPreview();
+      stopFullTrack();
     } else {
       sidenav.classList.add('slicer-takeover');
       open = true;
+      // Capture phase so the cut key preempts the app-wide Space handler.
       // Symmetric with the removeEventListener in finishClose() -- added
       // once per open takeover, not per video switch within it.
-      window.addEventListener('keydown', handleSlicerKeydown);
+      window.addEventListener('keydown', handleSlicerKeydown, true);
     }
+    setManualPlayIcon(false);
+    if (timeOverlayEl) timeOverlayEl.textContent = formatTime(0);
+    currentPlayheadTime = 0;
 
     currentVideoId = videoId;
     // Invalidate the retained buffer immediately -- it belongs to whatever
@@ -962,7 +1057,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }
     closing = false;
     sidenav.classList.remove('slicer-takeover', 'slicer-closing');
-    window.removeEventListener('keydown', handleSlicerKeydown);
+    window.removeEventListener('keydown', handleSlicerKeydown, true);
+    stopFullTrack();
     if (waveform) {
       waveform.destroy();
       waveform = null;
@@ -983,6 +1079,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // animation (mirror of slicerTakeoverIn, shrinking back to the right).
     cancelWorker();
     stopPreview();
+    stopFullTrack();
     closing = true;
     sidenav.classList.add('slicer-closing');
     const onEnd = (e) => {
@@ -1143,6 +1240,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   cancelBtn.addEventListener('click', () => cancelWorker());
 
   if (manualClearBtn) manualClearBtn.addEventListener('click', clearManualCuts);
+  if (manualPlayBtn) manualPlayBtn.addEventListener('click', playFullTrack);
 
   newSessionBtn.addEventListener('click', () => {
     if (selected.size === 0 || !currentVideoId) return;
