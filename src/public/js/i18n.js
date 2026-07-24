@@ -121,7 +121,7 @@ export const dictionaries = {
     'video.emptySearch': 'No videos match your search.',
 
     'slicer.title': 'Auto-Slicer',
-    'slicer.openTitle': 'Automatically create slices from this video, select them and assign them to different pads',
+    'slicer.openTitle': 'Auto-Slicer — automatically detect and create slices from this track, then assign them to the PADs',
     'slicer.closeButtonTitle': 'Close Auto-Slicer',
     'slicer.sensitivity': 'Sensitivity',
     'slicer.generate': 'Generate Slices',
@@ -479,7 +479,7 @@ export const dictionaries = {
     'video.emptySearch': 'Ningún video coincide con la búsqueda.',
 
     'slicer.title': 'Auto-Slicer',
-    'slicer.openTitle': 'Crear slices automáticamente de este video, seleccionar y asignar a diferentes pads',
+    'slicer.openTitle': 'Auto-Slicer — detectá y creá slices automáticamente de esta pista, y asignalos a los PADs',
     'slicer.closeButtonTitle': 'Cerrar el Auto-Slicer',
     'slicer.sensitivity': 'Sensibilidad',
     'slicer.generate': 'Generar cortes',

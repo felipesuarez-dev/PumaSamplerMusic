@@ -2449,6 +2449,37 @@ button.is-proxied {
   font-size: 1.1rem;
 }
 
+/* Two scissors per media row differ only by a small accent badge: a bolt for
+   the automatic Auto-Slicer, a hand for the manual chops entry. The button is
+   the positioning context; the accent sits in the bottom-right corner. */
+.video-item button.video-slice-btn {
+  position: relative;
+}
+
+.video-slice-btn .video-slice-accent {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 0.72rem;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.video-slice-btn--auto .video-slice-accent {
+  color: var(--accent);
+}
+
+.video-slice-btn--manual:hover {
+  color: var(--accent);
+}
+
+.video-slice-btn--manual .video-slice-accent {
+  color: var(--success);
+}
+
 /* Toast */
 .toast {
   position: fixed;

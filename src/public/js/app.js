@@ -2308,9 +2308,11 @@ function renderMediaList({
     }
 
     // Slicing works off the extracted opus regardless of kind, so both audio
-    // and video local media get the Slice button, same as YouTube videos.
+    // and video local media get the Slice buttons, same as YouTube videos.
+    // Two scissors: Auto-Slicer (bolt accent) and Manual Chops (hand accent).
     const sliceBtnHtml = video.status === 'ready'
-      ? `<button type="button" class="video-slice-btn" data-slice-id="${video.videoId}" data-i18n-title="slicer.openTitle" title="${t('slicer.openTitle')}"><span class="material-symbols-outlined">content_cut</span></button>`
+      ? `<button type="button" class="video-slice-btn video-slice-btn--auto" data-slice-auto="${video.videoId}" data-i18n-title="slicer.openTitle" title="${t('slicer.openTitle')}"><span class="material-symbols-outlined">content_cut</span><span class="material-symbols-outlined video-slice-accent">bolt</span></button>`
+        + `<button type="button" class="video-slice-btn video-slice-btn--manual" data-slice-manual="${video.videoId}" data-i18n-title="chops.openTitle" title="${t('chops.openTitle')}"><span class="material-symbols-outlined">content_cut</span><span class="material-symbols-outlined video-slice-accent">back_hand</span></button>`
       : '';
 
     li.innerHTML = `
@@ -2337,15 +2339,20 @@ function renderMediaList({
       infoEl.dataset.tooltip = detail.join('\n');
     }
 
-    const sliceBtn = li.querySelector('[data-slice-id]');
-    if (sliceBtn) {
-      sliceBtn.addEventListener('click', () => {
-        // Opening the takeover from a collapsed rail must still work — force
-        // it expanded first (the takeover's CSS makes the panel full-viewport
-        // either way, but this keeps the toggle's own state/aria in sync).
-        if (librarySidenavToggle && librarySidenavToggle.isCollapsed()) librarySidenavToggle.expand();
-        slicer.openForVideo(video.videoId);
-      });
+    // Opening the takeover from a collapsed rail must still work — force it
+    // expanded first (the takeover's CSS makes the panel full-viewport either
+    // way, but this keeps the toggle's own state/aria in sync).
+    const openSlicer = (openFn) => {
+      if (librarySidenavToggle && librarySidenavToggle.isCollapsed()) librarySidenavToggle.expand();
+      openFn(video.videoId);
+    };
+    const autoSliceBtn = li.querySelector('[data-slice-auto]');
+    if (autoSliceBtn) {
+      autoSliceBtn.addEventListener('click', () => openSlicer(slicer.openForVideo));
+    }
+    const manualSliceBtn = li.querySelector('[data-slice-manual]');
+    if (manualSliceBtn) {
+      manualSliceBtn.addEventListener('click', () => openSlicer(slicer.openForVideoManual));
     }
 
     const retryBtn = li.querySelector('[data-retry-cta]');
