@@ -231,6 +231,28 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     vig.addColorStop(0, 'rgba(0,0,0,0)');
     vig.addColorStop(1, 'rgba(3,4,6,0.55)');
     vinyl.vignette = vig;
+
+    // --- Turntable (platter + plinth) drawn beneath the disc ---
+    const platterR = outerR * 1.14;           // platter peeks out around the record
+    vinyl.platterR = platterR;
+    const platter = ctx.createRadialGradient(
+      cx - platterR * 0.2, cy - platterR * 0.2, platterR * 0.1, cx, cy, platterR);
+    platter.addColorStop(0, '#3a4150');
+    platter.addColorStop(0.6, '#262b35');
+    platter.addColorStop(0.92, '#1a1e26');
+    platter.addColorStop(1, '#0c0e13');
+    vinyl.platter = platter;
+
+    // Brushed-metal plinth (deck base): a wide rounded slab filling the frame.
+    const plinth = ctx.createLinearGradient(0, cy - platterR, 0, cy + platterR * 1.05);
+    plinth.addColorStop(0, '#20242c');
+    plinth.addColorStop(0.5, '#171a21');
+    plinth.addColorStop(1, '#0b0d12');
+    vinyl.plinth = plinth;
+
+    // Title glyph-advance cache: recomputed when the title/label size changes,
+    // so per-frame curved text needs no measureText calls.
+    vinyl.titleCache = null;
   }
 
   // DPR-aware sizing. Must run whenever the canvas becomes visible: a canvas
@@ -413,6 +435,44 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
       ctx.restore();
     }
 
+    /* 0. turntable: brushed-metal plinth slab + the platter the record sits on,
+       with a ring of strobe dots at the platter edge (the classic pitch-strobe
+       look). Drawn beneath the disc. */
+    const platterR = vinyl.platterR;
+    ctx.save();
+    if (typeof ctx.roundRect === 'function') {
+      const px = Math.max(0, cx - platterR * 1.35);
+      const pw = Math.min(w, cx + platterR * 1.9) - px;
+      const ph = platterR * 2.1;
+      ctx.beginPath();
+      ctx.roundRect(px, cy - ph / 2, pw, ph, 14 * dpr);
+      ctx.fillStyle = vinyl.plinth;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1 * dpr;
+      ctx.stroke();
+    }
+    // platter
+    ctx.fillStyle = vinyl.platter;
+    ctx.beginPath(); ctx.arc(cx, cy, platterR, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath(); ctx.arc(cx, cy, platterR, 0, TAU); ctx.stroke();
+    // strobe dots at the platter rim, rotating with the platter
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle * 0.5);
+    ctx.fillStyle = rgbStr(ac, 0.75);
+    const dots = 40;
+    for (let i = 0; i < dots; i++) {
+      const a = (i / dots) * TAU;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * platterR * 0.965, Math.sin(a) * platterR * 0.965, 1.1 * dpr, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    ctx.restore();
+
     /* 2. contact shadow */
     ctx.fillStyle = vinyl.ground;
     ctx.beginPath();
@@ -515,24 +575,68 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     }
     ctx.restore();
 
-    /* 8. title + track-duration print */
+    /* 8. curved title (rotates with the disc) + track-duration readout */
     const title = (getMediaTitle && getMediaTitle()) || '';
     if (title) {
+      const fs = Math.max(9 * dpr, labelR * 0.22);
+      const titleFont = `600 ${fs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+      const tr = labelR * 0.8; // arc radius for the glyphs
+
+      // Rebuild the per-glyph angular layout only when the title/size changes,
+      // so no measureText runs per frame.
+      if (!vinyl.titleCache || vinyl.titleCache.title !== title || vinyl.titleCache.fs !== fs) {
+        ctx.font = titleFont;
+        const maxArc = 1.7; // radians (~97°) across the top before truncating
+        const glyphs = [];
+        let total = 0;
+        let truncated = false;
+        for (const ch of title) {
+          const wd = ctx.measureText(ch).width;
+          const aw = wd / tr;
+          if (total + aw > maxArc) { truncated = true; break; }
+          glyphs.push({ ch, aw });
+          total += aw;
+        }
+        if (truncated) {
+          const ell = ctx.measureText('…').width / tr;
+          glyphs.push({ ch: '…', aw: ell });
+          total += ell;
+        }
+        // Center the arc over the top of the label (−90°).
+        let a = -Math.PI / 2 - total / 2;
+        for (const g of glyphs) { g.angle = a + g.aw / 2; a += g.aw; }
+        vinyl.titleCache = { title, fs, glyphs };
+      }
+
       ctx.save();
-      const fs = Math.max(9 * dpr, labelR * 0.24);
-      ctx.font = `600 ${fs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+      ctx.translate(cx, cy);
+      ctx.rotate(angle); // spin the title with the disc
+      ctx.font = titleFont;
+      ctx.fillStyle = vinyl.textColor;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = vinyl.textColor;
-      ctx.fillText(fitText(ctx, title, labelR * 1.5), cx, cy - labelR * 0.4);
-      // Real datum instead of a decorative "RPM": the track's total length.
-      const durationLabel = formatMinSec(getMediaDuration && getMediaDuration());
-      if (durationLabel) {
-        ctx.font = `500 ${Math.max(7 * dpr, labelR * 0.14)}px system-ui, sans-serif`;
-        ctx.globalAlpha = 0.6;
-        ctx.fillText(durationLabel, cx, cy + labelR * 0.52);
+      for (const g of vinyl.titleCache.glyphs) {
+        ctx.save();
+        ctx.rotate(g.angle + Math.PI / 2); // glyph upright relative to its arc point
+        ctx.translate(0, -tr);
+        ctx.fillText(g.ch, 0, 0);
+        ctx.restore();
       }
       ctx.restore();
+
+      // Track length: a small static readout near the spindle (not rotating,
+      // so it stays legible while the label spins).
+      const durationLabel = formatMinSec(getMediaDuration && getMediaDuration());
+      if (durationLabel) {
+        ctx.save();
+        ctx.font = `500 ${Math.max(7 * dpr, labelR * 0.14)}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = vinyl.textColor;
+        ctx.globalAlpha = 0.6;
+        ctx.fillText(durationLabel, cx, cy + labelR * 0.5);
+        ctx.restore();
+      }
     }
 
     /* 9. spindle hole */
