@@ -647,7 +647,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
       // so no measureText runs per frame.
       if (!vinyl.titleCache || vinyl.titleCache.title !== title || vinyl.titleCache.fs !== fs) {
         ctx.font = titleFont;
-        const maxArc = 1.7; // radians (~97°) across the top before truncating
+        const maxArc = 2.4; // radians (~137°) across the top before truncating
         const glyphs = [];
         let total = 0;
         let truncated = false;
@@ -685,17 +685,29 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
       }
       ctx.restore();
 
-      // Track length: a small static readout near the spindle (not rotating,
-      // so it stays legible while the label spins).
+      // Track length: a small static timecode readout near the spindle (not
+      // rotating, so it stays legible while the label spins). Styled like a
+      // deck's time display — a monospaced value in a subtle rounded chip.
       const durationLabel = formatMinSec(getMediaDuration && getMediaDuration());
       if (durationLabel) {
         ctx.save();
-        ctx.font = `500 ${Math.max(7 * dpr, labelR * 0.14)}px system-ui, sans-serif`;
+        const tcFs = Math.max(7 * dpr, labelR * 0.15);
+        ctx.font = `600 ${tcFs}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        const ty = cy + labelR * 0.52;
+        const tw = ctx.measureText(durationLabel).width;
+        const padX = tcFs * 0.55, padY = tcFs * 0.34;
+        // Chip background + border (reads as a small timecode window).
+        roundRectPath(ctx, cx - tw / 2 - padX, ty - tcFs / 2 - padY, tw + padX * 2, tcFs + padY * 2, tcFs * 0.4);
+        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, dpr);
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.stroke();
         ctx.fillStyle = vinyl.textColor;
-        ctx.globalAlpha = 0.6;
-        ctx.fillText(durationLabel, cx, cy + labelR * 0.5);
+        ctx.globalAlpha = 0.85;
+        ctx.fillText(durationLabel, cx, ty);
         ctx.restore();
       }
     }
@@ -764,12 +776,14 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     applySkin();
   }
 
-  // Called on each central-media load. Video media defaults to the video view
-  // (so a stored vinyl/bars doesn't hijack every video); audio-only media has
-  // no video, so it falls back to the stored skin ('video' there resolves to
-  // the underlying audio-mode waveform).
-  function onMediaLoaded(kind) {
-    activeSkin = kind === 'video' ? 'video' : skin;
+  // Called on each central-media load. The skin belongs to the APP, not the
+  // media/session: the user's chosen skin always wins. So a stored vinyl/bars
+  // keeps rendering even when a video pad is triggered — the video no longer
+  // hijacks the display. The default stored skin is 'video' (readStoredSkin),
+  // so users who never pick a skin still see the video, unchanged. `kind` is
+  // unused now but kept in the signature for the callers.
+  function onMediaLoaded() {
+    activeSkin = skin;
     particles.length = 0;
     applySkin();
   }
