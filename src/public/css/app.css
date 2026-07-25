@@ -3715,23 +3715,38 @@ button.is-proxied {
   display: none;
 }
 
-/* One-line controls: the active mode's controls row and the Generate button
-   share a single row (the takeover is full-width, so there's room). Wraps only
-   if the viewport is genuinely too narrow. In Manual Chops every child is
-   [hidden] so the line collapses to zero height. */
+/* Stacked controls: the active mode's controls row sits on top and the
+   Generate button below it, so Sensitivity can span the full takeover width
+   (long, precise slider) instead of being squeezed onto one line. In Manual
+   Chops every child is [hidden] so the line collapses to zero height. */
 .slicer-controls-line {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   flex-shrink: 0;
-  flex-wrap: wrap;
 }
 
-/* Sensitivity slider is capped (not flex:1-greedy) so the method select and the
-   Generate button sit to its right on the same line. */
+/* Onset controls stack vertically: Sensitivity gets its own full-width row
+   (long slider for fine, precise dragging), Method drops to the row below.
+   Kept inside #slicer-onset-controls (not moved to the generate row) so
+   setMode still hides Method in Grid mode. */
+#slicer-onset-controls {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.slicer-onset-subrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Sensitivity slider fills its full-width row for maximum range/precision. */
 #slicer-onset-controls input[type='range'] {
-  flex: 0 0 140px;
-  min-width: 140px;
+  flex: 1;
+  min-width: 0;
 }
 
 .slicer-controls-row label {

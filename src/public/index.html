@@ -536,17 +536,21 @@
 
             <div class="slicer-controls-line" id="slicer-controls-line">
               <div class="slicer-controls-row" id="slicer-onset-controls">
-                <label for="slicer-sensitivity" data-i18n="slicer.sensitivity">Sensitivity</label>
-                <input type="range" id="slicer-sensitivity" min="0" max="1" step="0.01" value="0.5">
-                <input type="number" class="slicer-sensitivity-value" id="slicer-sensitivity-value" min="0" max="1" step="0.01" value="0.50">
-                <span class="help-icon" data-i18n-tooltip="tip.slicerSensitivity" data-tooltip="How easily a change is detected as a new slice boundary. Lower finds fewer, larger slices; higher finds more, shorter ones. You can type an exact value.">?</span>
-                <label for="slicer-method" data-i18n="slicer.method">Method</label>
-                <select id="slicer-method" class="slicer-method-select">
-                  <option value="specflux" selected data-i18n="slicer.methodSpectralFlux">Spectral Flux</option>
-                  <option value="hfc" data-i18n="slicer.methodHfc">High Frequency</option>
-                  <option value="energy" data-i18n="slicer.methodEnergy">Energy</option>
-                </select>
-                <span class="help-icon" data-i18n-tooltip="tip.slicerMethod" data-tooltip="How transients are detected. Spectral Flux works well overall; High Frequency favors bright hits like cymbals and hi-hats; Energy favors loud, percussive hits.">?</span>
+                <div class="slicer-onset-subrow slicer-onset-sensitivity">
+                  <label for="slicer-sensitivity" data-i18n="slicer.sensitivity">Sensitivity</label>
+                  <input type="range" id="slicer-sensitivity" min="0" max="1" step="0.01" value="0.5">
+                  <input type="number" class="slicer-sensitivity-value" id="slicer-sensitivity-value" min="0" max="1" step="0.01" value="0.50">
+                  <span class="help-icon" data-i18n-tooltip="tip.slicerSensitivity" data-tooltip="How easily a change is detected as a new slice boundary. Lower finds fewer, larger slices; higher finds more, shorter ones. You can type an exact value.">?</span>
+                </div>
+                <div class="slicer-onset-subrow slicer-onset-method">
+                  <label for="slicer-method" data-i18n="slicer.method">Method</label>
+                  <select id="slicer-method" class="slicer-method-select">
+                    <option value="specflux" selected data-i18n="slicer.methodSpectralFlux">Spectral Flux</option>
+                    <option value="hfc" data-i18n="slicer.methodHfc">High Frequency</option>
+                    <option value="energy" data-i18n="slicer.methodEnergy">Energy</option>
+                  </select>
+                  <span class="help-icon" data-i18n-tooltip="tip.slicerMethod" data-tooltip="How transients are detected. Spectral Flux works well overall; High Frequency favors bright hits like cymbals and hi-hats; Energy favors loud, percussive hits.">?</span>
+                </div>
               </div>
 
               <div class="slicer-controls-row slicer-grid-controls" id="slicer-grid-controls" hidden>
