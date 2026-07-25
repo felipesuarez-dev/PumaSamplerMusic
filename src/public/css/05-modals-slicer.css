@@ -647,7 +647,9 @@
   flex: 1;
   width: 32px;
   align-items: center;
-  justify-content: flex-start;
+  /* Centered, and reads top-to-bottom to match the PADS rail toggle (no
+     rotate) instead of the reversed bottom-to-top it had before. */
+  justify-content: center;
   gap: 8px;
   padding: 12px 0;
   background: transparent;
@@ -655,7 +657,6 @@
   color: var(--text-muted);
   cursor: pointer;
   writing-mode: vertical-rl;
-  transform: rotate(180deg);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
