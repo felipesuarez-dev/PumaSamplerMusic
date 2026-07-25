@@ -44,6 +44,10 @@ const mediaDisplay = createMediaDisplay({
   waveformCanvas: document.getElementById('center-waveform-canvas'),
   rulerCanvas: document.getElementById('center-waveform-ruler'),
   getMediaInfo,
+  // Forwarder (visualizerSkins is declared just below; the callback only fires
+  // on a media load, well after both exist). Also refresh the toggle icon so it
+  // reflects the now-active view (e.g. video wins over a stored skin).
+  onMediaLoaded: (kind) => { visualizerSkins.onMediaLoaded(kind); refreshSkinToggleIcon(); },
 });
 const visualizerSkins = createVisualizerSkins({
   container: document.querySelector('.video-display'),
@@ -1123,15 +1127,22 @@ function positionExportMenu(menu, btn) {
 // Central-display skin picker. The button lives at the bottom-left of the
 // video surface, so its menu opens upward. Same dismiss-on-outside-click /
 // Escape lifecycle as the pad context menu.
+// Sets the skin toggle button's glyph to the currently-active view. Module-level
+// so a media-load (which can change the active view) can refresh it, not just
+// the menu interactions inside initSkinToggle.
+function refreshSkinToggleIcon() {
+  const btn = document.getElementById('skin-toggle-btn');
+  if (!btn || !visualizerSkins) return;
+  const icon = btn.querySelector('.material-symbols-outlined');
+  if (icon) icon.textContent = SKIN_ICONS[visualizerSkins.getSkin()] || 'movie';
+}
+
 function initSkinToggle() {
   const btn = document.getElementById('skin-toggle-btn');
   if (!btn || !visualizerSkins) return;
   let menu = null;
 
-  function updateIcon() {
-    const icon = btn.querySelector('.material-symbols-outlined');
-    if (icon) icon.textContent = SKIN_ICONS[visualizerSkins.getSkin()] || 'movie';
-  }
+  const updateIcon = refreshSkinToggleIcon;
 
   function closeMenu() {
     if (!menu) return;
@@ -1152,15 +1163,19 @@ function initSkinToggle() {
     closeMenu();
     menu = document.createElement('div');
     menu.className = 'skin-menu';
+    // For audio-only media there is no video to show, so the 'video' item is
+    // really "the audio waveform" — relabel it so the menu isn't misleading.
+    const currentId = mediaDisplay.getMediaId();
+    const isAudioOnly = currentId ? mediaKindOf(getMediaInfo(currentId)) === 'audio' : false;
     visualizerSkins.getSkins().forEach((name) => {
       const item = document.createElement('button');
       item.type = 'button';
       if (name === visualizerSkins.getSkin()) item.classList.add('active');
       const ic = document.createElement('span');
       ic.className = 'material-symbols-outlined';
-      ic.textContent = SKIN_ICONS[name] || 'movie';
+      ic.textContent = (name === 'video' && isAudioOnly) ? 'graphic_eq' : (SKIN_ICONS[name] || 'movie');
       const label = document.createElement('span');
-      label.textContent = t(`skin.${name}`);
+      label.textContent = (name === 'video' && isAudioOnly) ? t('skin.videoAudioOnly') : t(`skin.${name}`);
       item.append(ic, label);
       item.addEventListener('click', () => {
         visualizerSkins.setSkin(name);

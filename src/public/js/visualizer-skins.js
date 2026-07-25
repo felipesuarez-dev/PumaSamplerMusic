@@ -127,7 +127,11 @@ function formatMinSec(seconds) {
 
 export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle, getMediaDuration }) {
   const ctx = canvas.getContext('2d');
+  // `skin` is the user's persisted preference; `activeSkin` is what actually
+  // renders right now. They differ when video media forces the video view even
+  // though a skin is stored (video wins on each video load, non-persisted).
   let skin = readStoredSkin();
+  let activeSkin = skin;
   let rafId = null;
   let angle = 0; // vinyl rotation, radians
   const particles = []; // bubbles state
@@ -551,7 +555,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   }
 
   function renderFrame() {
-    switch (skin) {
+    switch (activeSkin) {
       case 'waveform': drawWaveform(); break;
       case 'bars': drawBars(); break;
       case 'bubbles': drawBubbles(); break;
@@ -579,40 +583,54 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   }
 
   function applySkin() {
-    const active = skin !== 'video';
+    const active = activeSkin !== 'video';
     container.classList.toggle('skin-active', active);
     if (active) startLoop();
     else stopLoop();
   }
 
+  // User picking a skin from the menu: persist it AND make it active for the
+  // current media (overrides the video-wins default until the next media load).
   function setSkin(next) {
     skin = SKINS.includes(next) ? next : 'video';
+    activeSkin = skin;
     localStorage.setItem(STORAGE_KEY, skin);
     particles.length = 0;
     applySkin();
   }
 
+  // Called on each central-media load. Video media defaults to the video view
+  // (so a stored vinyl/bars doesn't hijack every video); audio-only media has
+  // no video, so it falls back to the stored skin ('video' there resolves to
+  // the underlying audio-mode waveform).
+  function onMediaLoaded(kind) {
+    activeSkin = kind === 'video' ? 'video' : skin;
+    particles.length = 0;
+    applySkin();
+  }
+
+  // What's actually showing (menu reflects this).
   function getSkin() {
-    return skin;
+    return activeSkin;
   }
 
   // Pause the loop when the tab is hidden; resume if a skin is active.
   function onVisibility() {
     if (document.hidden) stopLoop();
-    else if (skin !== 'video') startLoop();
+    else if (activeSkin !== 'video') startLoop();
   }
   document.addEventListener('visibilitychange', onVisibility);
-  window.addEventListener('resize', () => { if (skin !== 'video') resize(); });
+  window.addEventListener('resize', () => { if (activeSkin !== 'video') resize(); });
 
   // Re-measure when the display box changes size without a window resize
   // (header collapse, panel toggles, sidenav swaps) so the canvas never keeps
   // a stale 1x1 / wrong-DPR backing store.
   if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(() => { if (skin !== 'video') resize(); });
+    const ro = new ResizeObserver(() => { if (activeSkin !== 'video') resize(); });
     ro.observe(canvas);
   }
 
   applySkin();
 
-  return { setSkin, getSkin, resize, getSkins: () => SKINS.slice() };
+  return { setSkin, getSkin, onMediaLoaded, resize, getSkins: () => SKINS.slice() };
 }

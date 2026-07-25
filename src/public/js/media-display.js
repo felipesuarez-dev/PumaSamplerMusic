@@ -12,7 +12,7 @@ import { mediaKindOf } from './state.js';
 //
 // `getMediaInfo(videoId)` looks up the store's video/media list so this can
 // tell `mediaKind` apart without needing its own copy of that state.
-export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerCanvas, getMediaInfo }) {
+export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerCanvas, getMediaInfo, onMediaLoaded }) {
   const video = videoDisplay.getVideo();
   const displayEl = video ? video.parentElement : null;
 
@@ -82,6 +82,9 @@ export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerC
     const changed = currentMediaId !== videoId || currentKind !== kind;
     currentMediaId = videoId;
     currentKind = kind;
+    // Report the media kind once per change so the visualizer can default to
+    // video for video media (and to the waveform for audio-only).
+    if (changed && onMediaLoaded) onMediaLoaded(kind);
     return changed;
   }
 
