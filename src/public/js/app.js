@@ -70,6 +70,10 @@ const visualizerSkins = createVisualizerSkins({
 });
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
+// Re-sizes the editor waveform whenever its container's box changes (sidenav
+// expand/collapse, window resize, panel resize) so canvas.width tracks the live
+// layout and the red playhead stays pixel-accurate. Disconnected with the wave.
+let editorWaveformResizeObserver = null;
 let padEditorActiveTab = 'general';
 let isCapturingKey = false;
 let masterFxControls = null;
@@ -1826,6 +1830,10 @@ async function triggerPad(position, data) {
 const editorEl = document.getElementById('pad-editor');
 
 function renderPadEditor(position, data) {
+  if (editorWaveformResizeObserver) {
+    editorWaveformResizeObserver.disconnect();
+    editorWaveformResizeObserver = null;
+  }
   if (editorWaveform) {
     editorWaveform.destroy();
     editorWaveform = null;
@@ -2001,6 +2009,10 @@ function renderPadEditor(position, data) {
 
   const canvas = document.getElementById('waveform-canvas');
   const rulerCanvas = document.getElementById('waveform-ruler');
+  if (editorWaveformResizeObserver) {
+    editorWaveformResizeObserver.disconnect();
+    editorWaveformResizeObserver = null;
+  }
   if (editorWaveform) editorWaveform.destroy();
   editorWaveform = createWaveform(canvas, {
     rulerCanvas,
@@ -2026,6 +2038,18 @@ function renderPadEditor(position, data) {
       if (zoomLevelEl) zoomLevelEl.textContent = `${Math.round(level * 10) / 10}x`;
     },
   });
+
+  // Keep the backing store matched to the container width so the red playhead
+  // stays precise when the center column is resized (sidenav toggles, window
+  // resize) — not just on tab switches. Observe the container, not the canvas,
+  // to avoid feedback from our own canvas.width writes.
+  const waveformContainer = canvas.closest('.waveform-container');
+  if (waveformContainer && typeof ResizeObserver !== 'undefined') {
+    editorWaveformResizeObserver = new ResizeObserver(() => {
+      if (editorWaveform) editorWaveform.resize();
+    });
+    editorWaveformResizeObserver.observe(waveformContainer);
+  }
 
   if (data?.videoId) {
     loadEditorWaveform(data.videoId, data.start ?? 0, data.end ?? 0);
