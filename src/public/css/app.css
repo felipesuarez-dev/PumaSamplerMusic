@@ -1028,10 +1028,29 @@ button.is-proxied {
 }
 
 /* Small "Clear FX" button under the FX master switch. */
+/* Clear-FX lives in the panel's title bar, right-aligned. It's a sibling of the
+   header <button> (never a child — nested buttons are invalid) absolutely
+   positioned over the right of the title. The panel is position:relative for
+   this (see .collapsible-strip below). Icon-only, tooltip explains it. */
 .pad-fx-clear-btn {
-  font-size: 0.62rem;
-  padding: 2px 8px;
-  white-space: nowrap;
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  line-height: 1;
+}
+
+.pad-fx-clear-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.pad-fx-clear-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* When the pad's master FX switch is off, dim the knob rows to signal the pad
@@ -1733,6 +1752,7 @@ button.is-proxied {
 }
 
 .collapsible-strip {
+  position: relative; /* anchor for the absolutely-positioned Clear-FX button */
   width: 100%;
   flex-shrink: 0;
   background: var(--bg);

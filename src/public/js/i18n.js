@@ -241,8 +241,9 @@ export const dictionaries = {
     'pads.fxGroupSelected': 'FX CONTROL PAD {position}',
     'pads.clearFx': 'Clear FX',
     'pads.clearFxConfirmTitle': 'Clear FX on PAD {position}?',
-    'pads.clearFxConfirmBody': "This resets all of this PAD's effects to their defaults. The pad's slice and key are kept.",
+    'pads.clearFxConfirmBody': "This permanently removes this PAD's effects and resets them to their defaults. To use new effects you'll have to set them again. The pad's slice and key are kept.",
     'pads.clearFxConfirmButton': 'Clear FX',
+    'tip.clearFx': "Permanently reset this PAD's effects to their defaults.",
     'tip.fxEnableSwitch': "Master ON/OFF for this PAD's effects. When off, the PAD plays clean without losing your settings.",
 
     'library.tabYouTube': 'YouTube',
@@ -648,8 +649,9 @@ export const dictionaries = {
     'pads.fxGroupSelected': 'CONTROL EFECTOS PAD {position}',
     'pads.clearFx': 'Limpiar FX',
     'pads.clearFxConfirmTitle': '¿Limpiar los FX del PAD {position}?',
-    'pads.clearFxConfirmBody': 'Esto restablece todos los efectos de este PAD a sus valores por defecto. Se conservan el corte y la tecla del pad.',
+    'pads.clearFxConfirmBody': 'Esto quita los efectos de este PAD de forma permanente y los restablece a sus valores por defecto. Si querés usar nuevos efectos, tendrás que configurarlos de nuevo. Se conservan el corte y la tecla del pad.',
     'pads.clearFxConfirmButton': 'Limpiar FX',
+    'tip.clearFx': 'Restablece de forma permanente los efectos de este PAD a sus valores por defecto.',
     'tip.fxEnableSwitch': 'ON/OFF maestro de los efectos de este PAD. Cuando está en off, el PAD suena limpio sin perder tus ajustes.',
 
     'library.tabYouTube': 'YouTube',

@@ -206,6 +206,10 @@
                   <span class="panel-title" id="pad-fx-label" data-i18n="pads.fxGroupNone">Select a PAD</span>
                   <span class="chev">▾</span>
                 </button>
+                <!-- Sibling of the header <button> (a nested button would be
+                     invalid HTML and would toggle the panel). Absolutely
+                     positioned over the right of the title bar via CSS. -->
+                <button type="button" class="btn btn-secondary pad-fx-clear-btn has-tip" id="pad-fx-clear" data-i18n="pads.clearFx" data-i18n-title="pads.clearFx" data-i18n-tooltip="tip.clearFx" data-tooltip="Permanently resets this PAD's effects to their defaults. To use new effects you'll have to set them again." disabled><span class="material-symbols-outlined">restart_alt</span></button>
                 <div class="panel-content" id="pad-fx-strip-content">
                   <div class="panel-content-inner">
                     <div class="pad-fx-strip" id="pad-fx-strip">
@@ -216,7 +220,6 @@
                             <span class="mini-switch-track"></span>
                             <span class="mini-switch-label" data-i18n-tooltip="tip.fxEnableSwitch" data-tooltip="Master ON/OFF for this PAD's effects. When off, the PAD plays clean without losing your settings.">FX</span>
                           </label>
-                          <button type="button" class="btn btn-secondary pad-fx-clear-btn" id="pad-fx-clear" data-i18n="pads.clearFx" data-i18n-title="pads.clearFx" disabled>Clear FX</button>
                           <label class="mini-switch">
                             <input type="checkbox" id="pad-fx-pshift" checked disabled>
                             <span class="mini-switch-track"></span>
