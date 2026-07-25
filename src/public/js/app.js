@@ -282,9 +282,14 @@ let sessionDirty = false;
 let autosaveDebounceTimer = null;
 let autosaveIntervalTimer = null;
 let autosaveSavedResetTimer = null;
+// One-shot guard so a keyless pad blocking auto-save toasts once, not on every
+// debounced attempt. Reset once a save succeeds.
+let autosaveBlockedNotified = false;
 
 function isAutosaveEnabled() {
-  return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) === 'true';
+  // Default ON: only an explicit opt-out (the Settings checkbox writing 'false')
+  // disables it. Users who never touched it now get working auto-save.
+  return localStorage.getItem(AUTOSAVE_ENABLED_STORAGE) !== 'false';
 }
 function getAutosaveMode() {
   return localStorage.getItem(AUTOSAVE_MODE_STORAGE) === 'interval' ? 'interval' : 'change';
@@ -306,12 +311,21 @@ function setAutosaveStatus(state) {
     const icon = el.querySelector('.material-symbols-outlined');
     const label = el.querySelector('.autosave-status-label');
     el.classList.toggle('saving', state === 'saving');
+    el.classList.toggle('saved', state === 'saved');
+    el.classList.toggle('blocked', state === 'blocked');
+    el.classList.toggle('error', state === 'error');
     if (state === 'saving') {
       if (icon) icon.textContent = 'sync';
       if (label) label.textContent = t('autosave.saving');
     } else if (state === 'saved') {
       if (icon) icon.textContent = 'check_circle';
       if (label) label.textContent = t('autosave.saved');
+    } else if (state === 'blocked') {
+      if (icon) icon.textContent = 'key_off';
+      if (label) label.textContent = t('autosave.blocked');
+    } else if (state === 'error') {
+      if (icon) icon.textContent = 'error';
+      if (label) label.textContent = t('autosave.error');
     } else {
       if (icon) icon.textContent = 'cloud_done';
       if (label) label.textContent = t('autosave.idle');
@@ -323,8 +337,19 @@ async function runAutosave() {
   if (!isAutosaveEnabled()) return;
   const current = sessionManager.getCurrent();
   if (!current?.name) return; // nothing to autosave into yet
-  const data = collectSessionData();
-  if (!data) return; // a guard aborted (e.g. pad missing key) — skip silently
+  const data = collectSessionData({ silent: true });
+  if (!data) {
+    // A keyless pad blocks the save. Surface it (visible status + a one-shot
+    // toast) instead of aborting silently, so the user knows why it won't save.
+    setAutosaveStatus('blocked');
+    if (!autosaveBlockedNotified) {
+      autosaveBlockedNotified = true;
+      const incomplete = findPadMissingKey();
+      if (incomplete) showToast(t('autosave.blockedNoKey', { position: incomplete.position }), 'warning');
+    }
+    return;
+  }
+  autosaveBlockedNotified = false;
   setAutosaveStatus('saving');
   try {
     await sessionManager.save({ ...data, name: current.name }, { silent: true });
@@ -333,7 +358,7 @@ async function runAutosave() {
     clearTimeout(autosaveSavedResetTimer);
     autosaveSavedResetTimer = setTimeout(() => setAutosaveStatus('idle'), 2000);
   } catch {
-    setAutosaveStatus('idle'); // save() already logged; stay quiet
+    setAutosaveStatus('error'); // surface it instead of swallowing
   }
 }
 
@@ -359,6 +384,14 @@ function refreshAutosave() {
   setAutosaveStatus('idle');
   restartAutosaveInterval();
 }
+
+// Last-line guard against losing unsaved edits on close/reload. Browsers ignore
+// custom text but still show the native prompt when preventDefault() runs.
+window.addEventListener('beforeunload', (e) => {
+  if (!sessionDirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
 
 // --- Settings modal --------------------------------------------------------
 function openSettingsModal() {
@@ -636,6 +669,29 @@ function openCopyPadModal(sourcePosition) {
 // the generic error wouldn't say which one.
 function findPadMissingKey() {
   return pads.getAll().find((p) => !p.key);
+}
+
+// Gathers the save payload and runs the pre-save keyless-pad guard, returning
+// null to abort. Module-level so BOTH the Save-button path (via the session
+// manager) and runAutosave() can call it -- runAutosave referenced a
+// `collectSessionData` that only existed as a session-manager method in another
+// scope, so enabling auto-save threw a ReferenceError and never saved.
+// `silent` suppresses the user-facing guard feedback (toast + pad-select) so a
+// debounced auto-save doesn't spam a toast / hijack selection on every edit;
+// the Save button keeps the feedback.
+function collectSessionData({ silent = false } = {}) {
+  const incomplete = findPadMissingKey();
+  if (incomplete) {
+    if (!silent) {
+      showToast(t('organize.saveBlockedMissingKey', { position: incomplete.position }), 'warning');
+      pads.select(incomplete.position);
+    }
+    return null;
+  }
+  return {
+    pads: pads.getAll(),
+    masterFx: masterFxControls ? masterFxControls.getState() : undefined,
+  };
 }
 
 // Global stop
@@ -2729,19 +2785,11 @@ ws.on('video:removed', (payload) => {
 const sessionManager = createSessionManager({
   showToast,
   openConfirmModal,
-  // Gathers the save payload and runs the pre-save guard; returning null aborts
-  // before the Save modal opens (the pad-key guard selects the offender).
+  // Save-button path: full guard feedback (toast + pad-select on a keyless pad).
+  // Shares the module-level collectSessionData with runAutosave (which passes
+  // silent:true) so there is one source of truth for the payload + guard.
   collectSessionData() {
-    const incomplete = findPadMissingKey();
-    if (incomplete) {
-      showToast(t('organize.saveBlockedMissingKey', { position: incomplete.position }), 'warning');
-      pads.select(incomplete.position);
-      return null;
-    }
-    return {
-      pads: pads.getAll(),
-      masterFx: masterFxControls ? masterFxControls.getState() : undefined,
-    };
+    return collectSessionData();
   },
   onSessionLoad(session) {
     const padsArray = session.pads || [];

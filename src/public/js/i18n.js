@@ -64,6 +64,9 @@ export const dictionaries = {
     'autosave.idle': 'Auto',
     'autosave.saving': 'Saving…',
     'autosave.saved': 'Saved',
+    'autosave.blocked': 'Needs key',
+    'autosave.blockedNoKey': "Auto-save paused: PAD {position} has no key. Assign one and it saves automatically.",
+    'autosave.error': 'Save failed',
 
     'logs.title': 'PumaSamplerMusic logs',
     'logs.loading': 'Loading logs...',
@@ -453,6 +456,9 @@ export const dictionaries = {
     'autosave.idle': 'Auto',
     'autosave.saving': 'Guardando…',
     'autosave.saved': 'Guardado',
+    'autosave.blocked': 'Falta tecla',
+    'autosave.blockedNoKey': 'Auto-guardado en pausa: el PAD {position} no tiene tecla. Asignale una y se guarda solo.',
+    'autosave.error': 'Fallo al guardar',
 
     'logs.title': 'Logs de PumaSamplerMusic',
     'logs.loading': 'Cargando logs...',

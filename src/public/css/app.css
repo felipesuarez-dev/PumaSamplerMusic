@@ -3139,8 +3139,28 @@ button.is-proxied {
   animation: autosave-spin 1s linear infinite;
 }
 
+/* Green on a successful save, with a brief flash so each persist is visible. */
+.autosave-status.saved {
+  color: var(--success);
+  background: var(--success-dim, rgba(74, 222, 128, 0.14));
+  animation: autosave-saved-flash 0.4s ease;
+}
+
+/* A keyless pad is blocking the save, or a save errored — surface, don't hide. */
+.autosave-status.blocked {
+  color: var(--warning, #fbbf24);
+}
+
+.autosave-status.error {
+  color: var(--danger);
+}
+
 @keyframes autosave-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes autosave-saved-flash {
+  from { background: var(--success); color: #0a0c10; }
 }
 
 /* Sessions manager modal */
