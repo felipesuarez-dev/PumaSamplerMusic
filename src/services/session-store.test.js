@@ -46,6 +46,18 @@ test('save/load round-trip preserves pads and stamps schemaVersion 3', async () 
   assert.equal(loaded.schemaVersion, 3);
 });
 
+test('list() reports the stored .name (with spaces), matching what load() returns', async () => {
+  // A name with a space sanitizes to a different filename stem; list() must
+  // still report the pretty stored name so the combobox option value matches
+  // load()/save()'s session.name (otherwise the select blanks).
+  await sessionStore.save({ name: 'My Session Name', pads: [] });
+  const sessions = await sessionStore.list();
+  const entry = sessions.find((s) => s.name === 'My Session Name');
+  assert.ok(entry, 'list() should return the stored name with spaces');
+  const loaded = await sessionStore.load('My Session Name');
+  assert.equal(loaded.name, entry.name); // list name === load name (no blank)
+});
+
 test('load migrates a schemaVersion 1 session with no masterFx to a full default masterFx', async () => {
   const legacyPath = join(config.sessionsDir, 'legacy-session.json');
   const legacySession = {

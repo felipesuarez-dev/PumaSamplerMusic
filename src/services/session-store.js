@@ -16,18 +16,24 @@ export async function list() {
 
     for (const entry of entries) {
       if (!entry.endsWith(SESSION_EXT)) continue;
-      const name = entry.slice(0, -SESSION_EXT.length);
+      const stem = entry.slice(0, -SESSION_EXT.length);
       const content = await readFile(join(config.sessionsDir, entry), 'utf8');
       try {
         const session = JSON.parse(content);
+        // Report the STORED name (with spaces/accents), not the sanitized
+        // filename stem, so the combobox option value matches what load()/save()
+        // return (session.name). Otherwise select.value never matches an option
+        // and the combo blanks for any name with a non-[A-Za-z0-9_-] char.
+        // (Edge case: two files with an identical stored name would collide into
+        // one sanitized filename — not reachable via the app, only manual FS edits.)
         sessions.push({
-          name,
+          name: session.name || stem,
           createdAt: session.createdAt || null,
           updatedAt: session.updatedAt || null,
           padCount: Array.isArray(session.pads) ? session.pads.length : 0,
         });
       } catch {
-        sessions.push({ name, invalid: true });
+        sessions.push({ name: stem, invalid: true });
       }
     }
 
