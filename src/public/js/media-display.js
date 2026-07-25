@@ -222,11 +222,18 @@ export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerC
       const currentTime = voiceTime != null ? voiceTime : wall;
       return { currentTime, paused: !clockPlaying, duration: clockEnd };
     }
+    // Video mode: derive the playhead from the SAME wall-clock the audio branch
+    // uses (already started by playSegment via startClock) instead of the
+    // <video>'s coarse, per-frame currentTime — so the editor's red playhead is
+    // as smooth/precise as the slicer's. Pause/seek already update the clock.
     const el = videoDisplay.getVideo();
+    const wall = clockPlaying
+      ? Math.min(clockEnd, clockStart + (performance.now() - clockStartedAt) / 1000)
+      : clockStart;
     return {
-      currentTime: el ? el.currentTime : 0,
+      currentTime: clockPlaying ? wall : (el ? el.currentTime : clockStart),
       paused: el ? el.paused : true,
-      duration: el && !Number.isNaN(el.duration) ? el.duration : 0,
+      duration: el && !Number.isNaN(el.duration) ? el.duration : clockEnd,
     };
   }
 
