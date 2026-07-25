@@ -13,7 +13,9 @@
 [![License][license-badge]](LICENSE)
 [![PumaSoft][pumasoft-badge]][pumasoft-link]
 
-[Descargar / Ejecutar](#inicio-rápido) · [Cómo funciona](#cómo-funciona) · [Características](#características) · [Arquitectura](#arquitectura) · [Desarrollo](#desarrollo)
+[Descargar / Ejecutar](#ejecutar) · [Cómo funciona](#cómo-funciona) · [Características](#características) · [Arquitectura](#arquitectura) · [Desarrollo](#desarrollo)
+
+<img src="docs/screenshot-main.png" alt="Vista principal de PumaSamplerMusic: grilla de PADs, controles de FX y visualizador de video" width="100%" />
 
 </div>
 
@@ -43,14 +45,13 @@ PumaSamplerMusic resuelve esto en una sola ventana del navegador: pega una URL d
 - **Resiliencia ante el bot-check de YouTube** — un contenedor auxiliar genera PO tokens para que `yt-dlp` pase la verificación "Sign in to confirm you're not a bot" sin necesidad de cookies; si aun así aparece, se puede pegar un cookies.txt exportado del navegador.
 - **Corre en Docker** — un solo contenedor, un puerto, sin necesidad de Node.js o Python local.
 
-## Inicio rápido
+## Ejecutar
 
-### Requisitos previos
-
-- [Docker](https://docs.docker.com/get-docker/) y Docker Compose v2
-- O, para desarrollo sin contenedores: Node.js 22+, Python 3, yt-dlp, ffmpeg
+La forma recomendada es Docker: un contenedor, un puerto, sin instalar Node.js ni Python en tu máquina. Si preferís correrlo directo sobre tu sistema, más abajo está la opción bare-metal.
 
 ### Opción 1: manage.sh (recomendado)
+
+Requiere [Docker](https://docs.docker.com/get-docker/) y Docker Compose v2. El wrapper `manage.sh` construye la imagen, levanta el contenedor y el sidecar de PO tokens, y expone comandos de logs/backup/update.
 
 ```bash
 git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
@@ -60,34 +61,61 @@ cd PumaSamplerMusic
 
 ### Opción 2: Docker Compose
 
+Mismos requisitos, sin el wrapper:
+
 ```bash
 git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
 cd PumaSamplerMusic
 docker compose up -d --build
 ```
 
-Abre http://localhost:4070
+### Opción 3: bare-metal (sin contenedores)
 
-### Acceso remoto (Tailscale)
+Para desarrollo o si no querés Docker. Necesitás **Node.js ≥ 22** y, en el `PATH`, **`python3`**, **`yt-dlp`** y **`ffmpeg`** (los usa el backend para descargar y extraer audio).
 
-Si el servidor está en tu tailnet, abre `http://<nombre-del-servidor>:4070` desde cualquier dispositivo. Con MagicDNS deshabilitado, usa la IP de Tailscale del servidor, por ejemplo:
-
+```bash
+git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
+cd PumaSamplerMusic
+npm ci
+npm start          # node src/server.js — escucha en 0.0.0.0:4070
 ```
-http://100.105.21.49:4070
-```
 
-No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
+- `npm run dev` — igual, pero con recarga automática (`node --watch`).
+- `npm test` — corre la suite de tests (`node --test`).
+- Los datos se guardan en `DATA_DIR` (por defecto `/data`), que contiene `videos/` y `sessions/`. Para bare-metal conviene apuntarlo a una carpeta local, por ejemplo `DATA_DIR=./data npm start`.
+
+En cualquiera de las tres opciones, abre **http://localhost:4070**.
 
 ### Atajos de teclado
+
+Las teclas de los PADs y las del cortador (Slicer/Chops) son **configurables**; abajo se listan los valores por defecto.
+
+**Editor de PAD y forma de onda**
 
 | Tecla | Acción |
 |---|---|
 | `I` | Fija el punto de **entrada** en la posición actual de la previsualización |
 | `O` | Fija el punto de **salida** en la posición actual de la previsualización |
-| `Espacio` | Reproducir/pausar previsualización |
-| `Ctrl` + rueda del mouse | Hace zoom in/out en la forma de onda en la posición del cursor |
+| `Espacio` | Reproducir/pausar la previsualización del PAD |
+| `Ctrl` + rueda del mouse | Zoom in/out en la forma de onda en la posición del cursor |
+
+**Chops manuales (cortador manual)** — configurables, solo activas dentro del cortador manual:
+
+| Tecla (por defecto) | Acción |
+|---|---|
+| `Espacio` (corte) | Coloca un corte en la posición del playhead |
+| `P` (play) | Reproduce el audio del cortador |
+| `S` (stop) | Detiene el audio del cortador |
+| `Ctrl/Cmd + Z` | Deshace el último corte/edición (Slicer y Chops) |
+
+> `Espacio` es contextual: en el editor de PAD reproduce/pausa la previsualización; dentro de los Chops manuales coloca un corte (el cortador captura la tecla antes que el editor).
+
+**Globales**
+
+| Tecla | Acción |
+|---|---|
 | `Escape` (configurable) | Detiene todos los PADs y pausa el video |
-| `Ctrl/Cmd + Shift + H` | Mostrar/ocultar barra superior |
+| `Ctrl/Cmd + Shift + H` | Muestra/oculta la barra superior |
 
 ## Cómo funciona
 
@@ -98,6 +126,12 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 5. **Reproducir** — presiona la tecla asignada. El audio se reproduce a través del motor Web Audio (pasando por la cadena de FX maestra — filtro, reverb, delay) y el video aparece en el visualizador.
 6. **Guardar la sesión** — el botón **Save** abre un modal para nombrarla; cárgala después desde el combo o desde el modal **Gestionar** (con búsqueda y eliminación por sesión). Al iniciar una sesión nueva se abre un modal de plantilla: empezar desde una disposición en blanco, o copiar los PADs de una sesión existente como punto de partida.
 7. **Organizar la grilla** — activa **Organizar** (junto al selector de PADS) para arrastrar e intercambiar/mover PADs, copiar uno a otro o limpiarlo; mientras está activo los PADs no disparan audio.
+
+### Auto-Slicer
+
+Analiza una pista completa (detección de onsets por flujo espectral o cuadrícula por beats), previsualiza cada corte y asígnalos a PADs o crea una sesión nueva con los seleccionados.
+
+<img src="docs/screenshot-slicer.png" alt="Auto-Slicer: forma de onda con marcadores de onsets y lista de cortes" width="100%" />
 
 ## Características
 
@@ -120,6 +154,12 @@ No se necesita redirección de puertos — Tailscale gestiona el túnel cifrado.
 | **Detención global** | El botón STOP o la tecla **Escape** silencia todos los PADs y pausa el video |
 | **Resiliencia YouTube** | Contenedor `bgutil-provider` genera PO tokens para sortear el bot-check de YouTube; panel de cookies en Video Library como respaldo |
 | **Docker** | Un solo comando para compilar, ejecutar, respaldar y actualizar |
+
+### Skins del visualizador
+
+El display cambia entre video, forma de onda, barras de espectro, burbujas y un tornamesa de vinilo animado que gira con el audio.
+
+<img src="docs/screenshot-vinyl.png" alt="Skin de vinilo: tornamesa animado girando con el audio" width="100%" />
 
 ## Arquitectura
 
@@ -211,14 +251,18 @@ Regla: el frontend solo descarga buffers de audio por HTTP; el backend maneja to
 
 Edita `docker-compose.yml`:
 
-| Variable | Por defecto | Significado |
+| Variable | En `docker-compose.yml` | Significado |
 |---|---|---|
-| `MAX_CACHE_GB` | 10 | Espacio máximo en disco para videos en caché |
-| `MAX_CONCURRENT_DOWNLOADS` | 2 | Descargas en paralelo |
-| `TZ` | America/Santiago | Zona horaria |
 | `PORT` | 4070 | Puerto interno + externo |
+| `DATA_DIR` | `/data` | Carpeta de datos (`videos/` + `sessions/`) |
+| `MAX_CACHE_GB` | 5 | Espacio máximo en disco para videos en caché (default del código: 10) |
+| `MAX_CONCURRENT_DOWNLOADS` | 1 | Descargas en paralelo (default del código: 2) |
+| `MAX_CONCURRENT_UPLOADS` | 2 | Subidas de archivos locales en paralelo (default del código) |
+| `MAX_UPLOAD_MB` | 4096 | Tamaño máximo por archivo subido, en MB (default del código) |
+| `YTDLP_CHANNEL` | `stable` | Canal de actualización de yt-dlp |
 | `COOKIES_FILE` | `/data/cookies.txt` | Ruta del archivo de cookies para yt-dlp |
 | `POT_PROVIDER_URL` | `http://bgutil-provider:4416` | URL del proveedor de PO tokens |
+| `TZ` | America/Santiago | Zona horaria |
 
 ## Estructura de datos
 

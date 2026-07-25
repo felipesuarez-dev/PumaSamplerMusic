@@ -13,7 +13,9 @@
 [![License][license-badge]](LICENSE)
 [![PumaSoft][pumasoft-badge]][pumasoft-link]
 
-[Download / Run](#quick-start) · [How it works](#how-it-works) · [Features](#features) · [Architecture](#architecture) · [Development](#development)
+[Download / Run](#run) · [How it works](#how-it-works) · [Features](#features) · [Architecture](#architecture) · [Development](#development)
+
+<img src="docs/screenshot-main.png" alt="PumaSamplerMusic main view: pad grid, FX controls, and video visualizer" width="100%" />
 
 </div>
 
@@ -43,14 +45,13 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL, mark a 
 - **YouTube bot-check resiliency** — a sidecar container generates PO tokens so `yt-dlp` passes the "Sign in to confirm you're not a bot" check without cookies; if it still appears, paste a browser-exported cookies.txt as a fallback.
 - **Runs in Docker** — single container, one port, no local Node.js or Python required.
 
-## Quick Start
+## Run
 
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2
-- Or, for bare-metal development: Node.js 22+, Python 3, yt-dlp, ffmpeg
+The recommended way is Docker: one container, one port, no local Node.js or Python. If you'd rather run it straight on your system, the bare-metal option is below.
 
 ### Option 1: manage.sh (recommended)
+
+Requires [Docker](https://docs.docker.com/get-docker/) and Docker Compose v2. The `manage.sh` wrapper builds the image, brings up the container and the PO-token sidecar, and exposes logs/backup/update commands.
 
 ```bash
 git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
@@ -60,32 +61,59 @@ cd PumaSamplerMusic
 
 ### Option 2: Docker Compose
 
+Same requirements, without the wrapper:
+
 ```bash
 git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
 cd PumaSamplerMusic
 docker compose up -d --build
 ```
 
-Open http://localhost:4070
+### Option 3: bare-metal (no containers)
 
-### Remote access (Tailscale)
+For development, or if you'd rather not use Docker. You need **Node.js ≥ 22** and, on your `PATH`, **`python3`**, **`yt-dlp`**, and **`ffmpeg`** (the backend uses them to download and extract audio).
 
-If the server is on your tailnet, open `http://<server-hostname>:4070` from any device. With MagicDNS disabled, use the server's Tailscale IP, for example:
-
+```bash
+git clone https://github.com/felipesuarez-dev/PumaSamplerMusic.git
+cd PumaSamplerMusic
+npm ci
+npm start          # node src/server.js — listens on 0.0.0.0:4070
 ```
-http://100.105.21.49:4070
-```
 
-No port forwarding is needed — Tailscale handles the encrypted tunnel.
+- `npm run dev` — same, but with auto-reload (`node --watch`).
+- `npm test` — runs the test suite (`node --test`).
+- Data is stored under `DATA_DIR` (defaults to `/data`), holding `videos/` and `sessions/`. For bare-metal, point it at a local folder, e.g. `DATA_DIR=./data npm start`.
+
+With any of the three options, open **http://localhost:4070**.
 
 ### Keyboard shortcuts
+
+Pad keys and slicer (Slicer/Chops) keys are **configurable**; the defaults are listed below.
+
+**Pad editor & waveform**
 
 | Key | Action |
 |---|---|
 | `I` | Set **In** point at the current preview position |
 | `O` | Set **Out** point at the current preview position |
-| `Space` | Play/pause preview |
+| `Space` | Play/pause the pad preview |
 | `Ctrl` + mouse wheel | Zoom the waveform in/out at the cursor position |
+
+**Manual chops (manual slicer)** — configurable, active only inside the manual slicer:
+
+| Key (default) | Action |
+|---|---|
+| `Space` (cut) | Place a cut at the playhead position |
+| `P` (play) | Play the slicer audio |
+| `S` (stop) | Stop the slicer audio |
+| `Ctrl/Cmd + Z` | Undo the last cut/edit (Slicer and Chops) |
+
+> `Space` is contextual: in the pad editor it plays/pauses the preview; inside manual Chops it places a cut (the slicer captures the key before the editor does).
+
+**Global**
+
+| Key | Action |
+|---|---|
 | `Escape` (configurable) | Stop all pads and pause the video |
 | `Ctrl/Cmd + Shift + H` | Show/hide the top bar |
 
@@ -98,6 +126,12 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 5. **Play** — press the assigned key. The audio plays through the Web Audio engine (through the master FX chain — filter, reverb, delay) and the video appears in the visualizer.
 6. **Save your session** — the **Save** button opens a modal to name it; load it later from the combo or the **Manage** modal (with search and per-session delete). Starting a new session opens a template modal: start from a blank layout, or copy the pads from an existing session as a starting point.
 7. **Organize the grid** — toggle **Organize** (next to the PADS selector) to drag and swap/move pads, copy one to another, or clear it; pads don't trigger audio while it's active.
+
+### Auto-Slicer
+
+Analyzes a full track (spectral-flux onset detection or a beat grid), lets you preview each cut, and assigns them to pads or spins up a new session from the selected ones.
+
+<img src="docs/screenshot-slicer.png" alt="Auto-Slicer: waveform with onset markers and a slice list" width="100%" />
 
 ## Features
 
@@ -120,6 +154,12 @@ No port forwarding is needed — Tailscale handles the encrypted tunnel.
 | **Global Stop** | STOP button or **Escape** key silences all pads and pauses the video |
 | **YouTube resiliency** | `bgutil-provider` container generates PO tokens to bypass YouTube's bot-check; cookies panel in Video Library as a fallback |
 | **Docker** | One command to build, run, backup, and update |
+
+### Visualizer skins
+
+The display switches between video, waveform, spectrum bars, bubbles, and an animated vinyl turntable that spins with the audio.
+
+<img src="docs/screenshot-vinyl.png" alt="Vinyl skin: animated turntable spinning with the audio" width="100%" />
 
 ## Architecture
 
@@ -211,14 +251,18 @@ Rule: the frontend only downloads audio buffers via HTTP; the backend handles al
 
 Edit `docker-compose.yml`:
 
-| Variable | Default | Meaning |
+| Variable | In `docker-compose.yml` | Meaning |
 |---|---|---|
-| `MAX_CACHE_GB` | 10 | Max disk space for cached videos |
-| `MAX_CONCURRENT_DOWNLOADS` | 2 | Parallel downloads |
-| `TZ` | America/Santiago | Timezone |
 | `PORT` | 4070 | Internal + external port |
+| `DATA_DIR` | `/data` | Data folder (`videos/` + `sessions/`) |
+| `MAX_CACHE_GB` | 5 | Max disk space for cached videos (code default: 10) |
+| `MAX_CONCURRENT_DOWNLOADS` | 1 | Parallel downloads (code default: 2) |
+| `MAX_CONCURRENT_UPLOADS` | 2 | Parallel local-file uploads (code default) |
+| `MAX_UPLOAD_MB` | 4096 | Max size per uploaded file, in MB (code default) |
+| `YTDLP_CHANNEL` | `stable` | yt-dlp update channel |
 | `COOKIES_FILE` | `/data/cookies.txt` | Path to cookies file for yt-dlp |
 | `POT_PROVIDER_URL` | `http://bgutil-provider:4416` | PO token provider URL |
+| `TZ` | America/Santiago | Timezone |
 
 ## Data Layout
 
