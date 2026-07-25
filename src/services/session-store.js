@@ -86,9 +86,11 @@ export async function load(name) {
     const content = await readFile(path, 'utf8');
     const session = JSON.parse(content);
 
-    if (!session.masterFx || (session.schemaVersion || 1) < 2) {
-      session.masterFx = { ...DEFAULT_MASTER_FX, ...session.masterFx };
-    }
+    // Always backfill missing masterFx fields from defaults (not only for
+    // schemaVersion < 2): partial v2/v3 sessions saved before bpm/tune existed
+    // must still get bpm/tune so the client resets them instead of leaking the
+    // previous session's values. Stored values win (spread puts them last).
+    session.masterFx = { ...DEFAULT_MASTER_FX, ...session.masterFx };
 
     session.pads = (session.pads || []).map((pad) => ({ ...PAD_FX_DEFAULTS, ...pad }));
 

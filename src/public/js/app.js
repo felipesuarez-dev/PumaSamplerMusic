@@ -1324,6 +1324,20 @@ function formatPan(v) {
   return pct < 0 ? `L${Math.abs(pct)}` : `R${pct}`;
 }
 
+// Canonical defaults for the 5 master-strip audio controls. Single source of
+// truth: the first-boot seed AND the per-field reset used when a loaded
+// session's masterFx is missing a key both read from here, so switching
+// sessions never leaks the previous session's live value. (The server
+// DEFAULT_MASTER_FX has extra keys — cutoff/resonance/reverb — that are per-pad
+// now and not part of the master strip.)
+const MASTER_FX_DEFAULTS = {
+  volume: 1,
+  delayTime: 250,
+  delayFeedback: 0,
+  bpm: 0,
+  tune: 0,
+};
+
 function loadMasterFxDefaults() {
   try {
     const saved = localStorage.getItem(MASTER_FX_STORAGE);
@@ -1331,13 +1345,7 @@ function loadMasterFxDefaults() {
   } catch {
     // ignore
   }
-  return {
-    volume: 1,
-    delayTime: 250,
-    delayFeedback: 0,
-    bpm: 0,
-    tune: 0,
-  };
+  return { ...MASTER_FX_DEFAULTS };
 }
 
 function saveMasterFx(state) {
@@ -1441,7 +1449,11 @@ function initMasterControls() {
       const display = document.getElementById(ctrl.displayId);
       if (!input) continue;
 
-      const v = fx[ctrl.key] ?? state[ctrl.key];
+      // Reset to the canonical default when the loaded session omits a key —
+      // NOT to state[ctrl.key], which would leak the previously-loaded
+      // session's live value (that was the "controls persist across sessions"
+      // bug). ?? (not ||) so a legit 0 (muted volume, bpm/tune 0) survives.
+      const v = fx[ctrl.key] ?? MASTER_FX_DEFAULTS[ctrl.key];
       input.value = v;
       const value = ctrl.toValue(input.value);
       if (display) display.textContent = ctrl.toDisplay(value);
@@ -3009,7 +3021,11 @@ const sessionManager = createSessionManager({
     store.set({ selectedPosition: null, currentPad: null });
     renderPadEditor(null, null);
     if (masterFxControls) {
-      masterFxControls.applyState(session.masterFx || loadMasterFxDefaults());
+      // Pass {} (not localStorage defaults) when the session has no masterFx,
+      // so applyState fills every field from MASTER_FX_DEFAULTS. Each session
+      // is thus fully independent in its audio controls — loading one never
+      // inherits the previous session's or the global localStorage values.
+      masterFxControls.applyState(session.masterFx || {});
     }
   },
   // Warm the audio buffers for the session's pads behind a blocking spinner, so
