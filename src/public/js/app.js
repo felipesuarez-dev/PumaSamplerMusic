@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { createStore, buildKeyCombo, formatTime, parseTime, isLocalMedia, mediaKindOf } from './state.js';
+import { createStore, buildKeyCombo, formatTime, parseTime, isLocalMedia, mediaKindOf, isTypingTarget } from './state.js';
 import { createWebSocketClient } from './ws-client.js';
 import { createAudioEngine } from './audio-engine.js';
 import { createVideoDisplay } from './video-display.js';
@@ -815,14 +815,7 @@ window.addEventListener('keydown', (e) => {
   const combo = buildKeyCombo(e).toLowerCase();
   if (combo !== stopKey.toLowerCase()) return;
 
-  const active = document.activeElement;
-  const isInput = active && (
-    active.tagName === 'INPUT' ||
-    active.tagName === 'TEXTAREA' ||
-    active.tagName === 'SELECT' ||
-    active.classList.contains('key-capture')
-  );
-  if (isInput) return;
+  if (isTypingTarget(document.activeElement)) return;
 
   e.preventDefault();
   e.stopImmediatePropagation();
@@ -836,14 +829,7 @@ window.addEventListener('keydown', (e) => {
   if (isCapturingKey) return;
   if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.key.toLowerCase() !== 'h') return;
 
-  const active = document.activeElement;
-  const isInput = active && (
-    active.tagName === 'INPUT' ||
-    active.tagName === 'TEXTAREA' ||
-    active.tagName === 'SELECT' ||
-    active.classList.contains('key-capture')
-  );
-  if (isInput) return;
+  if (isTypingTarget(document.activeElement)) return;
 
   e.preventDefault();
   document.getElementById('header-toggle')?.click();
@@ -852,14 +838,7 @@ window.addEventListener('keydown', (e) => {
 // Waveform shortcuts (I/O for in/out, Space for preview when editor active)
 window.addEventListener('keydown', (e) => {
   if (isCapturingKey) return;
-  const active = document.activeElement;
-  const isInput = active && (
-    active.tagName === 'INPUT' ||
-    active.tagName === 'TEXTAREA' ||
-    active.tagName === 'SELECT' ||
-    active.classList.contains('key-capture')
-  );
-  if (isInput) return;
+  if (isTypingTarget(document.activeElement)) return;
 
   const selectedPosition = store.get().selectedPosition;
   if (!selectedPosition) return;
@@ -1369,6 +1348,10 @@ function saveMasterFx(state) {
   }
 }
 
+// Shown at most once per session: the first time the global BPM is turned up
+// while no pad carries a source BPM, so the knob would silently do nothing.
+let masterBpmHintShown = false;
+
 function initMasterControls() {
   const state = loadMasterFxDefaults();
 
@@ -1406,6 +1389,15 @@ function initMasterControls() {
       toDisplay: (v) => (v > 0 ? `${v}` : '—'),
       apply: (v) => audio.setMasterBpm(v),
       key: 'bpm',
+      // Hint the user when the global tempo can't act yet: it only stretches
+      // pads that carry a source BPM (set per pad in the SAMPLER tab / filled
+      // by Grid slices). Without one, moving this knob does nothing.
+      onChange: (v) => {
+        if (masterBpmHintShown || v <= 0) return;
+        if (pads.getAll().some((p) => (p.bpm || 0) > 0)) return;
+        masterBpmHintShown = true;
+        showToast(t('toast.bpmNoSource'), 'info');
+      },
     },
     {
       // Sampler-wide tune offset in semitones, added on top of each pad's pitch.
@@ -1432,6 +1424,7 @@ function initMasterControls() {
       const v = ctrl.toValue(input.value);
       if (display) display.textContent = ctrl.toDisplay(v);
       ctrl.apply(v);
+      if (ctrl.onChange) ctrl.onChange(v);
       state[ctrl.key] = v;
       saveMasterFx(state);
       markDirty();

@@ -101,6 +101,11 @@ function enhanceKnob(input) {
   dial.addEventListener('pointerup', (e) => {
     if (dial.hasPointerCapture(e.pointerId)) dial.releasePointerCapture(e.pointerId);
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    // The invisible range that overlays the dial keeps focus after a drag,
+    // which both leaves the dial visually "marked" and made global keyboard
+    // shortcuts stand down (pad keys wouldn't fire until you clicked away).
+    // Drop focus after a pointer interaction; keyboard focus (Tab) is untouched.
+    input.blur();
   });
 
   dial.addEventListener('wheel', (e) => {

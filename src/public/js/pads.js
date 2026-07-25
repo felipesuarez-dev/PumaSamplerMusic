@@ -1,4 +1,4 @@
-import { buildKeyCombo, formatTime } from './state.js';
+import { buildKeyCombo, formatTime, isTypingTarget } from './state.js';
 
 export function createPads(container, options = {}, initialCount = 9) {
   const { onSelect, onTrigger, onRelease, onBeforeChange, onAfterSwap, onContextMenu, onChange } = options;
@@ -461,13 +461,7 @@ export function createPads(container, options = {}, initialCount = 9) {
 
   function isInputFocused() {
     if (capturingKey) return true;
-    const active = document.activeElement;
-    return active && (
-      active.tagName === 'INPUT' ||
-      active.tagName === 'TEXTAREA' ||
-      active.tagName === 'SELECT' ||
-      active.classList.contains('key-capture')
-    );
+    return isTypingTarget(document.activeElement);
   }
 
   function getCount() {

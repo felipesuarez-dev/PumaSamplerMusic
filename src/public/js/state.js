@@ -46,6 +46,25 @@ export function buildKeyCombo(e) {
   return modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key;
 }
 
+// Should a global keyboard shortcut (pad triggers, stop key, waveform I/O…)
+// stand down because the user is typing into this element? Only true for
+// TEXT-entry contexts. Knobs (input[type=range]) and switches
+// (input[type=checkbox]) are ALSO <input>s but you can't type into them, so
+// they must NOT swallow pad keys — the invisible range that overlays a knob
+// keeps focus after a drag, which used to silently block every pad key until
+// you clicked elsewhere.
+export function isTypingTarget(el) {
+  if (!el) return false;
+  if (el.classList && el.classList.contains('key-capture')) return true;
+  const tag = el.tagName;
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') {
+    const type = (el.type || 'text').toLowerCase();
+    return type !== 'range' && type !== 'checkbox' && type !== 'radio' && type !== 'button';
+  }
+  return false;
+}
+
 export function parseTime(text) {
   if (typeof text === 'number') return text;
   if (!text) return 0;
