@@ -100,6 +100,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const manualControlsEl = document.getElementById('slicer-manual-controls');
   const manualClearBtn = document.getElementById('slicer-manual-clear');
   const manualPlayBtn = document.getElementById('slicer-manual-play');
+  const manualPauseBtn = document.getElementById('slicer-manual-pause');
+  const manualStopBtn = document.getElementById('slicer-manual-stop');
   const timeOverlayEl = document.getElementById('slicer-time-overlay');
   const overlayCaptionEl = document.getElementById('slicer-overlay-caption');
 
@@ -175,6 +177,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // playhead used both for the time overlay and for the keyboard "cut at
   // playhead" action.
   let fullPlaying = false;
+  let paused = false;
   let fullAnimId = null;
   let fullTimer = null;
   // Live playhead time (seconds) shared by both playback paths, so the cut key
@@ -382,10 +385,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     if (buildKeyCombo(e).toLowerCase() === chopKey) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (fullPlaying || previewingIndex !== null) {
+      if (fullPlaying || paused || previewingIndex !== null) {
         // Verbatim insert (no zero-crossing snap) so the cut lands exactly at
         // the playhead. insertBoundary no-ops if it's within MIN_SLICE_SECONDS
-        // of an existing boundary.
+        // of an existing boundary. Also works while paused (playhead frozen).
         handleMarkerAdded(currentPlayheadTime);
       }
     }
@@ -644,37 +647,30 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     previewingIndex = null;
   }
 
-  function setManualPlayIcon(playing) {
-    if (!manualPlayBtn) return;
-    manualPlayBtn.innerHTML = playing
-      ? '<span class="material-symbols-outlined">stop</span>'
-      : '<span class="material-symbols-outlined">play_arrow</span>';
+  // Transport button visibility (play/pause swap + separate stop), mirroring the
+  // pad-editor transport (app.js setTransportState). `state`: 'playing' shows
+  // pause; 'idle'/'paused' show play.
+  function setTransportState(state) {
+    const playing = state === 'playing';
+    if (manualPlayBtn) manualPlayBtn.classList.toggle('hidden', playing);
+    if (manualPauseBtn) manualPauseBtn.classList.toggle('hidden', !playing);
   }
 
-  // Whole-track playback for Manual Chops: plays 0→duration through the scratch
-  // voice (position 0), driving a continuous playhead so the user can drop cuts
-  // with the cut key while listening. Independent of the per-slice preview.
-  function stopFullTrack() {
-    if (!fullPlaying) return;
-    fullPlaying = false;
-    if (fullAnimId !== null) { cancelAnimationFrame(fullAnimId); fullAnimId = null; }
-    clearTimeout(fullTimer);
-    audio.stop(0);
-    setManualPlayIcon(false);
-  }
-
-  function playFullTrack() {
-    if (!currentVideoId || !currentAudioBuffer) return;
-    stopPreview();
-    if (fullPlaying) { stopFullTrack(); return; }
+  // Whole-track playback for Manual Chops: plays through the scratch voice
+  // (position 0), driving a continuous playhead so the user can drop cuts with
+  // the cut key while listening. Web Audio can't resume a stopped BufferSource,
+  // so pause = stop + remember offset, resume = a fresh play() from that offset.
+  function startFullPlayback(fromOffset) {
     const duration = currentAudioBuffer.duration;
+    const resumeFrom = Math.max(0, Math.min(duration, fromOffset || 0));
     fullPlaying = true;
-    setManualPlayIcon(true);
-    audio.play(0, { videoId: currentVideoId, start: 0, end: duration, volume: previewVolume }).catch(() => {});
+    paused = false;
+    setTransportState('playing');
+    audio.play(0, { videoId: currentVideoId, start: resumeFrom, end: duration, volume: previewVolume }).catch(() => {});
     const startedAt = performance.now();
     const step = (now) => {
       if (!fullPlaying) return;
-      const time = Math.min(duration, (now - startedAt) / 1000);
+      const time = Math.min(duration, resumeFrom + (now - startedAt) / 1000);
       setPlayheadTime(time);
       if (time < duration) {
         fullAnimId = requestAnimationFrame(step);
@@ -683,7 +679,41 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       }
     };
     fullAnimId = requestAnimationFrame(step);
-    fullTimer = setTimeout(() => stopFullTrack(), duration * 1000 + 80);
+    // Safety timer over the REMAINING duration (not the full track).
+    fullTimer = setTimeout(() => stopFullTrack(), (duration - resumeFrom) * 1000 + 80);
+  }
+
+  // Play button: start from 0, or resume from the frozen playhead if paused.
+  function playFullTrack() {
+    if (!currentVideoId || !currentAudioBuffer || fullPlaying) return;
+    stopPreview();
+    startFullPlayback(paused ? currentPlayheadTime : 0);
+  }
+
+  // Pause: stop the voice + freeze the playhead where it is (currentPlayheadTime
+  // is already up to date via setPlayheadTime). Keep `paused` so Play resumes.
+  function pauseFullTrack() {
+    if (!fullPlaying) return;
+    fullPlaying = false;
+    paused = true;
+    if (fullAnimId !== null) { cancelAnimationFrame(fullAnimId); fullAnimId = null; }
+    clearTimeout(fullTimer);
+    audio.stop(0);
+    setTransportState('paused');
+  }
+
+  // Stop: halt AND rewind to 0. The guard also covers the paused state (and all
+  // teardown call sites) — without `!paused`, Stop-while-paused would no-op and
+  // leak a stale `paused` into the next play.
+  function stopFullTrack() {
+    if (!fullPlaying && !paused) return;
+    fullPlaying = false;
+    paused = false;
+    if (fullAnimId !== null) { cancelAnimationFrame(fullAnimId); fullAnimId = null; }
+    clearTimeout(fullTimer);
+    audio.stop(0);
+    setPlayheadTime(0);
+    setTransportState('idle');
   }
 
   function togglePreview(index, slice) {
@@ -1051,7 +1081,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       // once per open takeover, not per video switch within it.
       window.addEventListener('keydown', handleSlicerKeydown, true);
     }
-    setManualPlayIcon(false);
+    paused = false;
+    setTransportState('idle');
     if (timeOverlayEl) timeOverlayEl.textContent = formatTime(0);
     currentPlayheadTime = 0;
 
@@ -1308,6 +1339,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
   if (manualClearBtn) manualClearBtn.addEventListener('click', clearManualCuts);
   if (manualPlayBtn) manualPlayBtn.addEventListener('click', playFullTrack);
+  if (manualPauseBtn) manualPauseBtn.addEventListener('click', pauseFullTrack);
+  if (manualStopBtn) manualStopBtn.addEventListener('click', stopFullTrack);
 
   newSessionBtn.addEventListener('click', () => {
     if (selected.size === 0 || !currentVideoId) return;
