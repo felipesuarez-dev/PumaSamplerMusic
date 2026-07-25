@@ -123,10 +123,14 @@ function saveStopKey(key) {
   showToast(t('toast.stopKeySet', { key: formatKeyLabel(key) }), 'success');
 }
 
-function showToast(message, type = 'info') {
+let toastTimer = null;
+function showToast(message, type = 'info', duration = 3000) {
   toastEl.textContent = message;
   toastEl.className = `toast show ${type}`;
-  setTimeout(() => toastEl.classList.remove('show'), 3000);
+  // Clear a prior toast's pending hide so it can't cut this one short (the
+  // toast is a single shared element) — each message gets its full duration.
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.classList.remove('show'); toastTimer = null; }, duration);
 }
 
 // Reuses the same minimal modal/backdrop pattern as the New Session modal
@@ -1438,7 +1442,7 @@ function initMasterControls() {
       onCommit: (v) => {
         if (v <= 0) return;
         if (pads.getAll().some((p) => (p.bpm || 0) > 0)) return;
-        showToast(t('toast.bpmNoSource'), 'info');
+        showToast(t('toast.bpmNoSource'), 'info', 5000);
       },
     },
     {
