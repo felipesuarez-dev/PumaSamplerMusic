@@ -141,13 +141,17 @@ export function createWaveform(canvas, options = {}) {
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    // Use clientWidth/clientHeight (layout box), NOT getBoundingClientRect():
+    // the rect includes any CSS transform, so measuring during the slicer
+    // takeover's open scaleX animation sized the backing store ~0.85x too
+    // small, which made click→time (xToTime) overshoot and drop cuts far from
+    // the cursor. clientWidth ignores transforms, so the bitmap always matches
+    // the settled layout and click/marker math line up to the pixel.
+    canvas.width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
+    canvas.height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
 
     if (rulerCanvas) {
-      const rulerRect = rulerCanvas.parentElement.getBoundingClientRect();
-      rulerCanvas.width = Math.max(1, Math.floor(rulerRect.width * dpr));
+      rulerCanvas.width = Math.max(1, Math.floor(rulerCanvas.parentElement.clientWidth * dpr));
       rulerCanvas.height = Math.max(1, Math.floor(rulerCanvas.clientHeight * dpr));
     }
     draw();
