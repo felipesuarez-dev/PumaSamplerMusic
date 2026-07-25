@@ -1038,7 +1038,9 @@ button.is-proxied {
 .pad-fx-clear-btn {
   position: absolute;
   top: 6px;
-  right: 12px;
+  /* Sits left of the panel's collapse chevron (which is at right:12px) so the
+     two icons don't overlap. */
+  right: 36px;
   z-index: 2;
   display: flex;
   align-items: center;
