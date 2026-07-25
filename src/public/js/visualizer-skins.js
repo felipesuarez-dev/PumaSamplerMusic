@@ -71,46 +71,104 @@ function fitText(ctx, str, maxW) {
 
 // Static turntable tonearm — sells the record player and fills the wide
 // canvas's right-side negative space. Not animated (a real arm barely moves).
+// Modeled on a classic S-shaped arm: gimbal pivot base, counterweight cylinder
+// behind the pivot, an S-bent tube, and an angled headshell with a stylus.
 function drawTonearm(ctx, cx, cy, outerR, dpr, ac) {
   const px = cx + outerR * 1.42;            // pivot (top-right)
   const py = cy - outerR * 0.72;
-  const restA = -Math.PI * 0.32;            // headshell rests up-right on grooves
-  const rx = cx + Math.cos(restA) * outerR * 0.72;
-  const ry = cy + Math.sin(restA) * outerR * 0.72;
+  const restA = -Math.PI * 0.30;            // headshell rests up-right on grooves
+  const rx = cx + Math.cos(restA) * outerR * 0.70;
+  const ry = cy + Math.sin(restA) * outerR * 0.70;
 
+  // Pivot -> tip axis, and its unit normal (for the S-bend + counterweight).
+  const dx = rx - px, dy = ry - py;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;       // unit along the arm
+  const nx = -uy, ny = ux;                   // unit perpendicular
+  const bend = outerR * 0.13;                // S amplitude
+
+  // S-curve control points: bow one way near the pivot, the other near the tip.
+  const c1x = px + dx * 0.33 + nx * bend, c1y = py + dy * 0.33 + ny * bend;
+  const c2x = px + dx * 0.68 - nx * bend, c2y = py + dy * 0.68 - ny * bend;
+
+  // Counterweight sits behind the pivot, opposite the arm direction.
+  const cwDist = outerR * 0.26;
+  const cwx = px - ux * cwDist, cwy = py - uy * cwDist;
+
+  const armW = 3.4 * dpr;
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-  ctx.lineWidth = 5 * dpr;
-  ctx.beginPath(); ctx.moveTo(px + 2 * dpr, py + 3 * dpr); ctx.lineTo(rx + 2 * dpr, ry + 3 * dpr); ctx.stroke();
+  // 1. Soft drop shadow of the whole arm (offset down-right).
+  ctx.save();
+  ctx.translate(2 * dpr, 3 * dpr);
+  ctx.strokeStyle = 'rgba(0,0,0,0.30)';
+  ctx.lineWidth = armW + 1.5 * dpr;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, rx, ry); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(cwx, cwy); ctx.stroke();
+  ctx.restore();
 
-  ctx.strokeStyle = 'rgba(190,197,208,0.72)';
-  ctx.lineWidth = 3.2 * dpr;
-  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(rx, ry); ctx.stroke();
-
-  ctx.strokeStyle = 'rgba(150,157,168,0.72)';
-  ctx.lineWidth = 6 * dpr;
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px - (rx - px) * 0.16, py - (ry - py) * 0.16);
+  // 2. Counterweight stem + cylinder.
+  ctx.strokeStyle = 'rgba(120,127,138,0.9)';
+  ctx.lineWidth = 3 * dpr;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(cwx, cwy); ctx.stroke();
+  ctx.save();
+  ctx.translate(cwx, cwy);
+  ctx.rotate(Math.atan2(uy, ux));
+  const cwR = 7 * dpr, cwL = 13 * dpr;
+  const cwGrad = ctx.createLinearGradient(0, -cwR, 0, cwR);
+  cwGrad.addColorStop(0, 'rgba(196,202,211,0.96)');
+  cwGrad.addColorStop(0.5, 'rgba(120,127,138,0.96)');
+  cwGrad.addColorStop(1, 'rgba(70,76,85,0.96)');
+  ctx.fillStyle = cwGrad;
+  roundRectPath(ctx, -cwL * 0.55, -cwR, cwL, cwR * 2, cwR * 0.7);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(40,44,51,0.7)';
+  ctx.lineWidth = 1 * dpr;
   ctx.stroke();
+  ctx.restore();
 
-  ctx.fillStyle = 'rgba(58,64,74,0.92)';
-  ctx.beginPath(); ctx.arc(px, py, 6 * dpr, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(205,211,220,0.5)';
-  ctx.lineWidth = 1.3 * dpr;
-  ctx.stroke();
+  // 3. Arm tube (S-bend), with a metallic top highlight.
+  ctx.strokeStyle = 'rgba(150,157,168,0.95)';
+  ctx.lineWidth = armW;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, rx, ry); ctx.stroke();
+  ctx.strokeStyle = 'rgba(224,229,236,0.85)';
+  ctx.lineWidth = armW * 0.42;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, rx, ry); ctx.stroke();
 
+  // 4. Gimbal pivot base: dark mount ring, metallic collar, bright cap.
+  const pivotR = 9 * dpr;
+  ctx.fillStyle = 'rgba(38,42,49,0.96)';
+  ctx.beginPath(); ctx.arc(px, py, pivotR, 0, TAU); ctx.fill();
+  const collarGrad = ctx.createLinearGradient(px, py - pivotR, px, py + pivotR);
+  collarGrad.addColorStop(0, 'rgba(206,212,221,0.98)');
+  collarGrad.addColorStop(1, 'rgba(96,103,114,0.98)');
+  ctx.fillStyle = collarGrad;
+  ctx.beginPath(); ctx.arc(px, py, pivotR * 0.66, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(60,66,75,0.95)';
+  ctx.beginPath(); ctx.arc(px, py, pivotR * 0.30, 0, TAU); ctx.fill();
+
+  // 5. Headshell at the tip, angled along the arm, with a stylus accent dot.
   ctx.save();
   ctx.translate(rx, ry);
-  ctx.rotate(Math.atan2(ry - py, rx - px));
-  ctx.fillStyle = 'rgba(212,217,226,0.88)';
-  roundRectPath(ctx, -3 * dpr, -4 * dpr, 13 * dpr, 8 * dpr, 2 * dpr);
+  ctx.rotate(Math.atan2(uy, ux));
+  const hsGrad = ctx.createLinearGradient(0, -5 * dpr, 0, 5 * dpr);
+  hsGrad.addColorStop(0, 'rgba(228,232,238,0.95)');
+  hsGrad.addColorStop(1, 'rgba(150,157,168,0.95)');
+  ctx.fillStyle = hsGrad;
+  roundRectPath(ctx, -4 * dpr, -5 * dpr, 16 * dpr, 10 * dpr, 2.5 * dpr);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(40,44,51,0.55)';
+  ctx.lineWidth = 1 * dpr;
+  ctx.stroke();
+  // finger lift
+  ctx.strokeStyle = 'rgba(120,127,138,0.9)';
+  ctx.lineWidth = 2 * dpr;
+  ctx.beginPath(); ctx.moveTo(-4 * dpr, -3 * dpr); ctx.lineTo(-9 * dpr, -6 * dpr); ctx.stroke();
+  // stylus tip (accent) touching the groove
   ctx.fillStyle = rgbStr(ac);
-  ctx.beginPath(); ctx.arc(11 * dpr, 0, 1.6 * dpr, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(13 * dpr, 0, 1.8 * dpr, 0, TAU); ctx.fill();
   ctx.restore();
 
   ctx.restore();
@@ -125,7 +183,7 @@ function formatMinSec(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle, getMediaDuration }) {
+export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle, getMediaDuration, getHasSession }) {
   const ctx = canvas.getContext('2d');
   // `skin` is the user's persisted preference; `activeSkin` is what actually
   // renders right now. They differ when video media forces the video view even
@@ -416,9 +474,11 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     const level = loudness();
     const lv = level > 0 ? (level > 1 ? 1 : level) : 0;
 
-    // A record always turns — at a lively "spinning record" idle speed, faster
-    // while audio is playing.
-    angle += 0.05 + lv * 0.15;
+    // The record turns only while a session is loaded — at a lively idle speed,
+    // faster with audio. With no session it sits still (a stopped turntable).
+    if (!getHasSession || getHasSession()) {
+      angle += 0.05 + lv * 0.15;
+    }
 
     clear();
 

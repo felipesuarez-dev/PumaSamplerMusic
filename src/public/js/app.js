@@ -63,6 +63,10 @@ const visualizerSkins = createVisualizerSkins({
     const info = id ? getMediaInfo(id) : null;
     return info && info.duration > 0 ? info.duration : 0;
   },
+  // Lazy getter: sessionManager is declared later in this module, so it must
+  // be read at call time (inside the RAF loop), never captured now (TDZ). The
+  // vinyl skin uses it to spin only while a session is loaded.
+  getHasSession: () => sessionManager.getCurrent() != null,
 });
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
