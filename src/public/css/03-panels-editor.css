@@ -778,6 +778,48 @@
   font-size: 1.1rem;
 }
 
+/* Vinyl spin-speed button sits just right of the skin toggle. */
+.vinyl-speed-btn {
+  left: 54px;
+}
+
+/* Horizontal row of speed pills (YouTube-style), reusing the skin-menu shell. */
+.vinyl-speed-menu {
+  position: fixed;
+  z-index: 2500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+}
+
+.vinyl-speed-pill {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.vinyl-speed-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.vinyl-speed-pill.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
 .placeholder-logo {
   width: 64px;
   height: 64px;

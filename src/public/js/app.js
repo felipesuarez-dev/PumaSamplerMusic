@@ -7,7 +7,7 @@ import { createMediaDisplay } from './media-display.js';
 import { createPads } from './pads.js';
 import { createWaveform } from './waveform.js';
 import { getWaveformStyle, setWaveformStyle } from './waveform-style.js';
-import { createVisualizerSkins, SKIN_ICONS } from './visualizer-skins.js';
+import { createVisualizerSkins, SKIN_ICONS, SPIN_SPEEDS } from './visualizer-skins.js';
 import { createSessionManager } from './session.js';
 import { createSlicer } from './slicer.js';
 import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
@@ -1143,6 +1143,9 @@ function refreshSkinToggleIcon() {
   if (!btn || !visualizerSkins) return;
   const icon = btn.querySelector('.material-symbols-outlined');
   if (icon) icon.textContent = SKIN_ICONS[visualizerSkins.getSkin()] || 'movie';
+  // The spin-speed button only makes sense in vinyl mode.
+  const speedBtn = document.getElementById('vinyl-speed-btn');
+  if (speedBtn) speedBtn.hidden = visualizerSkins.getSkin() !== 'vinyl';
 }
 
 function initSkinToggle() {
@@ -1206,6 +1209,57 @@ function initSkinToggle() {
   btn.addEventListener('click', () => { if (menu) closeMenu(); else openMenu(); });
   closeOnOtherMenuOpen('skin', () => closeMenu());
   updateIcon();
+}
+
+// Vinyl-only spin-speed picker: a small horizontal row of speed pills next to
+// the skin toggle. Mirrors initSkinToggle's popover lifecycle/positioning.
+function initVinylSpeed() {
+  const btn = document.getElementById('vinyl-speed-btn');
+  if (!btn || !visualizerSkins) return;
+  let menu = null;
+
+  function closeMenu() {
+    if (!menu) return;
+    if (menu.parentNode) menu.parentNode.removeChild(menu);
+    menu = null;
+    document.removeEventListener('pointerdown', onDismiss, true);
+    window.removeEventListener('keydown', onKeydown);
+  }
+  function onDismiss(e) {
+    if (menu && !menu.contains(e.target) && !btn.contains(e.target)) closeMenu();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') closeMenu();
+  }
+
+  function openMenu() {
+    closeMenu();
+    announceMenuOpen('vinyl-speed');
+    menu = document.createElement('div');
+    menu.className = 'vinyl-speed-menu';
+    SPIN_SPEEDS.forEach((mult) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'vinyl-speed-pill';
+      if (mult === visualizerSkins.getSpinSpeed()) item.classList.add('active');
+      item.textContent = `${mult}×`;
+      item.addEventListener('click', () => {
+        visualizerSkins.setSpinSpeed(mult);
+        closeMenu();
+      });
+      menu.appendChild(item);
+    });
+    document.body.appendChild(menu);
+    const r = btn.getBoundingClientRect();
+    const mh = menu.offsetHeight;
+    menu.style.left = `${Math.max(8, r.left)}px`;
+    menu.style.top = `${Math.max(8, r.top - mh - 6)}px`;
+    document.addEventListener('pointerdown', onDismiss, true);
+    window.addEventListener('keydown', onKeydown);
+  }
+
+  btn.addEventListener('click', () => { if (menu) closeMenu(); else openMenu(); });
+  closeOnOtherMenuOpen('vinyl-speed', () => closeMenu());
 }
 
 // Header collapse is persisted (unlike the sidenavs, which always reopen on
@@ -3585,6 +3639,7 @@ const gripSession = initGripSessionMenu();
 initGripActions({ localeSwitcher, headerMore, gripSession });
 initTooltipPositioning();
 initSkinToggle();
+initVinylSpeed();
 initKeyCapture(document.getElementById('slicer-chop-key'), { storageKey: CHOP_KEY_STORAGE, defaultKey: ' ', toastKey: 'toast.chopKeySet' });
 initKeyCapture(document.getElementById('slicer-play-key'), { storageKey: CHOP_PLAY_KEY_STORAGE, defaultKey: 'p', toastKey: 'toast.playKeySet' });
 initKeyCapture(document.getElementById('slicer-stop-key'), { storageKey: CHOP_STOP_KEY_STORAGE, defaultKey: 's', toastKey: 'toast.stopKeyManualSet' });

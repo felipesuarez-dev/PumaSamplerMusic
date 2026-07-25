@@ -25,6 +25,14 @@ function readStoredSkin() {
   return SKINS.includes(stored) ? stored : 'video';
 }
 
+// Vinyl spin-speed multiplier (persisted). 1 = default speed.
+const SPIN_KEY = 'puma-vinyl-spin-speed';
+export const SPIN_SPEEDS = [0.5, 1, 1.5, 2];
+function readStoredSpinSpeed() {
+  const n = parseFloat(localStorage.getItem(SPIN_KEY));
+  return SPIN_SPEEDS.includes(n) ? n : 1;
+}
+
 // --- Pure helpers for the vinyl skin (stateless; safe at module scope) ---
 const TAU = Math.PI * 2;
 
@@ -190,6 +198,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   // though a skin is stored (video wins on each video load, non-persisted).
   let skin = readStoredSkin();
   let activeSkin = skin;
+  let spinSpeed = readStoredSpinSpeed();
   let rafId = null;
   let angle = 0; // vinyl rotation, radians
   const particles = []; // bubbles state
@@ -477,7 +486,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     // The record turns only while a session is loaded — at a lively idle speed,
     // faster with audio. With no session it sits still (a stopped turntable).
     if (!getHasSession || getHasSession()) {
-      angle += 0.05 + lv * 0.15;
+      angle += (0.05 + lv * 0.15) * spinSpeed;
     }
 
     clear();
@@ -825,5 +834,13 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
 
   applySkin();
 
-  return { setSkin, getSkin, onMediaLoaded, resize, getSkins: () => SKINS.slice() };
+  function setSpinSpeed(mult) {
+    spinSpeed = SPIN_SPEEDS.includes(mult) ? mult : 1;
+    localStorage.setItem(SPIN_KEY, String(spinSpeed));
+  }
+  function getSpinSpeed() {
+    return spinSpeed;
+  }
+
+  return { setSkin, getSkin, onMediaLoaded, resize, getSkins: () => SKINS.slice(), setSpinSpeed, getSpinSpeed };
 }
