@@ -1092,6 +1092,16 @@ function positionMenu(menu, btn) {
   menu.style.left = `${Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8))}px`;
 }
 
+// Export menu opens to the LEFT of its button (the format list is wide and the
+// button sits at the right of the header, so a plain dropdown looked cramped).
+// Its right edge aligns just left of the button's left edge; clamps to 8px.
+function positionExportMenu(menu, btn) {
+  const r = btn.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.style.left = `${Math.max(8, r.left - width - 6)}px`;
+}
+
 // Central-display skin picker. The button lives at the bottom-left of the
 // video surface, so its menu opens upward. Same dismiss-on-outside-click /
 // Escape lifecycle as the pad context menu.
@@ -2909,7 +2919,7 @@ if (exportBtn) {
       exportMenu.appendChild(item);
     });
     document.body.appendChild(exportMenu);
-    positionMenu(exportMenu, exportBtn);
+    positionExportMenu(exportMenu, exportBtn);
     document.addEventListener('pointerdown', onExportDismiss, true);
     window.addEventListener('keydown', onExportKeydown);
   }
