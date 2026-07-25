@@ -2973,13 +2973,18 @@ ws.on('video:removed', (payload) => {
 async function preloadSessionAudio(session) {
   const overlay = document.getElementById('session-load-overlay');
   const caption = document.getElementById('session-load-caption');
+  const progress = document.getElementById('session-load-progress');
+  const progressValue = document.getElementById('session-load-progress-value');
   const ids = [...new Set((session.pads || []).map((p) => p.videoId).filter(Boolean))];
   if (ids.length === 0) return;
 
-  const setCaption = (done) => {
+  const setProgress = (done) => {
     if (caption) caption.textContent = t('session.loadingAudio', { done, total: ids.length });
+    const fraction = ids.length ? done / ids.length : 0;
+    if (progress) progress.value = fraction;
+    if (progressValue) progressValue.textContent = `${Math.round(fraction * 100)}%`;
   };
-  setCaption(0);
+  setProgress(0); // reset per load so a prior session's bar doesn't linger
   if (overlay) overlay.hidden = false;
   let done = 0;
   try {
@@ -2990,7 +2995,7 @@ async function preloadSessionAudio(session) {
         console.warn('Session audio preload failed for', id, err);
       } finally {
         done += 1;
-        setCaption(done);
+        setProgress(done);
       }
     }
   } finally {

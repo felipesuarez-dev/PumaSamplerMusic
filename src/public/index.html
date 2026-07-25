@@ -613,6 +613,10 @@
   <div id="session-load-overlay" class="session-load-overlay" role="status" aria-live="polite" hidden>
     <span class="loading-spinner loading-spinner-lg"></span>
     <p id="session-load-caption" data-i18n="session.loadingAudio">Loading session…</p>
+    <div class="slicer-progress-row">
+      <progress class="slicer-progress" id="session-load-progress" value="0" max="1"></progress>
+      <span class="slicer-progress-value" id="session-load-progress-value">0%</span>
+    </div>
   </div>
 
   <script type="module" src="/js/app.js"></script>
