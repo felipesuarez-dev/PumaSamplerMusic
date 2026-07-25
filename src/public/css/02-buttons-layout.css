@@ -189,7 +189,10 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
+  /* Reads bottom-to-top, the opposite of the MEDIOS rail (top-to-bottom), so
+     the two side rails mirror each other. */
   writing-mode: vertical-rl;
+  transform: rotate(180deg);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.06em;
