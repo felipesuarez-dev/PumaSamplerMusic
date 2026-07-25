@@ -416,8 +416,9 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     const level = loudness();
     const lv = level > 0 ? (level > 1 ? 1 : level) : 0;
 
-    // A record always turns; faster while audio is playing.
-    angle += 0.01 + lv * 0.12;
+    // A record always turns — at a lively "spinning record" idle speed, faster
+    // while audio is playing.
+    angle += 0.05 + lv * 0.15;
 
     clear();
 
