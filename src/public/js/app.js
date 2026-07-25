@@ -3054,20 +3054,39 @@ async function preloadSessionAudio(session) {
   setProgress(0); // reset per load so a prior session's bar doesn't linger
   if (overlay) overlay.hidden = false;
   let done = 0;
+  let rafId = null;
+  const stopTween = () => { if (rafId) { cancelAnimationFrame(rafId); rafId = null; } };
   try {
     for (const id of ids) {
+      // Per file: real download fills 0→0.9 of the slot; a RAF "trickle" eases
+      // toward a 0.97 ceiling so the bar keeps MOVING during the un-progressable
+      // decodeAudioData freeze (and during cache hits / no-Content-Length), then
+      // the finally snaps to the full slot. 100% only shows when truly loaded —
+      // no more "jump to 100 then wait".
+      let downloadFrac = 0;
+      let tweenFrac = 0;
+      const ceiling = 0.97;
+      let last = performance.now();
+      const tick = (now) => {
+        const dt = Math.min(0.1, (now - last) / 1000);
+        last = now;
+        tweenFrac += (ceiling - tweenFrac) * dt * 1.8; // ease-out toward the ceiling
+        setProgress(done + Math.min(ceiling, Math.max(tweenFrac, downloadFrac * 0.9)));
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
       try {
-        // Forward per-byte download progress so the bar fills continuously
-        // within each file (mirrors the Auto-Slicer's loadAudio onProgress).
-        await audio.loadAudio(id, api.getAudioUrl(id), (f) => setProgress(done + f));
+        await audio.loadAudio(id, api.getAudioUrl(id), (f) => { downloadFrac = f; });
       } catch (err) {
         console.warn('Session audio preload failed for', id, err);
       } finally {
+        stopTween();
         done += 1;
-        setProgress(done);
+        setProgress(done); // snap to the full slot only once this file is truly loaded
       }
     }
   } finally {
+    stopTween();
     if (overlay) overlay.hidden = true;
   }
 }
