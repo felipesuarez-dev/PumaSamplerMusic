@@ -382,10 +382,12 @@
               <div class="grid-controls">
                 <label for="grid-size">PADS</label>
                 <select id="grid-size">
-                  <option value="9">3×3 (9)</option>
-                  <option value="12">3×4 (12)</option>
-                  <option value="18">3×6 (18)</option>
-                  <option value="27">3×9 (27)</option>
+                  <option value="9" data-cols="3">3×3 (9)</option>
+                  <option value="12" data-cols="3">3×4 (12)</option>
+                  <option value="18" data-cols="3">3×6 (18)</option>
+                  <option value="27" data-cols="3">3×9 (27)</option>
+                  <option value="16" data-cols="4">4×4 (16)</option>
+                  <option value="24" data-cols="4">4×6 (24)</option>
                 </select>
                 <span class="help-icon" data-i18n-tooltip="tip.gridSize" data-tooltip="Shrinking the grid discards any extra PADs that no longer fit.">?</span>
                 <button id="btn-organize-mode" type="button" class="btn btn-secondary btn-organize"

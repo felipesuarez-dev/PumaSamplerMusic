@@ -14,9 +14,11 @@
 .pad-grid {
   flex-shrink: 0;
   width: 100%;
-  max-width: calc(3 * var(--pad-size) + 2 * 14px);
+  /* Column count is driven by --pad-cols (set from the selected grid option's
+     data-cols), defaulting to 3. 4-wide (AKAI-style) layouts set it to 4. */
+  max-width: calc(var(--pad-cols, 3) * var(--pad-size) + (var(--pad-cols, 3) - 1) * 14px);
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--pad-cols, 3), minmax(0, 1fr));
   gap: 14px;
 }
 

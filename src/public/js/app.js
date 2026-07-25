@@ -1287,12 +1287,24 @@ function autoCommitPad(position, updates) {
   store.set({ currentPad: data });
 }
 
-// Grid size selector
+// Grid size selector. Each option carries data-cols (3 or 4) so the grid can
+// lay out 4-wide (AKAI-style) layouts, driven by the --pad-cols CSS variable.
 const gridSizeSelect = document.getElementById('grid-size');
+const padGridEl = document.getElementById('pad-grid');
+
+function applyPadCols() {
+  if (!gridSizeSelect || !padGridEl) return;
+  const opt = gridSizeSelect.selectedOptions[0];
+  const cols = opt && opt.dataset.cols ? parseInt(opt.dataset.cols, 10) : 3;
+  padGridEl.style.setProperty('--pad-cols', String(cols || 3));
+}
+
 if (gridSizeSelect) {
+  applyPadCols(); // seed from the initial selection
   gridSizeSelect.addEventListener('change', () => {
     const count = parseInt(gridSizeSelect.value, 10);
     if (count >= 1 && count <= MAX_PADS) {
+      applyPadCols();
       pads.resize(count);
       showToast(t('toast.padsResized', { n: count }), 'success');
     }
@@ -3056,6 +3068,7 @@ const sessionManager = createSessionManager({
       pads.resize(newCount);
       const gridSize = document.getElementById('grid-size');
       if (gridSize) gridSize.value = String(newCount);
+      applyPadCols(); // keep --pad-cols in sync with the restored grid size
     }
     pads.setAll(padsArray);
     store.set({ selectedPosition: null, currentPad: null });
