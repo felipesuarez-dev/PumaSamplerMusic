@@ -714,7 +714,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       const wall = Math.min(duration, resumeFrom + (now - startedAt) / 1000);
       const time = audio.getVoiceTime(0) ?? wall;
       setPlayheadTime(time);
-      if (time < duration && wall < duration) {
+      // End on the WALL-CLOCK only: the latency-compensated getVoiceTime now
+      // sits slightly BEHIND the wall-clock, so gating on `time` would let the
+      // loop overrun; gating on `wall` stops exactly when the track's duration
+      // has elapsed without clipping the tail.
+      if (wall < duration) {
         fullAnimId = requestAnimationFrame(step);
       } else {
         stopFullTrack();

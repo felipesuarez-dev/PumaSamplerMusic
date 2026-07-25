@@ -741,7 +741,13 @@ export function createAudioEngine() {
     const ref = activeSources.get(position);
     if (!ref || !audioContext) return null;
     const rate = ref.source.playbackRate ? ref.source.playbackRate.value : 1;
-    const elapsed = (audioContext.currentTime - ref.startedAtCtx) * rate;
+    // Subtract output latency: ctx.currentTime advances when audio is scheduled,
+    // but what the user HEARS lags it by the device output latency. Without this
+    // the playhead runs ahead of the sound and reaches the slice end early. The
+    // low clamp below holds it at startTime during the initial ~latency window
+    // (nothing audible yet), so no negative time leaks out.
+    const latency = audioContext.outputLatency || audioContext.baseLatency || 0;
+    const elapsed = (audioContext.currentTime - ref.startedAtCtx - latency) * rate;
     const t = ref.startTime + elapsed;
     return Math.max(ref.startTime, Math.min(ref.endTime, t));
   }
