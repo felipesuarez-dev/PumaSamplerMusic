@@ -1006,31 +1006,32 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     loadAbort = new AbortController();
     setProgress(0);
     setOverlayCaption('slicer.loadingDownload');
-    // Delay-gate: only reveal the blocking overlay if the load is actually
-    // slow, so a cached re-open (audio.loadAudio returns instantly) never
-    // flashes it. Mirrors video-display.js's 150ms spinner gate.
-    const showTimer = setTimeout(() => { if (loading) showOverlay(); }, 150);
+    // Show the overlay + spinner IMMEDIATELY (no delay-gate) so loading a big
+    // track gives instant feedback. A cached re-open flashes it for a frame —
+    // acceptable per the immediacy the user asked for.
+    showOverlay();
+    let completed = false;
     try {
-      // Phase weighting (determinate, no flicker): download fills 0→70% (real
-      // fraction), decode holds at 70% (atomic, unmeasurable), and the chunked
-      // peak build fills 70→100% (real). The bar only reaches 100% when the
-      // waveform is actually interactive.
+      // Phase weighting (determinate, no flicker): download fills 0→60% (real
+      // fraction), decode holds at 60% (atomic, unmeasurable), and the chunked
+      // peak build fills 60→100% (real) — render gets a wide-enough band to
+      // visibly animate instead of snapping from 70% to gone.
       const buffer = await audio.loadAudio(
         videoId,
         api.getAudioUrl(videoId),
-        (f) => { if (currentVideoId === videoId) setProgress(f * 0.70); },
+        (f) => { if (currentVideoId === videoId) setProgress(f * 0.60); },
         loadAbort.signal,
       );
       if (currentVideoId !== videoId || !waveform) return; // switched away mid-load
       // Download resolved; decodeAudioData already ran inside loadAudio. Move to
       // the render phase and build the peak cache in chunks so the bar keeps
-      // advancing instead of freezing at 100%.
+      // advancing instead of freezing.
       setOverlayCaption('slicer.loadingRender');
-      setProgress(0.70);
+      setProgress(0.60);
       await nextPaint();
       if (currentVideoId !== videoId || !waveform) return;
       await waveform.setAudioBufferAsync(buffer, {
-        onProgress: (f) => { if (currentVideoId === videoId) setProgress(0.70 + f * 0.30); },
+        onProgress: (f) => { if (currentVideoId === videoId) setProgress(0.60 + f * 0.40); },
         signal: loadAbort ? loadAbort.signal : undefined,
       });
       if (currentVideoId !== videoId || !waveform) return;
@@ -1047,6 +1048,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         waveform.setMarkers([0, buffer.duration]);
         renderResultsList();
       }
+      completed = true;
     } catch (err) {
       if (err && err.name === 'AbortError') {
         wf.setEmpty(t('waveform.selectVideo')); // user cancelled the load
@@ -1055,9 +1057,15 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
       }
     } finally {
-      clearTimeout(showTimer);
       loading = false;
       loadAbort = null;
+      // On a clean completion, snap to 100% and hold briefly so the bar is
+      // visibly seen filling before the overlay closes (the render phase can
+      // finish in a few chunks on short tracks). On abort/error, hide at once.
+      if (completed) {
+        setProgress(1);
+        await new Promise((r) => setTimeout(r, 140));
+      }
       hideOverlay();
       setOverlayCaption('slicer.analyzing'); // restore default for onset analysis
     }
