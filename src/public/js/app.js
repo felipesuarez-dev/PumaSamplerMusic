@@ -541,6 +541,7 @@ function closePadContextMenu() {
 
 function openPadContextMenu(position, x, y) {
   closePadContextMenu();
+  announceMenuOpen('pad-context');
   if (!pads.getData(position)) return; // nothing to manage on an empty pad
 
   const menu = document.createElement('div');
@@ -585,6 +586,8 @@ function openPadContextMenu(position, x, y) {
   window.addEventListener('keydown', onDismiss);
   padContextMenu = { el: menu, onDismiss };
 }
+// Close the pad context menu when any other popover opens (registered once).
+closeOnOtherMenuOpen('pad-context', () => closePadContextMenu());
 
 function confirmClearPad(position) {
   if (!pads.getData(position)) return;
@@ -1090,6 +1093,19 @@ function closeHeaderMenus() {
 }
 window.addEventListener('resize', closeHeaderMenus);
 
+// Mutual exclusion for every popover/menu (kebab, locale, grip-session, skin,
+// export, pad-context). Each announces itself on open; all the others close.
+// One event, no shared registry of menu internals — works even for the grip
+// menus whose triggers stopPropagation (which used to leave two menus open).
+// The event name is inlined (not a const) so these hoisted functions are safe
+// to call from earlier module-init code without hitting a const's TDZ.
+function announceMenuOpen(token) {
+  document.dispatchEvent(new CustomEvent('puma:menu-open', { detail: token }));
+}
+function closeOnOtherMenuOpen(token, closeSelf) {
+  document.addEventListener('puma:menu-open', (e) => { if (e.detail !== token) closeSelf(); });
+}
+
 // Places a fixed-positioned dropdown just under its trigger button, right-
 // aligned to the button and clamped inside the viewport. Called after the menu
 // is unhidden so offsetWidth reflects real layout; kept synchronous so there's
@@ -1148,6 +1164,7 @@ function initSkinToggle() {
 
   function openMenu() {
     closeMenu();
+    announceMenuOpen('skin');
     menu = document.createElement('div');
     menu.className = 'skin-menu';
     // For audio-only media there is no video to show, so the 'video' item is
@@ -1182,6 +1199,7 @@ function initSkinToggle() {
   }
 
   btn.addEventListener('click', () => { if (menu) closeMenu(); else openMenu(); });
+  closeOnOtherMenuOpen('skin', () => closeMenu());
   updateIcon();
 }
 
@@ -3149,6 +3167,7 @@ if (exportBtn) {
 
   function openExportMenu() {
     closeExportMenu();
+    announceMenuOpen('export');
     exportMenu = document.createElement('div');
     exportMenu.className = 'pad-context-menu export-format-menu';
     EXPORT_FORMATS.forEach((fmt) => {
@@ -3184,6 +3203,7 @@ if (exportBtn) {
     if (exportMenu) closeExportMenu();
     else openExportMenu();
   });
+  closeOnOtherMenuOpen('export', () => closeExportMenu());
 }
 
 const clearCacheBtn = document.getElementById('btn-clear-cache');
@@ -3235,6 +3255,7 @@ function initLocaleSwitcher() {
   // clicked. aria-expanded is written on the actual trigger (and cleared on
   // the other) so the invisible one doesn't stay marked expanded.
   function setOpen(open, trigger = btn) {
+    if (open) announceMenuOpen('locale');
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', open ? String(trigger === btn) : 'false');
     const gripBtn = document.getElementById('grip-locale-btn');
@@ -3243,6 +3264,7 @@ function initLocaleSwitcher() {
   }
 
   headerMenuClosers.push(() => setOpen(false));
+  closeOnOtherMenuOpen('locale', () => setOpen(false));
 
   paint(getLocale());
 
@@ -3320,6 +3342,7 @@ function initHeaderMoreMenu() {
   // trigger defaults to the kebab button; the collapsed-header mini ⋯ button
   // can pass itself so the fixed menu positions under whichever was clicked.
   function setOpen(open, trigger = btn) {
+    if (open) announceMenuOpen('kebab');
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', open ? String(trigger === btn) : 'false');
     const gripBtn = document.getElementById('grip-more-btn');
@@ -3383,6 +3406,7 @@ function initHeaderMoreMenu() {
   }
 
   headerMenuClosers.push(() => setOpen(false));
+  closeOnOtherMenuOpen('kebab', () => setOpen(false));
 
   btn.addEventListener('click', () => setOpen(menu.hidden, btn));
 
@@ -3428,6 +3452,7 @@ function initGripSessionMenu() {
 
   function setOpen(open, trigger) {
     if (open) {
+      announceMenuOpen('grip-session');
       const select = document.getElementById('session-select');
       const names = select
         ? Array.from(select.options).map((o) => o.value).filter(Boolean)
@@ -3453,6 +3478,7 @@ function initGripSessionMenu() {
   }
 
   headerMenuClosers.push(() => setOpen(false));
+  closeOnOtherMenuOpen('grip-session', () => setOpen(false));
 
   menu.addEventListener('click', (e) => {
     const item = e.target.closest('[data-name]');
