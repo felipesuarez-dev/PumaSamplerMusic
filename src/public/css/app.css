@@ -3595,6 +3595,78 @@ button.is-proxied {
   color: var(--text);
 }
 
+/* Minimize button in the slicer header, left of the close (×). Shrinks the
+   takeover to the collapsed rail so the PADs are visible without closing. */
+.slicer-min-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+}
+
+.slicer-min-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Collapsed rail: same 32px width and vertical-rl label style as the Media
+   rail, shown only while the takeover is minimized. Hidden otherwise. */
+.slicer-min-rail {
+  display: none;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized {
+  width: 32px;
+  /* Dock the collapsed rail on the right edge — where the Media rail lives —
+     instead of the left (inset:0 sets left:0, so pin right and free left). */
+  left: auto;
+  right: 0;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized > .library-sidenav-body {
+  display: none;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized > .slicer-min-rail {
+  display: flex;
+  flex: 1;
+  width: 32px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: var(--transition);
+  overflow: hidden;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized > .slicer-min-rail:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.slicer-min-rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Running time over the slicer waveform, mirroring the video display's
    #video-time-overlay so playback time reads the same in both places. */
 .slicer-time-overlay {

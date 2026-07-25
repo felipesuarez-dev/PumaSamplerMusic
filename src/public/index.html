@@ -447,6 +447,14 @@
           <span class="chev">▾</span>
         </button>
 
+        <!-- Collapsed rail shown while the Slicer/Chops takeover is minimized:
+             a 32px vertical strip (same width as the Media rail) that keeps the
+             workflow alive while the PADs are visible. Click to expand. -->
+        <button type="button" class="slicer-min-rail" id="slicer-min-rail" data-i18n-title="slicer.expandTitle" title="Expand" aria-label="Expand">
+          <span class="material-symbols-outlined">chevron_left</span>
+          <span class="slicer-min-rail-label" id="slicer-min-rail-label"></span>
+        </button>
+
         <div class="library-sidenav-body auto-scroll" id="library-sidenav-body">
           <div class="library-sidenav-header">
             <h3 class="panel-title" data-i18n="panel.videoLibraryTitle">Media Library</h3>
@@ -520,6 +528,7 @@
                 <div class="key-capture" id="slicer-stop-key" data-i18n-title="tip.slicerStopKey" title="Key that stops and rewinds the track"></div>
                 <span class="help-icon" data-i18n-tooltip="tip.slicerStopKey" data-tooltip="Press this key to stop and rewind the track. Click to change it.">?</span>
               </div>
+              <button type="button" class="slicer-min-btn" id="slicer-minimize-btn" data-i18n-title="slicer.minimizeTitle" title="Minimize" aria-label="Minimize"><span class="material-symbols-outlined">chevron_right</span></button>
               <button type="button" class="slicer-close-btn" id="slicer-close-btn" data-i18n-title="slicer.closeButtonTitle" title="Close Auto-Slicer">&times;</button>
             </div>
 

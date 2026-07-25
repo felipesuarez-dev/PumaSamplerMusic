@@ -76,6 +76,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const sidenav = document.getElementById('library-sidenav');
   const videoTitleEl = document.getElementById('slicer-video-title');
   const closeBtn = document.getElementById('slicer-close-btn');
+  const minimizeBtn = document.getElementById('slicer-minimize-btn');
+  const minRail = document.getElementById('slicer-min-rail');
+  const minRailLabel = document.getElementById('slicer-min-rail-label');
   const canvas = document.getElementById('slicer-waveform-canvas');
   const rulerCanvas = document.getElementById('slicer-waveform-ruler');
   const sensitivityInput = document.getElementById('slicer-sensitivity');
@@ -129,6 +132,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
   let open = false;
   let closing = false;
+  let minimized = false;
   let closeTimer = null;
   let currentVideoId = null;
   let waveform = null;
@@ -371,6 +375,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // preventDefault + stopImmediatePropagation BEFORE the app-wide Space handler
   // (which toggles the pad-editor preview) and before the page scrolls.
   function handleSlicerKeydown(e) {
+    // While minimized the takeover is out of the way (PADs are in focus), so
+    // the slicer's cut/play/stop keys must not fire in the background.
+    if (minimized) return;
     // Only stand down for true text-entry targets. The old guard bailed on ANY
     // focused <input>, so dragging the range sliders (volume/sensitivity) left
     // them focused and swallowed the Play/Stop/Cut keys until you clicked away.
@@ -1209,7 +1216,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       closeTimer = null;
     }
     closing = false;
-    sidenav.classList.remove('slicer-takeover', 'slicer-closing');
+    minimized = false;
+    sidenav.classList.remove('slicer-takeover', 'slicer-closing', 'slicer-minimized');
     window.removeEventListener('keydown', handleSlicerKeydown, true);
     stopFullTrack();
     if (waveform) {
@@ -1246,6 +1254,31 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       sidenav.removeEventListener('animationend', onEnd);
       finishClose();
     }, 300);
+  }
+
+  // Minimize the takeover to the 32px collapsed rail (keeps slicer-takeover on
+  // so the panel stays in the DOM for an instant expand). The rail label shows
+  // "<mode> · <track>" — e.g. "Chops Manuales · Daft Punk…".
+  function minimize() {
+    if (!open || minimized) return;
+    const mode = (panelTitleEl && panelTitleEl.textContent.trim()) || '';
+    const track = (videoTitleEl && videoTitleEl.textContent.trim()) || '';
+    if (minRailLabel) minRailLabel.textContent = track ? `${mode} · ${track}` : mode;
+    minimized = true;
+    sidenav.classList.add('slicer-minimized');
+  }
+
+  function expand() {
+    if (!minimized) return;
+    minimized = false;
+    sidenav.classList.remove('slicer-minimized');
+    // The panel was display:none while minimized, so the waveform canvas had no
+    // layout width — re-measure now that it's visible again (see waveform
+    // resize()'s clientWidth sizing), then redraw so markers stay precise.
+    if (waveform) {
+      waveform.resize();
+      waveform.draw();
+    }
   }
 
   function openCloseConfirmModal() {
@@ -1334,6 +1367,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   closeBtn.addEventListener('click', close);
+  if (minimizeBtn) minimizeBtn.addEventListener('click', minimize);
+  if (minRail) minRail.addEventListener('click', expand);
 
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
   sensitivityValueEl.addEventListener('input', onSensitivityNumberInput);
