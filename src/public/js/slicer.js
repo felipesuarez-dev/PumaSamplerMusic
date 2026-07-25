@@ -1,5 +1,5 @@
 import { createWaveform } from './waveform.js';
-import { formatTime, buildKeyCombo } from './state.js';
+import { formatTime, buildKeyCombo, isTypingTarget } from './state.js';
 import {
   boundariesToSlices,
   slicesToBoundaries,
@@ -367,21 +367,14 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // Same input-focus convention as pads.js isInputFocused(): while a text
   // field/select is focused (e.g. the grid beats input), native browser
   // undo must keep working instead of being hijacked by our Ctrl+Z.
-  function isInputFocused() {
-    const active = document.activeElement;
-    return Boolean(active && (
-      active.tagName === 'INPUT' ||
-      active.tagName === 'TEXTAREA' ||
-      active.tagName === 'SELECT' ||
-      active.classList.contains('key-capture')
-    ));
-  }
-
   // Registered in the CAPTURE phase (see openForVideo) so the cut key can
   // preventDefault + stopImmediatePropagation BEFORE the app-wide Space handler
   // (which toggles the pad-editor preview) and before the page scrolls.
   function handleSlicerKeydown(e) {
-    if (isInputFocused()) return;
+    // Only stand down for true text-entry targets. The old guard bailed on ANY
+    // focused <input>, so dragging the range sliders (volume/sensitivity) left
+    // them focused and swallowed the Play/Stop/Cut keys until you clicked away.
+    if (isTypingTarget(document.activeElement)) return;
     // While a key-capture widget is listening, let it (and only it) receive the
     // press — otherwise pressing the key you're rebinding would also fire the
     // transport/cut here. The app-level isCapturingKey isn't visible from this
@@ -464,7 +457,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const pct = parseInt(previewVolumeInput.value, 10);
     previewVolumeValueEl.textContent = `${pct}%`;
     previewVolume = pct / 100;
-    if (previewingIndex !== null) {
+    // Apply live to the playing voice in BOTH modes: a slice preview
+    // (previewingIndex set) and full-track playback (fullPlaying, Manual
+    // Chops). Both use voice slot 0; setVoiceVolume no-ops safely if idle.
+    if (previewingIndex !== null || fullPlaying) {
       audio.setVoiceVolume(0, previewVolume);
     }
   }
