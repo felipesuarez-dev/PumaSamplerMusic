@@ -65,6 +65,7 @@ const PAD_FX_DEFAULTS = {
   attack: 0,
   release: 0,
   reverse: false,
+  fxEnabled: true,
 };
 
 export async function load(name) {

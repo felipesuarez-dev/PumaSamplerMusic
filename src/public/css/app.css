@@ -1027,6 +1027,21 @@ button.is-proxied {
   justify-content: center;
 }
 
+/* Small "Clear FX" button under the FX master switch. */
+.pad-fx-clear-btn {
+  font-size: 0.62rem;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* When the pad's master FX switch is off, dim the knob rows to signal the pad
+   plays clean — but keep them editable so the user can prep FX for when it's
+   turned back on. */
+.pad-fx-strip.fx-bypassed .master-knob,
+.pad-fx-strip.fx-bypassed .mini-switch:not(.mini-switch-enable) {
+  opacity: 0.4;
+}
+
 .mini-switch {
   display: flex;
   flex-direction: column;

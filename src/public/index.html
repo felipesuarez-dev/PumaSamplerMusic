@@ -211,6 +211,12 @@
                     <div class="pad-fx-strip" id="pad-fx-strip">
                       <div class="master-knobs-row">
                         <div class="pad-fx-switch-group">
+                          <label class="mini-switch mini-switch-enable">
+                            <input type="checkbox" id="pad-fx-enabled" checked disabled>
+                            <span class="mini-switch-track"></span>
+                            <span class="mini-switch-label" data-i18n-tooltip="tip.fxEnableSwitch" data-tooltip="Master ON/OFF for this PAD's effects. When off, the PAD plays clean without losing your settings.">FX</span>
+                          </label>
+                          <button type="button" class="btn btn-secondary pad-fx-clear-btn" id="pad-fx-clear" data-i18n="pads.clearFx" data-i18n-title="pads.clearFx" disabled>Clear FX</button>
                           <label class="mini-switch">
                             <input type="checkbox" id="pad-fx-pshift" checked disabled>
                             <span class="mini-switch-track"></span>

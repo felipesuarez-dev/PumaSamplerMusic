@@ -41,7 +41,7 @@ test('save/load round-trip preserves pads and stamps schemaVersion 3', async () 
   assert.deepEqual(loaded.pads, pads.map((p) => ({
     pitch: 0, cutoff: 100, resonance: 0.1, reverbSend: 0, delaySend: 0,
     pitchShiftOn: true, stretchOn: false, speed: 100, pan: 0, drive: 0,
-    attack: 0, release: 0, reverse: false, ...p,
+    attack: 0, release: 0, reverse: false, fxEnabled: true, ...p,
   })));
   assert.equal(loaded.schemaVersion, 3);
 });
@@ -99,6 +99,7 @@ test('load fills PAD_FX_DEFAULTS on a legacy pad with no FX fields', async () =>
     attack: 0,
     release: 0,
     reverse: false,
+    fxEnabled: true,
   });
 });
 

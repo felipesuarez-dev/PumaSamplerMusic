@@ -1414,6 +1414,7 @@ function initMasterControls() {
 // audio.updateVoiceFx so you can hear the change while it plays.
 function initPadFxControls() {
   const labelEl = document.getElementById('pad-fx-label');
+  const stripEl = document.getElementById('pad-fx-strip');
 
   const controls = [
     {
@@ -1562,10 +1563,53 @@ function initPadFxControls() {
     });
   }
 
+  // Master FX ON/OFF switch — bespoke (not in the generic `switches` array):
+  // toggling it must re-apply the WHOLE effective FX set to the live voice
+  // (updateVoiceFx ignores an unknown `fxEnabled` param) and dim the strip.
+  const enableSwitch = document.getElementById('pad-fx-enabled');
+  if (enableSwitch) {
+    enableSwitch.addEventListener('change', () => {
+      enableSwitch.blur();
+      const { selectedPosition } = store.get();
+      if (!selectedPosition) return;
+      autoCommitPad(selectedPosition, { fxEnabled: enableSwitch.checked });
+      applyEffectiveFxToVoice(selectedPosition);
+      if (stripEl) stripEl.classList.toggle('fx-bypassed', !enableSwitch.checked);
+    });
+  }
+
+  // Clear FX — resets this pad's FX to defaults after a confirm modal. Keeps
+  // fxEnabled true so the (now clean) pad plays as it did originally.
+  const clearBtn = document.getElementById('pad-fx-clear');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      const { selectedPosition } = store.get();
+      if (!selectedPosition) return;
+      openConfirmModal({
+        title: t('pads.clearFxConfirmTitle', { position: selectedPosition }),
+        body: t('pads.clearFxConfirmBody'),
+        confirmLabel: t('pads.clearFxConfirmButton'),
+        onConfirm: () => {
+          autoCommitPad(selectedPosition, { ...CLEAN_FX, fxEnabled: true });
+          bindPad(selectedPosition, pads.getData(selectedPosition));
+          applyEffectiveFxToVoice(selectedPosition);
+          showToast(t('toast.fxCleared', { position: selectedPosition }), 'success');
+        },
+      });
+    });
+  }
+
   function bindPad(position, data) {
     if (labelEl) {
       labelEl.textContent = position ? t('pads.fxGroupSelected', { position }) : t('pads.fxGroupNone');
     }
+    const fxEnabled = position ? (data?.fxEnabled ?? true) : true;
+    if (enableSwitch) {
+      enableSwitch.disabled = !position;
+      enableSwitch.checked = fxEnabled;
+    }
+    if (clearBtn) clearBtn.disabled = !position;
+    if (stripEl) stripEl.classList.toggle('fx-bypassed', position && !fxEnabled);
 
     for (const ctrl of controls) {
       const input = document.getElementById(ctrl.id);
@@ -1597,8 +1641,45 @@ function initPadFxControls() {
   return { bindPad };
 }
 
+// Clean FX values (mirror server PAD_FX_DEFAULTS FX fields). Used to play a pad
+// dry when its effects are switched off, without discarding the stored values.
+const CLEAN_FX = {
+  pitch: 0, cutoff: 100, resonance: 0.1, reverbSend: 0, delaySend: 0,
+  pitchShiftOn: true, stretchOn: false, speed: 100, pan: 0, drive: 0,
+  attack: 0, release: 0, reverse: false,
+};
+
+// The FX that should actually sound for this pad: the stored ones, or CLEAN_FX
+// when the pad's master FX switch is off (fxEnabled === false).
+function effectiveFx(data) {
+  return data && data.fxEnabled === false ? { ...data, ...CLEAN_FX } : data;
+}
+
+// Re-applies a pad's effective FX to its live voice (no-op if not sounding),
+// so toggling the FX ON/OFF switch takes effect immediately on a playing loop.
+// attack/reverse are baked at trigger time and can't be live-applied.
+function applyEffectiveFxToVoice(position) {
+  const data = pads.getData(position);
+  if (!data) return;
+  const fx = effectiveFx(data);
+  audio.updateVoiceFx(position, {
+    pitch: fx.pitch ?? 0,
+    cutoff: percentToFreq(fx.cutoff ?? 100),
+    resonance: fx.resonance ?? 0.1,
+    reverbSend: fx.reverbSend ?? 0,
+    delaySend: fx.delaySend ?? 0,
+    pitchShiftOn: fx.pitchShiftOn ?? true,
+    stretchOn: fx.stretchOn ?? false,
+    speed: fx.speed ?? 100,
+    pan: fx.pan ?? 0,
+    drive: fx.drive ?? 0,
+    release: fx.release ?? 0,
+  });
+}
+
 async function triggerPad(position, data) {
   if (!data || !data.videoId) return;
+  const fx = effectiveFx(data);
 
   const video = store.get().videos.find((v) => v.videoId === data.videoId);
   if (!video) {
@@ -1630,19 +1711,19 @@ async function triggerPad(position, data) {
       volume: data.volume ?? 0.2,
       loop: data.loop ?? false,
       triggerMode: data.triggerMode ?? 'oneshot',
-      pitch: data.pitch ?? 0,
-      cutoff: percentToFreq(data.cutoff ?? 100),
-      resonance: data.resonance ?? 0.1,
-      reverbSend: data.reverbSend ?? 0,
-      delaySend: data.delaySend ?? 0,
-      pitchShiftOn: data.pitchShiftOn ?? true,
-      stretchOn: data.stretchOn ?? false,
-      speed: data.speed ?? 100,
-      pan: data.pan ?? 0,
-      drive: data.drive ?? 0,
-      attack: data.attack ?? 0,
-      release: data.release ?? 0,
-      reverse: data.reverse ?? false,
+      pitch: fx.pitch ?? 0,
+      cutoff: percentToFreq(fx.cutoff ?? 100),
+      resonance: fx.resonance ?? 0.1,
+      reverbSend: fx.reverbSend ?? 0,
+      delaySend: fx.delaySend ?? 0,
+      pitchShiftOn: fx.pitchShiftOn ?? true,
+      stretchOn: fx.stretchOn ?? false,
+      speed: fx.speed ?? 100,
+      pan: fx.pan ?? 0,
+      drive: fx.drive ?? 0,
+      attack: fx.attack ?? 0,
+      release: fx.release ?? 0,
+      reverse: fx.reverse ?? false,
     });
   } catch (err) {
     showToast(t('toast.playbackFailed', { message: err.message }), 'error');
@@ -1655,7 +1736,7 @@ async function triggerPad(position, data) {
   // would just look wrong. Instead, show a frozen frame at the slice end,
   // since reversed audio audibly starts from that end of the slice; real
   // video reverse is out of scope for this pad FX.
-  if (data.reverse) {
+  if (fx.reverse) {
     mediaDisplay.showFrame({
       videoId: data.videoId,
       url: videoUrl,

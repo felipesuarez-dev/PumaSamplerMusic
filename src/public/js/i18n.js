@@ -233,7 +233,12 @@ export const dictionaries = {
     'pads.toggleTitle': 'Toggle PADS',
     'pads.toggleLabel': 'PADS',
     'pads.fxGroupNone': 'Select a PAD',
-    'pads.fxGroupSelected': 'PAD {position}',
+    'pads.fxGroupSelected': 'FX CONTROL PAD {position}',
+    'pads.clearFx': 'Clear FX',
+    'pads.clearFxConfirmTitle': 'Clear FX on PAD {position}?',
+    'pads.clearFxConfirmBody': "This resets all of this PAD's effects to their defaults. The pad's slice and key are kept.",
+    'pads.clearFxConfirmButton': 'Clear FX',
+    'tip.fxEnableSwitch': "Master ON/OFF for this PAD's effects. When off, the PAD plays clean without losing your settings.",
 
     'library.tabYouTube': 'YouTube',
     'library.tabLocal': 'Local',
@@ -273,6 +278,7 @@ export const dictionaries = {
 
     'toast.stopKeySet': 'Stop key set to {key}',
     'toast.chopKeySet': 'Cut key set to {key}',
+    'toast.fxCleared': 'FX cleared on PAD {position}',
     'toast.allStopped': 'All stopped',
     'toast.padsResized': 'PADS resized to {n}',
     'toast.videoNotLoaded': 'Video not loaded',
@@ -627,7 +633,12 @@ export const dictionaries = {
     'pads.toggleTitle': 'Mostrar/ocultar PADS',
     'pads.toggleLabel': 'PADS',
     'pads.fxGroupNone': 'Selecciona un PAD',
-    'pads.fxGroupSelected': 'PAD {position}',
+    'pads.fxGroupSelected': 'CONTROL EFECTOS PAD {position}',
+    'pads.clearFx': 'Limpiar FX',
+    'pads.clearFxConfirmTitle': '¿Limpiar los FX del PAD {position}?',
+    'pads.clearFxConfirmBody': 'Esto restablece todos los efectos de este PAD a sus valores por defecto. Se conservan el corte y la tecla del pad.',
+    'pads.clearFxConfirmButton': 'Limpiar FX',
+    'tip.fxEnableSwitch': 'ON/OFF maestro de los efectos de este PAD. Cuando está en off, el PAD suena limpio sin perder tus ajustes.',
 
     'library.tabYouTube': 'YouTube',
     'library.tabLocal': 'Local',
@@ -667,6 +678,7 @@ export const dictionaries = {
 
     'toast.stopKeySet': 'Tecla de stop configurada a {key}',
     'toast.chopKeySet': 'Tecla de corte configurada a {key}',
+    'toast.fxCleared': 'FX limpiados en el PAD {position}',
     'toast.allStopped': 'Todo detenido',
     'toast.padsResized': 'PADS redimensionados a {n}',
     'toast.videoNotLoaded': 'Video no cargado',
