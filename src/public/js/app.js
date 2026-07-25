@@ -3168,7 +3168,14 @@ if (exportBtn) {
       exportMenu.appendChild(item);
     });
     document.body.appendChild(exportMenu);
-    positionExportMenu(exportMenu, exportBtn);
+    // When Export isn't pinned, exportBtn is display:none (invoked from the
+    // kebab), so its rect is all-zeros and the menu would land in the corner.
+    // Anchor to whichever ⋯ button is actually visible instead.
+    const anchor = exportBtn.offsetParent !== null
+      ? exportBtn
+      : ([document.getElementById('btn-header-more'), document.getElementById('grip-more-btn')]
+          .find((el) => el && el.offsetParent !== null) || exportBtn);
+    positionExportMenu(exportMenu, anchor);
     document.addEventListener('pointerdown', onExportDismiss, true);
     window.addEventListener('keydown', onExportKeydown);
   }
