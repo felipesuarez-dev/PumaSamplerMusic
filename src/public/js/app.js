@@ -1111,6 +1111,12 @@ function closeOnOtherMenuOpen(token, closeSelf) {
   document.addEventListener('puma:menu-open', (e) => { if (e.detail !== token) closeSelf(); });
 }
 
+// Bridge so the kebab (⋯) menu can open/close the export flyout as its own
+// submenu without importing the export block's closures. Assigned by the export
+// init below; read at click time by the kebab handler.
+let openExportSubmenu = null;
+let closeExportSubmenu = () => {};
+
 // Places a fixed-positioned dropdown just under its trigger button, right-
 // aligned to the button and clamped inside the viewport. Called after the menu
 // is unhidden so offsetWidth reflects real layout; kept synchronous so there's
@@ -3227,16 +3233,25 @@ const EXPORT_FORMATS = ['package', 'pss', 'sfz', 'decentsampler', 'mpc', 'fl', '
 const exportBtn = document.getElementById('btn-export-session');
 if (exportBtn) {
   let exportMenu = null;
+  let exportSubmenuParent = null; // the kebab menu, when open as a submenu
 
   function closeExportMenu() {
     if (!exportMenu) return;
     if (exportMenu.parentNode) exportMenu.parentNode.removeChild(exportMenu);
     exportMenu = null;
+    exportSubmenuParent = null;
     document.removeEventListener('pointerdown', onExportDismiss, true);
     window.removeEventListener('keydown', onExportKeydown);
   }
   function onExportDismiss(e) {
-    if (exportMenu && !exportMenu.contains(e.target) && !exportBtn.contains(e.target)) closeExportMenu();
+    // Clicks inside the parent kebab menu (when open as a submenu) don't close
+    // the flyout — only a click outside BOTH does.
+    if (exportMenu
+      && !exportMenu.contains(e.target)
+      && !exportBtn.contains(e.target)
+      && !(exportSubmenuParent && exportSubmenuParent.contains(e.target))) {
+      closeExportMenu();
+    }
   }
   function onExportKeydown(e) {
     if (e.key === 'Escape') closeExportMenu();
@@ -3270,9 +3285,13 @@ if (exportBtn) {
     }
   }
 
-  function openExportMenu() {
+  // opts.submenuOf (the kebab menu) + opts.row (the Export <li>) open the flyout
+  // as a submenu beside the kebab, keeping the kebab open (no announce, so the
+  // parent isn't closed by the mutual-exclusion bus).
+  function openExportMenu(opts = {}) {
     closeExportMenu();
-    announceMenuOpen('export');
+    exportSubmenuParent = opts.submenuOf || null;
+    if (!exportSubmenuParent) announceMenuOpen('export');
     exportMenu = document.createElement('div');
     exportMenu.className = 'pad-context-menu export-format-menu';
     EXPORT_FORMATS.forEach((fmt) => {
@@ -3292,14 +3311,22 @@ if (exportBtn) {
       exportMenu.appendChild(item);
     });
     document.body.appendChild(exportMenu);
-    // When Export isn't pinned, exportBtn is display:none (invoked from the
-    // kebab), so its rect is all-zeros and the menu would land in the corner.
-    // Anchor to whichever ⋯ button is actually visible instead.
-    const anchor = exportBtn.offsetParent !== null
-      ? exportBtn
-      : ([document.getElementById('btn-header-more'), document.getElementById('grip-more-btn')]
-          .find((el) => el && el.offsetParent !== null) || exportBtn);
-    positionExportMenu(exportMenu, anchor);
+    if (exportSubmenuParent) {
+      // Submenu: sit to the LEFT of the kebab menu, top-aligned with the Export
+      // row (the format list is wide and the kebab hugs the right edge).
+      const menuRect = exportSubmenuParent.getBoundingClientRect();
+      const rowRect = (opts.row || exportSubmenuParent).getBoundingClientRect();
+      const w = exportMenu.offsetWidth;
+      exportMenu.style.left = `${Math.max(8, menuRect.left - w - 6)}px`;
+      exportMenu.style.top = `${Math.max(8, Math.min(rowRect.top, window.innerHeight - exportMenu.offsetHeight - 8))}px`;
+    } else {
+      // Standalone (Export pinned to the navbar): anchor under a visible ⋯/btn.
+      const anchor = exportBtn.offsetParent !== null
+        ? exportBtn
+        : ([document.getElementById('btn-header-more'), document.getElementById('grip-more-btn')]
+            .find((el) => el && el.offsetParent !== null) || exportBtn);
+      positionExportMenu(exportMenu, anchor);
+    }
     document.addEventListener('pointerdown', onExportDismiss, true);
     window.addEventListener('keydown', onExportKeydown);
   }
@@ -3309,6 +3336,10 @@ if (exportBtn) {
     else openExportMenu();
   });
   closeOnOtherMenuOpen('export', () => closeExportMenu());
+
+  // Bridges for the kebab menu to drive the export flyout as its submenu.
+  openExportSubmenu = (menuEl, rowEl) => openExportMenu({ submenuOf: menuEl, row: rowEl });
+  closeExportSubmenu = closeExportMenu;
 }
 
 const clearCacheBtn = document.getElementById('btn-clear-cache');
@@ -3448,6 +3479,7 @@ function initHeaderMoreMenu() {
   // can pass itself so the fixed menu positions under whichever was clicked.
   function setOpen(open, trigger = btn) {
     if (open) announceMenuOpen('kebab');
+    else closeExportSubmenu(); // closing the kebab also closes its export submenu
     menu.hidden = !open;
     btn.setAttribute('aria-expanded', open ? String(trigger === btn) : 'false');
     const gripBtn = document.getElementById('grip-more-btn');
@@ -3526,6 +3558,11 @@ function initHeaderMoreMenu() {
     }
     const item = e.target.closest('[data-proxy], [data-action]');
     if (!item) return;
+    // Export opens as a submenu BESIDE this menu — keep the kebab open.
+    if (item.dataset.proxy === 'btn-export-session' && openExportSubmenu) {
+      openExportSubmenu(menu, item);
+      return;
+    }
     setOpen(false);
     if (item.dataset.action === 'settings') {
       openSettingsModal();
