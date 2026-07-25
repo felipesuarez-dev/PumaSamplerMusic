@@ -116,7 +116,16 @@ function drawTonearm(ctx, cx, cy, outerR, dpr, ac) {
   ctx.restore();
 }
 
-export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle }) {
+// mm:ss for the vinyl label (formatTime in state.js includes .mmm, too noisy
+// for a static print).
+function formatMinSec(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle, getMediaDuration }) {
   const ctx = canvas.getContext('2d');
   let skin = readStoredSkin();
   let rafId = null;
@@ -502,7 +511,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     }
     ctx.restore();
 
-    /* 8. title + RPM print */
+    /* 8. title + track-duration print */
     const title = (getMediaTitle && getMediaTitle()) || '';
     if (title) {
       ctx.save();
@@ -512,9 +521,13 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
       ctx.textBaseline = 'middle';
       ctx.fillStyle = vinyl.textColor;
       ctx.fillText(fitText(ctx, title, labelR * 1.5), cx, cy - labelR * 0.4);
-      ctx.font = `500 ${Math.max(7 * dpr, labelR * 0.14)}px system-ui, sans-serif`;
-      ctx.globalAlpha = 0.6;
-      ctx.fillText('33 ⅓ RPM', cx, cy + labelR * 0.52);
+      // Real datum instead of a decorative "RPM": the track's total length.
+      const durationLabel = formatMinSec(getMediaDuration && getMediaDuration());
+      if (durationLabel) {
+        ctx.font = `500 ${Math.max(7 * dpr, labelR * 0.14)}px system-ui, sans-serif`;
+        ctx.globalAlpha = 0.6;
+        ctx.fillText(durationLabel, cx, cy + labelR * 0.52);
+      }
       ctx.restore();
     }
 

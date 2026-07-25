@@ -54,6 +54,11 @@ const visualizerSkins = createVisualizerSkins({
     const info = id ? getMediaInfo(id) : null;
     return info ? info.title || '' : '';
   },
+  getMediaDuration: () => {
+    const id = mediaDisplay.getMediaId();
+    const info = id ? getMediaInfo(id) : null;
+    return info && info.duration > 0 ? info.duration : 0;
+  },
 });
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
