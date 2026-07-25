@@ -1,6 +1,6 @@
 import { formatTime } from './state.js';
 import { t } from './i18n.js';
-import { buildPeakCache as buildPeakCacheFromSamples, selectLevel as selectPeakLevel } from './waveform-peaks.js';
+import { buildPeakCache as buildPeakCacheFromSamples, buildPeakCacheAsync as buildPeakCacheFromSamplesAsync, selectLevel as selectPeakLevel } from './waveform-peaks.js';
 import { MIN_SLICE_SECONDS } from './slicer-core.js';
 import { WAVEFORM_STYLE_EVENT } from './waveform-style.js';
 
@@ -162,6 +162,29 @@ export function createWaveform(canvas, options = {}) {
     isLoading = false;
     peakCache = null;
     if (buffer) buildPeakCache(buffer);
+    draw();
+  }
+
+  // Async variant: same result as setAudioBuffer but builds the peak cache in
+  // chunks, reporting progress, so a loading bar can advance during the (long)
+  // bucketing of a big track instead of freezing the main thread. Draws
+  // immediately with peakCache=null (raw-scan fallback → the waveform appears at
+  // once) and only publishes the cache once fully built (a half-filled cache
+  // would render zeros through selectPeakLevel).
+  async function setAudioBufferAsync(buffer, { onProgress, signal } = {}) {
+    audioBuffer = buffer;
+    duration = buffer ? buffer.duration : 0;
+    zoomLevel = 1;
+    zoomCenter = duration / 2;
+    clampZoom();
+    isLoading = false;
+    peakCache = null;
+    draw(); // raw-scan render up front
+    if (!buffer) return;
+    const cache = await buildPeakCacheFromSamplesAsync(buffer.getChannelData(0), { onProgress, signal });
+    // Guard: a newer load may have replaced the buffer while we were building.
+    if (audioBuffer !== buffer) return;
+    peakCache = cache;
     draw();
   }
 
@@ -1005,6 +1028,7 @@ export function createWaveform(canvas, options = {}) {
 
   return {
     setAudioBuffer,
+    setAudioBufferAsync,
     setLoading,
     setEmpty,
     setSegment,

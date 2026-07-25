@@ -67,6 +67,74 @@ export function buildPeakCache(data, targetBucketCounts = DEFAULT_TARGET_BUCKET_
   return { levels };
 }
 
+// Async, chunked twin of buildPeakCache that reports incremental progress and
+// yields to the event loop between chunks (so a loading <progress> bar can
+// advance and repaint while a long track is bucketed). Output is BIT-IDENTICAL
+// to buildPeakCache for the same input: same bucketSize selection (floor +
+// dedup), same per-bucket min/max math, same coarsest-first sort. Chunking is
+// WITHIN each level's bucket loop (not per-level) so the yields are frequent
+// enough to keep the UI alive. `onProgress(fraction 0..1)` and an optional
+// AbortSignal are supported. The synchronous buildPeakCache is left untouched
+// for the existing tests and non-progress callers.
+export async function buildPeakCacheAsync(data, {
+  targetBucketCounts = DEFAULT_TARGET_BUCKET_COUNTS,
+  chunkBuckets = 8192,
+  onProgress,
+  signal,
+} = {}) {
+  const counts = Array.isArray(targetBucketCounts) ? targetBucketCounts : [targetBucketCounts];
+  const seenBucketSizes = new Set();
+  // Plan every level up front (identical selection to the sync path) and
+  // allocate each level's arrays ONCE, not per chunk.
+  const plans = [];
+  for (const targetCount of counts) {
+    const bucketSize = Math.max(1, Math.ceil(data.length / targetCount));
+    if (bucketSize < MIN_LEVEL_BUCKET_SIZE) continue;
+    if (seenBucketSizes.has(bucketSize)) continue;
+    seenBucketSizes.add(bucketSize);
+    const numBuckets = Math.ceil(data.length / bucketSize);
+    plans.push({ bucketSize, numBuckets, mins: new Float32Array(numBuckets), maxs: new Float32Array(numBuckets) });
+  }
+
+  const totalBuckets = plans.reduce((sum, p) => sum + p.numBuckets, 0);
+  let doneBuckets = 0;
+
+  for (const plan of plans) {
+    const { bucketSize, numBuckets, mins, maxs } = plan;
+    for (let start = 0; start < numBuckets; start += chunkBuckets) {
+      if (signal && signal.aborted) {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+      const end = Math.min(start + chunkBuckets, numBuckets);
+      for (let b = start; b < end; b++) {
+        const offset = b * bucketSize;
+        const limit = Math.min(offset + bucketSize, data.length);
+        let min = 1;
+        let max = -1;
+        for (let i = offset; i < limit; i++) {
+          const sample = data[i];
+          if (sample < min) min = sample;
+          if (sample > max) max = sample;
+        }
+        mins[b] = min;
+        maxs[b] = max;
+      }
+      doneBuckets += end - start;
+      if (onProgress) onProgress(totalBuckets ? doneBuckets / totalBuckets : 1);
+      // Macrotask yield: lets the browser paint the progress bar between chunks
+      // (portable to node for the unit test).
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  const levels = plans.map(({ bucketSize, mins, maxs }) => ({ bucketSize, mins, maxs }));
+  levels.sort((a, b) => b.bucketSize - a.bucketSize);
+  if (onProgress) onProgress(1);
+  return { levels };
+}
+
 // Picks the coarsest level whose bucketSize is still <= step (samples per
 // pixel), which maximizes work saved while staying at/finer than the pixel
 // resolution being drawn. Returns null when no level qualifies (e.g. zoomed

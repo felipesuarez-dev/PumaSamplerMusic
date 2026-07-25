@@ -974,20 +974,29 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // flashes it. Mirrors video-display.js's 150ms spinner gate.
     const showTimer = setTimeout(() => { if (loading) showOverlay(); }, 150);
     try {
+      // Phase weighting (determinate, no flicker): download fills 0→70% (real
+      // fraction), decode holds at 70% (atomic, unmeasurable), and the chunked
+      // peak build fills 70→100% (real). The bar only reaches 100% when the
+      // waveform is actually interactive.
       const buffer = await audio.loadAudio(
         videoId,
         api.getAudioUrl(videoId),
-        (f) => { if (currentVideoId === videoId) setProgress(f); },
+        (f) => { if (currentVideoId === videoId) setProgress(f * 0.70); },
         loadAbort.signal,
       );
       if (currentVideoId !== videoId || !waveform) return; // switched away mid-load
-      // Download done; the synchronous peak build (setAudioBuffer) is about to
-      // block. Show "Rendering…" and wait for a real paint before blocking.
+      // Download resolved; decodeAudioData already ran inside loadAudio. Move to
+      // the render phase and build the peak cache in chunks so the bar keeps
+      // advancing instead of freezing at 100%.
       setOverlayCaption('slicer.loadingRender');
-      setProgress(1);
+      setProgress(0.70);
       await nextPaint();
       if (currentVideoId !== videoId || !waveform) return;
-      waveform.setAudioBuffer(buffer);
+      await waveform.setAudioBufferAsync(buffer, {
+        onProgress: (f) => { if (currentVideoId === videoId) setProgress(0.70 + f * 0.30); },
+        signal: loadAbort ? loadAbort.signal : undefined,
+      });
+      if (currentVideoId !== videoId || !waveform) return;
       currentAudioBuffer = buffer;
       updateGridBpmLabel();
       if (cachedSlices.length) {

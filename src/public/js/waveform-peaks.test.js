@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPeakCache, selectLevel } from './waveform-peaks.js';
+import { buildPeakCache, buildPeakCacheAsync, selectLevel } from './waveform-peaks.js';
 
 // Brute-force min/max scan over data[offset, limit) — used as the ground
 // truth to check the bucketed cache against.
@@ -120,4 +120,46 @@ test('selectLevel: falls back to null when no level is fine enough for step', ()
 test('selectLevel: returns null for an empty or missing cache', () => {
   assert.equal(selectLevel({ levels: [] }, 10), null);
   assert.equal(selectLevel(null, 10), null);
+});
+
+test('buildPeakCacheAsync: output is bit-identical to buildPeakCache', async () => {
+  // 600k samples so the coarsest level (8192 target → bucketSize ~74) survives
+  // the 64-sample floor and gets split across multiple chunks — a real,
+  // non-empty comparison rather than two empty caches.
+  const length = 600000;
+  const data = new Float32Array(length);
+  for (let i = 0; i < length; i++) {
+    data[i] = Math.sin(i * 0.017) * (0.3 + 0.7 * Math.sin(i * 0.0003));
+  }
+
+  const sync = buildPeakCache(data);
+  const async = await buildPeakCacheAsync(data, { chunkBuckets: 1000 });
+
+  assert.ok(sync.levels.length > 0, 'at least one level survives the floor');
+  assert.equal(async.levels.length, sync.levels.length);
+  for (let l = 0; l < sync.levels.length; l++) {
+    assert.equal(async.levels[l].bucketSize, sync.levels[l].bucketSize);
+    assert.deepEqual(async.levels[l].mins, sync.levels[l].mins);
+    assert.deepEqual(async.levels[l].maxs, sync.levels[l].maxs);
+  }
+});
+
+test('buildPeakCacheAsync: reports progress ending at exactly 1', async () => {
+  const data = new Float32Array(600000);
+  for (let i = 0; i < data.length; i++) data[i] = Math.sin(i * 0.1);
+  const seen = [];
+  await buildPeakCacheAsync(data, { chunkBuckets: 500, onProgress: (f) => seen.push(f) });
+  assert.ok(seen.length > 0, 'onProgress was called');
+  assert.equal(seen[seen.length - 1], 1);
+  for (const f of seen) assert.ok(f >= 0 && f <= 1, `fraction ${f} in range`);
+});
+
+test('buildPeakCacheAsync: aborts via signal', async () => {
+  const data = new Float32Array(600000);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(
+    () => buildPeakCacheAsync(data, { signal: controller.signal }),
+    (err) => err.name === 'AbortError',
+  );
 });
