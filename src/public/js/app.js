@@ -2923,6 +2923,40 @@ ws.on('video:removed', (payload) => {
   refreshVideos();
 });
 
+// Pre-decodes the audio for every distinct videoId a session's pads reference,
+// behind a blocking full-screen spinner, so the first trigger of each pad is
+// instant (audio.loadAudio caches decoded buffers, so later triggers hit the
+// cache). Each id is isolated: a missing/slow one (e.g. a YouTube id still
+// re-downloading server-side) is skipped and falls back to lazy load on first
+// trigger. The overlay always hides in the finally.
+async function preloadSessionAudio(session) {
+  const overlay = document.getElementById('session-load-overlay');
+  const caption = document.getElementById('session-load-caption');
+  const ids = [...new Set((session.pads || []).map((p) => p.videoId).filter(Boolean))];
+  if (ids.length === 0) return;
+
+  const setCaption = (done) => {
+    if (caption) caption.textContent = t('session.loadingAudio', { done, total: ids.length });
+  };
+  setCaption(0);
+  if (overlay) overlay.hidden = false;
+  let done = 0;
+  try {
+    for (const id of ids) {
+      try {
+        await audio.loadAudio(id, api.getAudioUrl(id));
+      } catch (err) {
+        console.warn('Session audio preload failed for', id, err);
+      } finally {
+        done += 1;
+        setCaption(done);
+      }
+    }
+  } finally {
+    if (overlay) overlay.hidden = true;
+  }
+}
+
 // Session Manager
 const sessionManager = createSessionManager({
   showToast,
@@ -2949,6 +2983,9 @@ const sessionManager = createSessionManager({
       masterFxControls.applyState(session.masterFx || loadMasterFxDefaults());
     }
   },
+  // Warm the audio buffers for the session's pads behind a blocking spinner, so
+  // the first pad trigger is instant instead of stalling on fetch+decode.
+  onSessionReady: preloadSessionAudio,
 });
 
 // Auto-Slicer takeover view

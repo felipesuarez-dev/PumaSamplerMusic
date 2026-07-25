@@ -100,7 +100,7 @@ async function readZipEntryBytes(file, entryName) {
 }
 
 export function createSessionManager(options = {}) {
-  const { onSessionLoad, onSessionListChange, showToast, openConfirmModal, collectSessionData } = options;
+  const { onSessionLoad, onSessionReady, onSessionListChange, showToast, openConfirmModal, collectSessionData } = options;
   const saveBtn = document.getElementById('btn-save-session');
   const newBtn = document.getElementById('btn-new-session');
   const manageBtn = document.getElementById('btn-manage-sessions');
@@ -262,6 +262,9 @@ export function createSessionManager(options = {}) {
       showToast(t('toast.sessionLoaded', { name: session.name }), 'success');
       if (onSessionLoad) onSessionLoad(session);
       await reconcileSessionVideos(session);
+      // After the media is reconciled server-side, let the app warm the audio
+      // buffers (with a blocking spinner) so the first pad trigger is instant.
+      if (onSessionReady) await onSessionReady(session);
       return session;
     } catch (err) {
       showToast(t('toast.sessionLoadFailed', { message: err.message }), 'error');
@@ -298,6 +301,7 @@ export function createSessionManager(options = {}) {
         manifest = null;
       }
       await reconcileSessionVideos(saved, { file, manifest });
+      if (onSessionReady) await onSessionReady(saved);
 
       return saved;
     } catch (err) {

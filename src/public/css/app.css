@@ -2999,6 +2999,32 @@ button.is-proxied {
   animation: fadeIn 0.15s ease;
 }
 
+/* Full-screen blocking spinner while a loaded session's audio decodes. Same
+   fixed backdrop as the session modal, with a centered spinner + caption. */
+.session-load-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text);
+  animation: fadeIn 0.12s ease;
+}
+
+.session-load-overlay[hidden] {
+  display: none;
+}
+
+.session-load-overlay p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .session-modal {
   position: relative;
   background: var(--surface);
