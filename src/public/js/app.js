@@ -1415,6 +1415,9 @@ if (gridSizeSelect) {
       pads.resize(count);
       showToast(t('toast.padsResized', { n: count }), 'success');
     }
+    // Drop focus so pad keys fire immediately (a focused <select> otherwise
+    // captures letter keys for typeahead) — mirrors the knob's blur-on-commit.
+    gridSizeSelect.blur();
   });
 }
 
@@ -2493,7 +2496,10 @@ function initEditorListeners(position) {
     }
   }
 
-  // Preview transport
+  // Preview transport. `previewPlaying` gates the natural-end snap below so a
+  // manual stop/pause (which fires the audio path's delayed onStop too) doesn't
+  // yank the playhead to the OUT after the fact.
+  let previewPlaying = false;
   async function playPreview() {
     const videoId = selectedMediaId();
     if (!videoId) return;
@@ -2509,12 +2515,22 @@ function initEditorListeners(position) {
         end: segment.end,
         muted: false,
         volume: previewVolume,
-        onStop: () => setTransportState(false),
+        onStop: () => {
+          setTransportState(false);
+          // Reaching the end: snap the red playhead exactly onto the OUT marker
+          // (the last RAF frame lands ~1 frame short). Only on a natural end.
+          if (previewPlaying && editorWaveform) {
+            editorWaveform.setPlayhead(segment.end);
+            updatePreviewTime();
+          }
+          previewPlaying = false;
+        },
       });
       if (!ok) {
         showToast(t('toast.previewPlayFailed'), 'error');
         return;
       }
+      previewPlaying = true;
       setTransportState(true);
       syncPlayhead(videoId);
     } finally {
@@ -2524,11 +2540,13 @@ function initEditorListeners(position) {
   }
 
   function pausePreview() {
+    previewPlaying = false;
     mediaDisplay.pause();
     setTransportState(false);
   }
 
   function stopPreview() {
+    previewPlaying = false;
     const segment = editorWaveform ? editorWaveform.getSegment() : { start: 0, end: 0 };
     mediaDisplay.pause();
     mediaDisplay.seek(segment.start);
@@ -3558,9 +3576,11 @@ function initHeaderMoreMenu() {
     }
     const item = e.target.closest('[data-proxy], [data-action]');
     if (!item) return;
-    // Export opens as a submenu BESIDE this menu — keep the kebab open.
+    // Export opens as a submenu BESIDE this menu — keep the kebab open, and
+    // toggle it: a second click on the Export row closes the open flyout.
     if (item.dataset.proxy === 'btn-export-session' && openExportSubmenu) {
-      openExportSubmenu(menu, item);
+      if (document.querySelector('.export-format-menu')) closeExportSubmenu();
+      else openExportSubmenu(menu, item);
       return;
     }
     setOpen(false);
