@@ -133,6 +133,12 @@ Analiza una pista completa (detección de onsets por flujo espectral o cuadrícu
 
 <img src="docs/screenshot-slicer.png" alt="Auto-Slicer: forma de onda con marcadores de onsets y lista de cortes" width="100%" />
 
+### Chops manuales
+
+Corta la pista a mano: doble clic en la forma de onda para colocar cada corte, previsualízalos y asígnalos a los PADs o crea una sesión nueva con los seleccionados.
+
+<img src="docs/screenshot-chops.png" alt="Chops manuales: forma de onda con cortes colocados a mano y lista de cortes" width="100%" />
+
 ## Características
 
 | Área | Qué hace |

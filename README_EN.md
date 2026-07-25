@@ -133,6 +133,12 @@ Analyzes a full track (spectral-flux onset detection or a beat grid), lets you p
 
 <img src="docs/screenshot-slicer.png" alt="Auto-Slicer: waveform with onset markers and a slice list" width="100%" />
 
+### Manual chops
+
+Chop the track by hand: double-click the waveform to drop each cut, preview them, and assign them to pads or start a new session from the selected ones.
+
+<img src="docs/screenshot-chops.png" alt="Manual chops: waveform with hand-placed cuts and a slice list" width="100%" />
+
 ## Features
 
 | Area | What it does |
