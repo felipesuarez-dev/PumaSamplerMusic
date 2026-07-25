@@ -1,0 +1,540 @@
+:root {
+  --bg: #0a0c10;
+  --surface: #14171f;
+  --surface-light: #1e2230;
+  --surface-hover: #252a3a;
+  --border: #2d3347;
+  --text: #e8ecf1;
+  --text-muted: #8b95a8;
+  --accent: #ff9f1c;
+  --accent-hover: #ffb347;
+  --accent-dim: rgba(255, 159, 28, 0.15);
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #ef4444;
+  --danger-hover: #f87171;
+  --danger-dim: rgba(239, 68, 68, 0.15);
+  --pad-size: min(150px, 21vw);
+  --radius: 12px;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--surface);
+  flex-shrink: 0;
+  gap: 20px;
+  flex-wrap: wrap;
+  row-gap: 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.5px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: var(--surface-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  align-self: center;
+  margin-left: 4px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  row-gap: 10px;
+  justify-content: flex-end;
+}
+
+.session-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.session-controls input,
+.session-controls select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  transition: var(--transition);
+}
+
+.session-controls input:focus,
+.session-controls select:focus {
+  border-color: var(--accent);
+}
+
+.locale-switcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.locale-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.locale-btn:hover,
+.locale-btn[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.locale-flag {
+  display: inline-flex;
+  width: 18px;
+  height: 14px;
+}
+
+.locale-flag .flag {
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  display: block;
+}
+
+.locale-btn .chev {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.locale-menu {
+  /* Fixed for the same reason as .header-more-menu — escapes the header's
+     overflow:hidden. JS positions it from the locale button's rect on open. */
+  position: fixed;
+  z-index: 1000;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  min-width: 100px;
+  max-width: calc(100vw - 16px);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.locale-menu li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.locale-menu li:hover {
+  background: var(--surface-hover);
+}
+
+/* The kebab (⋯) menu is the permanent home for the secondary actions; their
+   real buttons only appear in the navbar when pinned (see .menu-pin). */
+.header-more {
+  position: relative;
+  display: block;
+}
+
+/* Unpinned secondary actions are hidden from the navbar and live only in the
+   kebab menu. `button.is-proxied` (0,1,1) intentionally outranks `.btn`
+   (0,1,0, display:inline-flex) so the hide actually wins — a bare .is-proxied
+   would lose the cascade tie to .btn declared later. Pinning removes this
+   class to reveal the button. */
+button.is-proxied {
+  display: none;
+}
+
+.header-more-btn {
+  padding: 8px 12px;
+  line-height: 1;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.header-more-menu {
+  /* Fixed (not absolute) so the dropdown escapes #header-collapse-inner's
+     overflow:hidden, which would otherwise clip it. JS sets top/left from the
+     trigger button's rect on open. No header ancestor uses transform, so fixed
+     resolves against the viewport. */
+  position: fixed;
+  z-index: 1000;
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  min-width: 150px;
+  max-width: calc(100vw - 16px);
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.header-more-menu li {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.header-more-menu li:hover {
+  background: var(--surface-hover);
+}
+
+/* Grip session dropdown: truncate long session names; muted, non-interactive
+   empty state. */
+.grip-session-menu li {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grip-session-menu .grip-session-empty {
+  color: var(--text-muted);
+  font-weight: 400;
+  cursor: default;
+}
+
+.grip-session-menu .grip-session-empty:hover {
+  background: transparent;
+}
+
+/* Kebab items carrying a pin: label on the left, pin toggle on the right. */
+.header-more-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.menu-pin {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  opacity: 0.6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.menu-pin .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.menu-pin:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+/* Pinned = colored, matching the app's active-toggle treatment
+   (.btn-transport.active). Color/background only — the Material Symbols font is
+   loaded as a fixed FILL@0 instance, so a fill swap would render nothing. */
+.menu-pin[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--accent-dim);
+  opacity: 1;
+}
+
+/* Header collapse: same grid 1fr->0fr pattern as .panel-content (below),
+   animating the header's own height rather than a max-height ceiling. .app
+   is flex column and .main is flex:1, so main reclaims the space
+   automatically once the header collapses — no calc() needed anywhere. */
+.header-collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+  flex-shrink: 0;
+}
+
+.app.header-hidden .header-collapse {
+  grid-template-rows: 0fr;
+}
+
+.header-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Thin grip, always visible between header and main. Now a container: the
+   inner .grip-toggle button collapses/expands the header; .grip-actions holds
+   mini controls shown only when the header is hidden. Borderless to match the
+   Video Library collapse aesthetic (--surface vs --bg contrast, no hairline). */
+.header-grip {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: var(--surface);
+}
+
+.grip-toggle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.grip-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.grip-toggle .chev {
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.grip-toggle[aria-expanded='true'] .chev {
+  transform: rotate(180deg);
+}
+
+.grip-brand {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.grip-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
+/* Mirrors .header h1's weight/letter-spacing feel, sized down for the 28px
+   strip. Single line with an ellipsis safety net rather than wrapping or
+   pushing the mini action buttons out of view. */
+.grip-app-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Mini action buttons — only while the header is hidden. */
+.grip-actions {
+  display: none;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.grip-actions::-webkit-scrollbar { display: none; }
+
+.grip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.grip-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.grip-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.grip-stop {
+  color: var(--danger);
+}
+
+.grip-save {
+  color: var(--accent);
+}
+
+.grip-autosave.autosave-status {
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+/* Pinned actions mirrored as icon buttons in the collapsed-header grip strip.
+   Hidden by default (and when empty) — revealed alongside .grip-brand once
+   the header collapses. */
+.grip-pinned-actions {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.grip-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.grip-pin-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.grip-pin-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+/* When the header is collapsed, surface a compact logo + version + mini
+   actions in the grip strip; the full brand returns when expanded. */
+.app.header-hidden .header-grip {
+  padding: 0 12px;
+  min-height: 28px;
+}
+
+.app.header-hidden .grip-toggle {
+  justify-content: space-between;
+}
+
+.app.header-hidden .grip-brand {
+  display: flex;
+}
+
+.app.header-hidden .grip-brand .version {
+  margin-left: 0;
+}
+
+.app.header-hidden .grip-actions {
+  display: flex;
+}
+
+.app.header-hidden .grip-pinned-actions {
+  display: flex;
+}
+
+.app.header-hidden .grip-brand .chev,
+.grip-toggle .chev {
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .app.header-hidden .grip-brand .version,
+  .app.header-hidden .grip-app-name {
+    display: none;
+  }
+
+  .app.header-hidden .grip-pinned-actions {
+    display: none;
+  }
+}
+

@@ -5,7 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PumaSamplerMusic</title>
   <link rel="icon" type="image/png" href="/logo.png">
-  <link rel="stylesheet" href="/css/app.css">
+  <!-- app.css was split into contiguous concern-based files. Order matters:
+       it is the exact original source order, so the cascade is unchanged. -->
+  <link rel="stylesheet" href="/css/01-base-header.css">
+  <link rel="stylesheet" href="/css/02-buttons-layout.css">
+  <link rel="stylesheet" href="/css/03-panels-editor.css">
+  <link rel="stylesheet" href="/css/04-library-responsive.css">
+  <link rel="stylesheet" href="/css/05-modals-slicer.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0">
 </head>
 <body>

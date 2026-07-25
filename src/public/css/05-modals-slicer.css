@@ -1,0 +1,1104 @@
+/* Session modal */
+.session-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.15s ease;
+}
+
+/* Full-screen blocking spinner while a loaded session's audio decodes. Same
+   fixed backdrop as the session modal, with a centered spinner + caption. */
+.session-load-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text);
+  animation: fadeIn 0.12s ease;
+}
+
+.session-load-overlay[hidden] {
+  display: none;
+}
+
+.session-load-overlay p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.session-modal {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  min-width: 360px;
+  max-width: 90vw;
+  animation: slideUp 0.15s ease;
+}
+
+.session-modal h3 {
+  margin: 0 0 8px;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+
+.session-modal-hint {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.session-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.session-modal-actions .btn {
+  justify-content: center;
+}
+
+.session-modal-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.session-modal-or {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.session-modal-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  flex: 1;
+  min-width: 160px;
+}
+
+.session-modal-select:focus {
+  border-color: var(--accent);
+}
+
+.session-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 6px;
+  transition: var(--transition);
+}
+
+.session-modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.session-modal-input {
+  flex: 1;
+  min-width: 200px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.session-modal-input:focus {
+  border-color: var(--accent);
+}
+
+/* Settings modal */
+.settings-modal {
+  width: min(440px, 90vw);
+}
+
+.settings-section {
+  margin-bottom: 20px;
+}
+
+.settings-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.settings-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.settings-font-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-font-value {
+  min-width: 52px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.settings-toggle-row .settings-label {
+  margin-bottom: 0;
+}
+
+.settings-autosave-options {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-autosave-interval {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-autosave-interval .settings-label {
+  margin-bottom: 0;
+}
+
+.settings-autosave-interval input {
+  width: 80px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  outline: none;
+}
+
+/* The `hidden` attribute is display:none only in the UA stylesheet (low
+   priority), so these class rules with `display:` would override it. Compound
+   [hidden] guards (specificity 0,2,0) restore it without !important — same
+   technique as button.is-proxied. */
+.autosave-status[hidden],
+.settings-autosave-options[hidden],
+.settings-autosave-interval[hidden] {
+  display: none;
+}
+
+/* Auto-save status indicator (beside the Save button) */
+.autosave-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  background: var(--surface-light);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.autosave-status .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.autosave-status.saving {
+  color: var(--accent);
+}
+
+.autosave-status.saving .material-symbols-outlined {
+  animation: autosave-spin 1s linear infinite;
+}
+
+/* Green on a successful save, with a brief flash so each persist is visible. */
+.autosave-status.saved {
+  color: var(--success);
+  background: var(--success-dim, rgba(74, 222, 128, 0.14));
+  animation: autosave-saved-flash 0.4s ease;
+}
+
+/* A keyless pad is blocking the save, or a save errored — surface, don't hide. */
+.autosave-status.blocked {
+  color: var(--warning, #fbbf24);
+}
+
+.autosave-status.error {
+  color: var(--danger);
+}
+
+@keyframes autosave-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes autosave-saved-flash {
+  from { background: var(--success); color: #0a0c10; }
+}
+
+/* Sessions manager modal */
+.sessions-manager {
+  width: min(560px, 90vw);
+}
+
+.sessions-manager-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  margin-bottom: 12px;
+}
+
+.sessions-manager-search:focus {
+  border-color: var(--accent);
+}
+
+.sessions-manager-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sessions-manager-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.sessions-manager-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sessions-manager-name {
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessions-manager-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.sessions-manager-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sessions-manager-actions .btn {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+}
+
+.sessions-manager-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 24px 0;
+  margin: 0;
+}
+
+.waveform-help-modal {
+  max-width: min(480px, 90vw);
+}
+
+.logs-modal {
+  width: min(720px, 90vw);
+}
+
+.logs-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem;
+}
+
+.log-line {
+  display: flex;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-time {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.log-message {
+  color: var(--text);
+}
+
+.log-line-warn .log-message {
+  color: var(--warning);
+}
+
+.log-line-error .log-message {
+  color: var(--danger);
+}
+
+.waveform-help-modal section {
+  margin-top: 16px;
+}
+
+.waveform-help-modal section:first-of-type {
+  margin-top: 8px;
+}
+
+.waveform-help-modal h4 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.waveform-help-modal p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+
+.link-btn:hover {
+  color: var(--accent-hover);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Auto-Slicer takeover view
+   ==========================================================================
+   The Video Library sidenav becomes a takeover view while slicing. It is
+   absolutely positioned to fill .main (its positioned ancestor) — NOT the
+   viewport — so the top bar above .main stays visible and clickable. z-index
+   50 sits above the in-flow siblings (pads-sidenav, content) and under session
+   modals (2000) / tooltips (9999) by design. width/height auto let inset:0
+   define the box, outranking the mobile `.library-sidenav { height:44px }`
+   override on its two-class specificity tier. */
+.library-sidenav.slicer-takeover {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  z-index: 50;
+  border-radius: 0;
+  overflow: auto;
+  transform-origin: right center;
+  animation: slicerTakeoverIn 0.2s ease;
+}
+
+@keyframes slicerTakeoverIn {
+  from { transform: scaleX(0.85); opacity: 0.5; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+/* Exit mirrors the entrance: the panel shrinks back toward the right edge
+   (transform-origin is right center on the base rule) instead of vanishing.
+   slicer.js removes both classes on animationend (or a timeout fallback). */
+.library-sidenav.slicer-takeover.slicer-closing {
+  animation: slicerTakeoverOut 0.2s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes slicerTakeoverOut {
+  from { transform: scaleX(1); opacity: 1; }
+  to { transform: scaleX(0.85); opacity: 0; }
+}
+
+/* Body must be visible even if the rail was collapsed when Slice was
+   clicked (app.js also force-expands the toggle, but this is the layout
+   guarantee that doesn't depend on that). */
+.library-sidenav.slicer-takeover .library-sidenav-body {
+  opacity: 1;
+  height: 100%;
+}
+
+/* The takeover replaces the whole rail's normal content with its own
+   header/waveform/results — hide the regular chrome instead of reparenting
+   or duplicating it. .video-library matches both the YouTube and Local
+   panels (they share the class), and the tab bar + cache footer are listed
+   explicitly since the media library split them out from the panels. */
+.library-sidenav.slicer-takeover .library-sidenav-toggle,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .library-sidenav-header,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .library-tab-bar,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .video-library,
+.library-sidenav.slicer-takeover > .library-sidenav-body > .cache-footer {
+  display: none;
+}
+
+/* The resize handle is injected by makeResizable() as a child of the sidenav
+   element itself (a sibling of the toggle/body) — hidden here for the same
+   reason app.js also guards its mousedown handler: a drag would otherwise
+   write an inline width that fights the takeover's fixed layout. */
+.library-sidenav.slicer-takeover .resize-handle {
+  display: none;
+}
+
+.slicer-panel {
+  display: none;
+  height: 100%;
+}
+
+.library-sidenav.slicer-takeover #slicer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+/* Help "?" next to the panel title. flex:0 0 auto so it keeps its size beside
+   the flex:1 video title; the shared tooltip positioner already flips the
+   bubble below (.tip-below) when the icon sits too close to the top edge. */
+.slicer-title-help {
+  flex: 0 0 auto;
+}
+
+.slicer-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.slicer-panel-header .panel-title {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.slicer-video-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Header preview-volume control: sits between the (flex:1) video title and
+   the close button, so it naturally lands top-right of the header without
+   its own positioning. A fixed-width value span keeps the header from
+   jittering as the two/three-digit percentage changes while dragging. */
+.slicer-preview-volume-group {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.slicer-preview-volume-label {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.slicer-preview-volume-group input[type="range"] {
+  flex: 0 0 auto;
+  width: 110px;
+}
+
+.slicer-preview-volume-value {
+  flex: 0 0 auto;
+  width: 3.2em;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.slicer-close-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: var(--transition);
+}
+
+.slicer-close-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Minimize button in the slicer header, left of the close (×). Shrinks the
+   takeover to the collapsed rail so the PADs are visible without closing. */
+.slicer-min-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+}
+
+.slicer-min-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Collapsed rail: same 32px width and vertical-rl label style as the Media
+   rail, shown only while the takeover is minimized. Hidden otherwise. */
+.slicer-min-rail {
+  display: none;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized {
+  width: 32px;
+  /* Dock the collapsed rail on the right edge — where the Media rail lives —
+     instead of the left (inset:0 sets left:0, so pin right and free left). */
+  left: auto;
+  right: 0;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized > .library-sidenav-body {
+  display: none;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized > .slicer-min-rail {
+  display: flex;
+  flex: 1;
+  width: 32px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: var(--transition);
+  overflow: hidden;
+}
+
+.library-sidenav.slicer-takeover.slicer-minimized > .slicer-min-rail:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.slicer-min-rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Running time over the slicer waveform, mirroring the video display's
+   #video-time-overlay so playback time reads the same in both places. */
+.slicer-time-overlay {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Configurable cut-key widget in the header, same shape as the preview-volume
+   group. */
+.slicer-chop-key-group {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Restore [hidden] over the author display:flex (same origin-precedence issue
+   as .slicer-controls-row / .slicer-mode-toggle) so applyEntryMode can hide the
+   cut/play/stop key widgets in the Auto-Slicer — they're Manual-Chops-only. */
+.slicer-chop-key-group[hidden] {
+  display: none;
+}
+
+.slicer-waveform-container {
+  position: relative;
+  flex: 0 0 auto;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.slicer-waveform-container .waveform-ruler {
+  width: 100%;
+  height: 20px;
+  display: block;
+}
+
+.slicer-waveform-container canvas:not(.waveform-ruler) {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: block;
+  cursor: crosshair;
+}
+
+/* Onsets/Grid segmented toggle -- same active-state language as .pad-tab. */
+.slicer-mode-toggle {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Restore [hidden] over the author display:flex (same origin-precedence issue
+   as .slicer-controls-row) so Manual Chops mode can hide the whole toggle. */
+.slicer-mode-toggle[hidden] {
+  display: none;
+}
+
+.slicer-mode-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.slicer-mode-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.slicer-mode-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.slicer-mode-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.slicer-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Restore [hidden] on the controls rows: the author `display:flex` above beats
+   the UA `[hidden]{display:none}` (same-origin specificity is irrelevant across
+   origins, author wins), so without this BOTH the onset and grid rows render at
+   once — stacking two rows and pushing Generate + results off the panel. This
+   mirrors the same [hidden] restore already done for .video-library/.form-row
+   above (see the note near .video-library[hidden]). */
+.slicer-controls-row[hidden] {
+  display: none;
+}
+
+/* Stacked controls: the active mode's controls row sits on top and the
+   Generate button below it, so Sensitivity can span the full takeover width
+   (long, precise slider) instead of being squeezed onto one line. In Manual
+   Chops every child is [hidden] so the line collapses to zero height. */
+.slicer-controls-line {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Onset controls stack vertically: Sensitivity gets its own full-width row
+   (long slider for fine, precise dragging), Method drops to the row below.
+   Kept inside #slicer-onset-controls (not moved to the generate row) so
+   setMode still hides Method in Grid mode. */
+#slicer-onset-controls {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.slicer-onset-subrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Sensitivity slider fills its full-width row for maximum range/precision. */
+#slicer-onset-controls input[type='range'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.slicer-controls-row label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.slicer-controls-row input[type='range'] {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Editable sensitivity value: a small number input styled like the old
+   read-only span but typeable for an exact value. */
+input.slicer-sensitivity-value {
+  flex: 0 0 auto;
+  width: 56px;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  outline: none;
+}
+
+input.slicer-sensitivity-value:focus {
+  border-color: var(--accent);
+}
+
+/* Method select (onset row) and divisions select (grid row) -- fixed width
+   instead of .session-modal-select's flex:1 so they sit inline with the
+   short labels/inputs around them instead of stretching to fill the row. */
+.slicer-method-select {
+  flex: 0 0 auto;
+  min-width: 140px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.slicer-method-select:focus {
+  border-color: var(--accent);
+}
+
+.slicer-grid-controls input[type='number'] {
+  flex: 0 0 auto;
+  width: 72px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+}
+
+.slicer-grid-controls input[type='number']:focus {
+  border-color: var(--accent);
+}
+
+.slicer-bpm-value {
+  min-width: 80px;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Manual Chops toolbar: a muted usage hint that grows, with the Clear button
+   sitting at the end of the same row. */
+.slicer-manual-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* Blocking overlay during analysis — same visual language as
+   .video-loading-overlay, scoped to this panel instead of the video area. */
+.slicer-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(10, 12, 16, 0.9);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 24px;
+  z-index: 10;
+  border-radius: var(--radius);
+}
+
+.slicer-overlay.visible {
+  display: flex;
+}
+
+.slicer-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, 80%);
+}
+
+.slicer-progress {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  appearance: none;
+}
+
+.slicer-progress::-webkit-progress-bar {
+  background: var(--surface-light);
+  border-radius: 4px;
+}
+
+.slicer-progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.15s ease;
+}
+
+.slicer-progress::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+.slicer-progress-value {
+  min-width: 40px;
+  text-align: right;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.slicer-results {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.slicer-results-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.slicer-results-header h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.slicer-results-header .hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.slicer-slice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.slice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.slice-row-checkbox {
+  flex: 0 0 auto;
+}
+
+.slice-row-index {
+  flex: 0 0 auto;
+  min-width: 28px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.slice-row-time {
+  flex: 0 0 auto;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.slice-row-duration {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.slice-preview-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+}
+
+.slicer-assign-select {
+  flex: 1;
+  min-width: 140px;
+}
+
+.slice-row-badge {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--success);
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  /* The takeover is absolutely positioned to fill .main (see base rule), so it
+     already fills the width below the header at any viewport — no viewport
+     override needed, and the top bar stays visible on mobile too. */
+
+  /* The header's title/video-title/volume-group/close-btn row doesn't fit
+     one line at narrow widths -- wrapping keeps every control reachable
+     instead of clipping or forcing horizontal scroll. */
+  .slicer-panel-header {
+    flex-wrap: wrap;
+  }
+
+  .slicer-video-title {
+    flex-basis: 100%;
+  }
+
+  .slicer-waveform-container {
+    height: 150px;
+  }
+
+  .slice-row {
+    align-items: flex-start;
+  }
+
+  .slicer-assign-select {
+    min-width: 100%;
+    order: 10;
+  }
+}

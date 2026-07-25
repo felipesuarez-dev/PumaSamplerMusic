@@ -1,0 +1,674 @@
+/* Video Library */
+.add-video-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.add-video-form input {
+  width: 100%;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  transition: var(--transition);
+}
+
+.add-video-form input:focus {
+  border-color: var(--accent);
+}
+
+.add-video-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-video-actions .btn {
+  flex: 1;
+}
+
+/* YouTube/Local tab bar — reuses .slicer-mode-toggle/.slicer-mode-btn (see
+   further below) for the segmented pill look instead of its own styling. */
+.library-tab-bar {
+  margin-bottom: 14px;
+}
+
+.video-library {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The class rule above sets an explicit display, which would otherwise beat
+   the [hidden] attribute (UA display:none has lower specificity). Restore it
+   so tab-switching (and the pad-editor rows below) can hide via [hidden]. */
+.video-library[hidden],
+.form-row[hidden] {
+  display: none;
+}
+
+.upload-row {
+  margin-bottom: 14px;
+}
+
+.upload-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.upload-picker:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.upload-picker:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.upload-picker.loading {
+  border-style: solid;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.upload-picker-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-picker-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.upload-file-size {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.media-kind-badge {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.media-kind-badge-video {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-light));
+  color: var(--accent);
+}
+
+.media-kind-badge-audio {
+  background: color-mix(in srgb, var(--success, #2ecc71) 18%, var(--surface-light));
+  color: var(--success, #2ecc71);
+}
+
+.video-search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  margin-bottom: 12px;
+}
+
+.video-search:focus {
+  border-color: var(--accent);
+}
+
+.video-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.video-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.video-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.btn-pager {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+.video-pager-info {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cache-footer {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cache-usage {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.btn-clear-cache {
+  width: 100%;
+  justify-content: center;
+}
+
+.video-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: var(--transition);
+}
+
+.video-item:hover {
+  border-color: var(--accent);
+  background: var(--surface-light);
+}
+
+.video-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.video-item-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.video-item-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.video-item .status {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.video-item .status.ready {
+  background: rgba(74, 222, 128, 0.12);
+  color: var(--success);
+}
+
+.video-item .status.downloading,
+.video-item .status.extracting,
+.video-item .status.retrying {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warning);
+}
+
+.video-item .status.error {
+  background: var(--danger-dim);
+  color: var(--danger);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.video-item-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.video-item button {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 1.2rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: var(--transition);
+}
+
+.video-item button:hover {
+  background: var(--danger-dim);
+}
+
+/* Overrides the generic red "remove" look above — Slice is not destructive. */
+.video-item button.video-slice-btn {
+  color: var(--text-muted);
+}
+
+.video-item button.video-slice-btn:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+}
+
+.video-slice-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+/* Two scissors per media row differ only by a small accent badge: a bolt for
+   the automatic Auto-Slicer, a hand for the manual chops entry. The button is
+   the positioning context; the accent sits in the bottom-right corner. */
+.video-item button.video-slice-btn {
+  position: relative;
+}
+
+.video-slice-btn .video-slice-accent {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-size: 0.72rem;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.video-slice-btn--auto .video-slice-accent {
+  color: var(--accent);
+}
+
+.video-slice-btn--manual:hover {
+  color: var(--accent);
+}
+
+.video-slice-btn--manual .video-slice-accent {
+  color: var(--success);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--surface);
+  color: var(--text);
+  padding: 12px 22px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  z-index: 1000;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  min-width: 220px;
+  text-align: center;
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.toast.success {
+  border-left-color: var(--success);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.toast.error {
+  border-left-color: var(--danger);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.toast.warning {
+  border-left-color: var(--warning);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.toast.info {
+  border-left-color: var(--accent);
+  color: var(--text);
+  background: var(--surface);
+}
+
+/* Utility */
+.hint {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  text-align: center;
+  margin: auto;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 6px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Compact single-row header: the flex-wrap rules above already prevent hard
+   cutoff at any width, but a wrapped header on a 1366px external monitor
+   looks cramped rather than broken. Tighten paddings/gaps so the header
+   still fits in one row down to 901px, where the stacked @900 layout below
+   takes over. */
+@media (min-width: 901px) and (max-width: 1400px) {
+  .header {
+    padding: 12px 16px;
+    gap: 14px;
+  }
+
+  .header-actions {
+    gap: 10px;
+  }
+
+  .stop-group {
+    gap: 6px;
+  }
+
+  .session-controls {
+    gap: 6px;
+  }
+
+  .session-controls input,
+  .session-controls select {
+    padding: 7px 10px;
+    font-size: 0.85rem;
+  }
+
+  #session-name {
+    width: 130px;
+  }
+
+  .btn {
+    padding: 7px 12px;
+    font-size: 0.85rem;
+  }
+
+  .btn-stop {
+    padding: 7px 12px;
+  }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  :root {
+    --pad-size: min(100px, 28vw);
+  }
+
+  .main {
+    flex-direction: column;
+    overflow-y: auto;
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .pads-sidenav {
+    flex-direction: column-reverse;
+    width: 100%;
+    height: 44px;
+  }
+
+  .pads-sidenav.expanded {
+    width: 100%;
+    height: auto;
+  }
+
+  .pads-sidenav-toggle {
+    flex: 0 0 44px;
+    width: 100%;
+    height: 44px;
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+
+  .pads-sidenav-body {
+    padding: 12px;
+  }
+
+  .master-divider {
+    width: 100%;
+    height: 1px;
+    margin: 4px 0;
+  }
+
+  .pad-area {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+  }
+
+  .pad-grid {
+    gap: 10px;
+  }
+
+  .grid-controls {
+    position: static;
+  }
+
+  .master-strip {
+    gap: 8px;
+  }
+
+  .master-knob {
+    min-width: 60px;
+    width: auto;
+  }
+
+  .master-label,
+  .master-value {
+    font-size: 0.65rem;
+  }
+
+  .pad-fx-strip .master-label,
+  .pad-fx-strip .master-value {
+    font-size: 0.58rem;
+  }
+
+  .pad-fx-strip .master-divider {
+    display: none;
+  }
+
+  .right-panel {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    gap: 12px;
+  }
+
+  .video-display {
+    min-height: 200px;
+    flex: 0 0 auto;
+  }
+
+  .panel {
+    flex: 0 0 auto;
+    padding: 12px;
+  }
+
+  .library-sidenav {
+    flex-direction: column;
+    width: 100%;
+    height: 44px;
+  }
+
+  .library-sidenav.expanded {
+    width: 100%;
+    height: auto;
+  }
+
+  .library-sidenav-toggle {
+    flex: 0 0 44px;
+    width: 100%;
+    height: 44px;
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+
+  .library-sidenav-body {
+    padding: 12px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 16px;
+  }
+
+  .header h1 {
+    font-size: 1.1rem;
+  }
+
+  .logo {
+    width: 32px;
+    height: 32px;
+  }
+
+  .version {
+    font-size: 0.65rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .stop-group {
+    justify-content: center;
+  }
+
+  .session-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .panel-header.panel-toggle {
+    padding: 10px 40px;
+  }
+
+  .waveform-container {
+    height: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --pad-size: min(96px, 29vw);
+  }
+
+  .main {
+    padding: 10px;
+  }
+
+  .pad-grid {
+    gap: 8px;
+  }
+
+  .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+
+  .master-strip {
+    gap: 6px;
+  }
+
+  .master-knob {
+    min-width: 52px;
+    width: auto;
+    gap: 4px;
+  }
+
+  .master-knob-control {
+    padding: 4px 6px;
+  }
+
+  .master-label,
+  .master-value {
+    font-size: 0.6rem;
+  }
+
+  .pad-fx-strip .master-label,
+  .pad-fx-strip .master-value {
+    font-size: 0.54rem;
+  }
+}
+

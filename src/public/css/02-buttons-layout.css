@@ -1,0 +1,342 @@
+/* Buttons */
+.btn {
+  background: var(--accent);
+  color: #0a0c10;
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--surface-light);
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+.btn-danger {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.btn-danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.stop-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-stop {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  box-shadow: 0 0 0 transparent;
+  transition: var(--transition);
+  padding: 8px 14px;
+  gap: 8px;
+}
+
+.btn-stop:hover {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.35);
+}
+
+.btn-stop .stop-icon {
+  flex-shrink: 0;
+}
+
+.btn-stop .key-label {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+#stop-key-capture {
+  min-width: 80px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.btn-transport {
+  background: var(--surface-light);
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  min-width: 40px;
+}
+
+.btn-transport:hover {
+  background: var(--surface-hover);
+}
+
+.btn-transport.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.btn-transport:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-transport.hidden {
+  display: none;
+}
+
+.material-symbols-outlined {
+  font-size: 1.1rem;
+  line-height: 1;
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+.btn-transport-stop {
+  color: var(--danger);
+}
+
+.btn-transport-stop:hover {
+  background: var(--danger-dim);
+  color: var(--danger-hover);
+}
+
+.btn-mark {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid rgba(255, 159, 28, 0.3);
+}
+
+.btn-mark:hover {
+  background: rgba(255, 159, 28, 0.25);
+  border-color: var(--accent);
+}
+
+/* Main layout */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 20px;
+  padding: 20px;
+  /* Containing block for the Auto-Slicer/Chops takeover, which is absolutely
+     positioned to fill .main only (never the header above it). */
+  position: relative;
+}
+
+/* PADS sidenav — mirrors .library-sidenav (same collapse/resize language),
+   but grows from the left toward the center and starts expanded since it
+   holds the app's primary content. */
+.pads-sidenav {
+  position: relative;
+  flex: 0 0 auto;
+  width: min(420px, 44vw);
+  display: flex;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: width 0.25s ease, height 0.25s ease;
+}
+
+.pads-sidenav:not(.expanded) {
+  width: 32px;
+}
+
+@media (min-width: 1100px) {
+  .pads-sidenav.expanded {
+    width: 437px;
+  }
+}
+
+.pads-sidenav-toggle {
+  flex: 0 0 32px;
+  width: 32px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  writing-mode: vertical-rl;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 0;
+  transition: var(--transition);
+}
+
+.pads-sidenav-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pads-sidenav-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease, padding 0.25s ease;
+}
+
+/* Collapsed: box-sizing border-box floors the body's width at its horizontal
+   padding (32px), which min-width: 0 cannot pierce. Since the body precedes
+   the toggle in the flex row, that invisible floor pushes the 32px toggle
+   past the 30px clip edge, leaving only a sliver of it visible. Zeroing
+   the horizontal padding while collapsed lets the body truly reach 0 width
+   so the toggle tab renders fully (mirroring how VIDEOS, whose toggle comes
+   first, never hits this). */
+.pads-sidenav:not(.expanded) .pads-sidenav-body {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.pads-sidenav.expanded .pads-sidenav-body {
+  opacity: 1;
+}
+
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Video Library sidenav */
+.library-sidenav {
+  position: relative;
+  flex: 0 0 auto;
+  width: 32px;
+  display: flex;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: width 0.25s ease, height 0.25s ease;
+}
+
+.library-sidenav.expanded {
+  width: min(360px, 90vw);
+}
+
+.library-sidenav-toggle {
+  flex: 0 0 32px;
+  width: 32px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 0;
+  transition: var(--transition);
+}
+
+.library-sidenav-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.library-sidenav-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.library-sidenav.expanded .library-sidenav-body {
+  opacity: 1;
+}
+
+.library-sidenav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Swap-places icon button in the PADS / Video Library headers. */
+.panel-swap-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: var(--transition);
+}
+
+.panel-swap-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.panel-swap-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+/* .pads-sidenav-body centers its children (align-items: center), so the
+   shared header class needs an explicit stretch there or its border-bottom
+   would only span the title text instead of the full panel width. */
+.pads-sidenav-body .library-sidenav-header {
+  align-self: stretch;
+}
+

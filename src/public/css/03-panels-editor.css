@@ -1,0 +1,1438 @@
+/* Pad grid */
+.pad-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: auto 0;
+}
+
+/* Columns are fluid (1fr) so the grid shrinks to fit whatever width its
+   container actually has instead of overflowing/clipping — max-width caps
+   how big pads get to grow on a roomy container, aspect-ratio on .pad keeps
+   them square at any resulting column width. */
+.pad-grid {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: calc(3 * var(--pad-size) + 2 * 14px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.grid-controls {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.grid-controls label {
+  font-weight: 700;
+}
+
+.grid-controls select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  outline: none;
+  transition: var(--transition);
+}
+
+.grid-controls select:focus {
+  border-color: var(--accent);
+}
+
+.pad-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Master controls strip */
+.master-strip {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* PAD FX knob strip — same visual language as .master-strip, but edits
+   whichever pad is currently selected instead of a global value (like the
+   physical per-pad knobs on an AKAI MPC). Its own row so it can wrap
+   independently of the General/Delay bus controls above it. */
+.pad-fx-strip {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.pad-fx-strip .master-knobs-row {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* PAD FX labels/values one step smaller than the General strip. Scoped to
+   .pad-fx-strip because .master-label/.master-value are shared with it. */
+.pad-fx-strip .master-label,
+.pad-fx-strip .master-value {
+  font-size: 0.62rem;
+}
+
+/* Reserve room for a 2-line label so a longer localized label can't shift one
+   knob column out of alignment with the others. */
+.pad-fx-strip .master-label-row {
+  min-height: 2.4em;
+}
+
+.master-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.master-group-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.master-group--global .master-group-label {
+  color: var(--accent);
+}
+
+.master-knobs-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.master-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* P.SHIFT/STRETCH switches, grouped at the far left of the PAD FX row.
+   justify-content:center vertically centers the two switches against the
+   knob controls in the stretched row. */
+.pad-fx-switch-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+/* Small "Clear FX" button under the FX master switch. */
+/* Clear-FX lives in the panel's title bar, right-aligned. It's a sibling of the
+   header <button> (never a child — nested buttons are invalid) absolutely
+   positioned over the right of the title. The panel is position:relative for
+   this (see .collapsible-strip below). Icon-only, tooltip explains it. */
+.pad-fx-clear-btn {
+  position: absolute;
+  top: 6px;
+  /* Sits left of the panel's collapse chevron (which is at right:12px) so the
+     two icons don't overlap. */
+  right: 36px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  line-height: 1;
+}
+
+.pad-fx-clear-btn .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.pad-fx-clear-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* When the pad's master FX switch is off, dim the knob rows to signal the pad
+   plays clean — but keep them editable so the user can prep FX for when it's
+   turned back on. */
+.pad-fx-strip.fx-bypassed .master-knob,
+.pad-fx-strip.fx-bypassed .mini-switch:not(.mini-switch-enable) {
+  opacity: 0.4;
+}
+
+.mini-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.mini-switch input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mini-switch-track {
+  position: relative;
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--border);
+  transition: var(--transition);
+}
+
+.mini-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+  transition: var(--transition);
+}
+
+.mini-switch input:checked ~ .mini-switch-track {
+  background: var(--accent);
+}
+
+.mini-switch input:checked ~ .mini-switch-track::after {
+  transform: translateX(12px);
+}
+
+.mini-switch input:focus-visible ~ .mini-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mini-switch input:disabled ~ .mini-switch-track {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mini-switch-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.master-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 52px;
+  width: auto;
+}
+
+.master-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.master-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.1;
+}
+
+.master-label-row .help-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 0.6rem;
+}
+
+
+.master-knob-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: var(--radius);
+}
+
+/* Rotary knob (see knob.js) — the native <input type="range"> stays in the
+   DOM as the real source of truth and stays focusable/keyboard-operable, but
+   is stretched over the whole dial and made invisible; .knob-dial/.knob-indicator
+   are the only thing actually painted. */
+.master-knob-control input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.knob {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+/* Redesigned rotary knob — same 44x44 footprint and the same --knob-angle /
+   --knob-fill contract from knob.js, restyled to read as a real potentiometer:
+   a value arc ring (::before, conic gradient driven by --knob-fill), a beveled
+   metallic cap (::after, radial gradient + inner/outer shadows) and a bright
+   indicator with an accent glow. */
+.knob-dial {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  /* Value arc: accent sweep from the 7:30 position (−135°) across up to 270°,
+     the rest a dim track. Masked to a thin ring so the cap sits on top. */
+  background:
+    conic-gradient(from 225deg,
+      var(--accent) 0 calc(var(--knob-fill, 0) * 270deg),
+      rgba(139, 149, 168, 0.18) calc(var(--knob-fill, 0) * 270deg) 270deg,
+      transparent 270deg);
+  transition: filter var(--transition);
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* Beveled cap over the arc, leaving the arc visible as a ring at the edge. */
+.knob-dial::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 32%, #2a2f3a 0%, #171a21 55%, #0c0e13 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+}
+
+.knob-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 3px;
+  height: 12px;
+  margin-top: -18px;
+  margin-left: -1.5px;
+  background: linear-gradient(var(--accent), #fff);
+  border-radius: 2px;
+  transform-origin: 50% 18px;
+  transform: rotate(var(--knob-angle, 0deg));
+  box-shadow: 0 0 4px var(--accent);
+}
+
+.knob-dial:hover {
+  filter: brightness(1.12);
+}
+
+.knob-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.knob input:focus-visible ~ .knob-dial {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.master-value {
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text);
+  text-align: center;
+  min-height: 1.2em;
+}
+
+.pad {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: var(--transition);
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.pad:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 159, 28, 0.12);
+}
+
+.pad.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 24px rgba(255, 159, 28, 0.35);
+  background: var(--accent-dim);
+}
+
+.pad.selected {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pad.empty {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.pad.empty:hover {
+  opacity: 0.85;
+}
+
+/* A selected empty pad keeps the lit border. .pad.empty's 0.55 opacity would
+   dim the accent outline, so brighten it back up when selected. */
+.pad.empty.selected {
+  opacity: 0.85;
+}
+
+/* Organize mode: pads are managed, not played, so drop the "about to trigger"
+   hover affordance and signal draggability instead. */
+.pad-grid.organize-mode .pad {
+  cursor: grab;
+}
+
+.pad-grid.organize-mode .pad:hover {
+  transform: none;
+  border-color: var(--warning);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.pad-grid.organize-mode .pad.empty:hover {
+  border-color: var(--border);
+}
+
+.pad.dragging {
+  opacity: 0.35;
+  cursor: grabbing;
+}
+
+.pad.drop-target-swap {
+  outline: 3px solid var(--warning);
+  outline-offset: 2px;
+}
+
+.pad.drop-target-move {
+  outline: 3px solid var(--success);
+  outline-offset: 2px;
+}
+
+.pad-drag-ghost {
+  position: fixed;
+  z-index: 3000;
+  width: var(--pad-size);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: var(--radius);
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  opacity: 0.85;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 8px;
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* Organize toggle sits inside .grid-controls, to the right of the PADS
+   selector — a small left margin sets it apart from the help icon. */
+.grid-controls .btn-organize {
+  margin-left: 4px;
+}
+
+.btn-organize[aria-pressed='true'] {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: #0a0c10;
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.4);
+}
+
+/* Pad context menu (organize mode: right-click / long-press) */
+.pad-context-menu {
+  position: fixed;
+  z-index: 2500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pad-context-menu button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.pad-context-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.pad-context-menu button.danger {
+  color: var(--danger);
+}
+
+.pad-context-menu button.danger:hover {
+  background: var(--danger-dim);
+}
+
+/* Export format menu: wider rows with a bold label over a muted description. */
+.export-format-menu {
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.export-format-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.export-format-label {
+  font-weight: 600;
+}
+
+.export-format-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.pad-key {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.pad-position {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.pad-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 0 8px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pad-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+.pad-color-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--accent);
+  transition: var(--transition);
+}
+
+.pad-playing-indicator {
+  position: absolute;
+  bottom: 8px;
+  left: 10px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.pad.playing .pad-playing-indicator {
+  opacity: 1;
+}
+
+/* Video display */
+.video-display {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow);
+}
+
+.video-display video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.video-time-overlay {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: clamp(0.9rem, 2.5vw, 1.25rem);
+  font-weight: 700;
+  padding: clamp(3px, 0.8vw, 6px) clamp(6px, 1.5vw, 12px);
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 10;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.video-placeholder {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 1rem;
+  pointer-events: none;
+  text-align: center;
+}
+
+/* Skin overlay: covers the video/waveform (z below the time overlay:10 and
+   loading spinner) only while a non-video skin is active. */
+.skin-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  z-index: 5;
+  background: #0a0c10;
+}
+
+.video-display.skin-active .skin-canvas {
+  display: block;
+}
+
+/* Hide the placeholder while a skin paints, so an empty pad still shows the
+   chosen skin rather than the "add a video" prompt behind it. */
+.video-display.skin-active .video-placeholder {
+  display: none;
+}
+
+.skin-toggle-btn {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.skin-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.skin-toggle-btn .material-symbols-outlined {
+  font-size: 1.2rem;
+}
+
+/* Skin picker popover — same fixed, viewport-clamped pattern as the pad
+   context menu. */
+.skin-menu {
+  position: fixed;
+  z-index: 2500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+}
+
+.skin-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.skin-menu button:hover {
+  background: var(--surface-hover);
+}
+
+.skin-menu button.active {
+  color: var(--accent);
+}
+
+.skin-menu button .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
+.placeholder-logo {
+  width: 64px;
+  height: 64px;
+  opacity: 0.25;
+}
+
+/* .has-media is toggled by video-display.js's load()/unload() once a src is
+   actually assigned/cleared, so the placeholder shows only while nothing is
+   loaded (audio-mode also hides it in favor of the waveform below). */
+.video-display.has-media .video-placeholder,
+.video-display.audio-mode .video-placeholder {
+  display: none;
+}
+
+/* Audio-only local media (no video track) shows a waveform instead of the
+   <video>/placeholder/time-overlay — see media-display.js's .audio-mode
+   toggle. */
+.video-display.audio-mode video,
+.video-display.audio-mode .video-time-overlay {
+  display: none;
+}
+
+.video-display.audio-mode #center-waveform {
+  display: flex;
+}
+
+#center-waveform {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+#center-waveform .waveform-ruler {
+  width: 100%;
+  height: 22px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+#center-waveform canvas:not(.waveform-ruler) {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  display: block;
+}
+
+/* Loading overlay — shown (via .visible class, not the hidden attribute) while
+   heavy/uncached media buffers. */
+.video-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  z-index: 5;
+}
+
+.video-loading-overlay.visible {
+  display: flex;
+}
+
+.loading-spinner-lg {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+  margin: 0;
+}
+
+/* Panel */
+.panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex: 0 0 360px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Shared toggle mechanics (no sizing opinions) for anything that collapses
+   via the panel-header/panel-content grid-row pattern — the real PAD Editor
+   panel and the two mini knob strips below it. */
+.collapsible-box {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.collapsible-strip {
+  position: relative; /* anchor for the absolutely-positioned Clear-FX button */
+  width: 100%;
+  flex-shrink: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.collapsible-strip .panel-content-inner {
+  padding: 10px 14px;
+}
+
+/* Pad Editor header: the entire bar IS the toggle button (mirrors
+   .library-sidenav-toggle's pattern), title centered instead of left-aligned
+   with a separate small toggle button. */
+.panel-header.panel-toggle {
+  width: 100%;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 7px 36px;
+  margin: 0;
+}
+
+.panel-header.panel-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.panel-header .panel-title {
+  flex: 0 1 auto;
+  margin: 0;
+  text-align: center;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.panel-header .chev {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: transform 0.2s ease;
+}
+
+.panel-header.collapse-toggle[aria-expanded='false'] .chev {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.panel-title {
+  flex: 1;
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.collapse-toggle {
+  transition: var(--transition);
+}
+
+.collapse-toggle .chev {
+  transition: transform 0.2s ease;
+}
+
+.collapse-toggle[aria-expanded='false'] .chev {
+  transform: rotate(180deg);
+}
+
+.resize-handle {
+  position: absolute;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: var(--accent-dim);
+}
+
+.resize-handle-left {
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.resize-handle-right {
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.resize-handle-top {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+/* Only the mini control strips hide their handle when collapsed (they have
+   none anyway). PADS / VIDEOS / PAD EDITOR keep a grabbable handle while
+   collapsed so dragging the edge re-expands and resizes them. */
+.collapsible-strip.collapsed .resize-handle {
+  display: none;
+}
+
+.chev {
+  display: inline-block;
+}
+
+.collapsible-box.collapsed { flex: 0 0 auto; min-height: 0; }
+
+/* Colapso animado vía grid-template-rows (1fr -> 0fr) en vez de display:none
+   abrupto — anima la altura real del contenido de forma pareja, a diferencia
+   de max-height con un techo arbitrario. .panel-content-inner necesita
+   overflow:hidden para que el recorte durante la transición se vea limpio;
+   el scroll real (cuando el panel expandido queda más chico que el
+   contenido) lo maneja #pad-editor con su propio overflow-y. */
+.panel-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s ease;
+  flex: 1;
+  min-height: 0;
+}
+
+.collapsible-box.collapsed .panel-content {
+  grid-template-rows: 0fr;
+}
+
+.panel-content-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding: 16px;
+  transition: padding 0.25s ease;
+}
+
+.collapsible-box.collapsed .panel-content-inner {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* Scrollbar auto-oculta: transparente en reposo, visible solo al pasar el
+   mouse o mientras se hace scroll (focus-within cubre el caso de la rueda
+   con el puntero encima de un hijo enfocable). */
+.auto-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.auto-scroll:hover,
+.auto-scroll:focus-within {
+  scrollbar-color: var(--border) transparent;
+}
+
+.auto-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.auto-scroll::-webkit-scrollbar-track { background: transparent; }
+.auto-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.auto-scroll:hover::-webkit-scrollbar-thumb,
+.auto-scroll:focus-within::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+.auto-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Pad Editor */
+.pad-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Pad editor tabs */
+.pad-editor-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.pad-editor-tabs-pad {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+.pad-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.pad-tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.pad-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.pad-tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pad-tab-panel.active {
+  display: flex;
+}
+
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.volume-row input[type="range"] {
+  flex: 1;
+}
+
+.vol-number {
+  width: 56px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.pad-editor h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.form-row label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-row input,
+.form-row select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  outline: none;
+  transition: var(--transition);
+}
+
+.form-row input:focus,
+.form-row select:focus {
+  border-color: var(--accent);
+}
+
+.form-row input[type="color"] {
+  padding: 2px;
+  height: 38px;
+  cursor: pointer;
+}
+
+.form-row input[type="range"] {
+  padding: 0;
+}
+
+.vol-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+.key-capture {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  text-align: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  font-weight: 600;
+}
+
+.key-capture:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.key-capture.listening {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: 0 0 12px rgba(255, 159, 28, 0.2);
+}
+
+.time-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.waveform-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.waveform-label-row > span:first-child {
+  flex-shrink: 0;
+}
+
+.waveform-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-zoom {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.btn-zoom:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-zoom:active {
+  transform: translateY(1px);
+}
+
+.zoom-level {
+  font-size: 0.75rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  color: var(--text-muted);
+  min-width: 32px;
+  text-align: center;
+  user-select: none;
+}
+
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface-light);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: help;
+  position: relative;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.help-icon:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Shared fixed-position tooltip bubble (never clipped by overflow ancestors).
+   Positioned from --tip-x/--tip-y set in initTooltipPositioning. Used by the
+   help-icon "?" badges and by video-item info blocks (.has-tip). */
+.help-icon::after,
+.has-tip::after,
+.mini-switch-label::after {
+  content: attr(data-tooltip);
+  position: fixed;
+  top: var(--tip-y, 0px);
+  left: var(--tip-x, 0px);
+  transform: translate(-50%, -100%);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-transform: none;
+  line-height: 1.5;
+  white-space: pre-line;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 9999;
+  box-shadow: var(--shadow);
+}
+
+.help-icon::after,
+.mini-switch-label::after {
+  text-align: center;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.has-tip::after {
+  text-align: left;
+  min-width: 260px;
+  max-width: 340px;
+}
+
+.help-icon:hover::after,
+.has-tip:hover::after,
+.mini-switch-label:hover::after {
+  opacity: 1;
+}
+
+.help-icon.tip-below::after,
+.has-tip.tip-below::after,
+.mini-switch-label.tip-below::after {
+  transform: translate(-50%, 0);
+}
+
+/* Waveform */
+.editor-preview-video {
+  width: 100%;
+  max-height: 160px;
+  min-height: 120px;
+  background: #000;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.waveform-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.waveform-container {
+  position: relative;
+  height: 180px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: crosshair;
+  display: flex;
+  flex-direction: column;
+}
+
+.waveform-ruler {
+  height: 22px;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.waveform-container canvas:not(.waveform-ruler) {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.waveform-status {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  text-align: center;
+  user-select: none;
+}
+
+/* Transport */
+.transport-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.transport-time {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  min-width: 90px;
+  text-align: center;
+  background: var(--bg);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.transport-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
