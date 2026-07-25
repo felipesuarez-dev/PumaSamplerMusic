@@ -45,6 +45,10 @@ function enhanceKnob(input) {
     const clampedRatio = Math.max(0, Math.min(1, ratio));
     const angle = -135 + clampedRatio * 270;
     dial.style.setProperty('--knob-angle', `${angle}deg`);
+    // Also expose the 0..1 ratio so the CSS can paint a value arc around the
+    // dial (see .knob-dial::before). Purely visual; the indicator still rotates
+    // via --knob-angle.
+    dial.style.setProperty('--knob-fill', clampedRatio);
     dial.classList.toggle('knob-disabled', input.disabled);
   }
 

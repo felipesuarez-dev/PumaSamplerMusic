@@ -1159,29 +1159,60 @@ button.is-proxied {
   flex-shrink: 0;
 }
 
+/* Redesigned rotary knob — same 44x44 footprint and the same --knob-angle /
+   --knob-fill contract from knob.js, restyled to read as a real potentiometer:
+   a value arc ring (::before, conic gradient driven by --knob-fill), a beveled
+   metallic cap (::after, radial gradient + inner/outer shadows) and a bright
+   indicator with an accent glow. */
 .knob-dial {
   position: absolute;
-  inset: 4px;
+  inset: 2px;
   border-radius: 50%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  transition: var(--transition);
+  /* Value arc: accent sweep from the 7:30 position (−135°) across up to 270°,
+     the rest a dim track. Masked to a thin ring so the cap sits on top. */
+  background:
+    conic-gradient(from 225deg,
+      var(--accent) 0 calc(var(--knob-fill, 0) * 270deg),
+      rgba(139, 149, 168, 0.18) calc(var(--knob-fill, 0) * 270deg) 270deg,
+      transparent 270deg);
+  transition: filter var(--transition);
   cursor: pointer;
   touch-action: none;
+}
+
+/* Beveled cap over the arc, leaving the arc visible as a ring at the edge. */
+.knob-dial::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 32%, #2a2f3a 0%, #171a21 55%, #0c0e13 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.12),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.4);
 }
 
 .knob-indicator {
   position: absolute;
   top: 50%;
   left: 50%;
+  z-index: 1;
   width: 3px;
-  height: 14px;
-  margin-top: -14px;
+  height: 12px;
+  margin-top: -18px;
   margin-left: -1.5px;
-  background: var(--accent);
+  background: linear-gradient(var(--accent), #fff);
   border-radius: 2px;
-  transform-origin: 50% 14px;
+  transform-origin: 50% 18px;
   transform: rotate(var(--knob-angle, 0deg));
+  box-shadow: 0 0 4px var(--accent);
+}
+
+.knob-dial:hover {
+  filter: brightness(1.12);
 }
 
 .knob-disabled {
