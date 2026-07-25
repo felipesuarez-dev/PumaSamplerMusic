@@ -1445,6 +1445,9 @@ function initPadFxControls() {
       key: 'reverbSend',
       default: 0,
       toValue: (v) => parseInt(v, 10) / 100,
+      // Stored as a 0..1 fraction but the input range is 0..100, so bindPad
+      // must scale the stored value back up when seeding the knob.
+      toInput: (v) => v * 100,
       toDisplay: (v) => `${Math.round(v * 100)}%`,
     },
     {
@@ -1453,6 +1456,7 @@ function initPadFxControls() {
       key: 'delaySend',
       default: 0,
       toValue: (v) => parseInt(v, 10) / 100,
+      toInput: (v) => v * 100,
       toDisplay: (v) => `${Math.round(v * 100)}%`,
     },
     {
@@ -1469,6 +1473,7 @@ function initPadFxControls() {
       key: 'pan',
       default: 0,
       toValue: (v) => parseInt(v, 10) / 100,
+      toInput: (v) => v * 100,
       toDisplay: (v) => formatPan(v),
     },
     {
@@ -1559,7 +1564,12 @@ function initPadFxControls() {
 
       input.disabled = !position;
       const value = position ? (data?.[ctrl.key] ?? ctrl.default) : ctrl.default;
-      input.value = value;
+      // Seed the input on ITS OWN scale: controls that store a normalized
+      // fraction (reverbSend/delaySend/pan) must scale back up to the input's
+      // 0..100 range, or the knob dial (driven off input.value) would pin near
+      // zero even though the value persisted. toDisplay still takes the stored
+      // value below.
+      input.value = ctrl.toInput ? ctrl.toInput(value) : value;
       if (display) display.textContent = ctrl.toDisplay(value);
     }
 
