@@ -55,6 +55,8 @@ const DEFAULT_MASTER_FX = {
   reverb: 0,
   delayTime: 250,
   delayFeedback: 0,
+  bpm: 0,
+  tune: 0,
 };
 
 const PAD_FX_DEFAULTS = {
@@ -72,6 +74,9 @@ const PAD_FX_DEFAULTS = {
   release: 0,
   reverse: false,
   fxEnabled: true,
+  // Source tempo of the pad's slice (0 = unknown). Used by the sampler-wide
+  // global BPM knob to time-stretch pads to a target tempo.
+  bpm: 0,
 };
 
 export async function load(name) {

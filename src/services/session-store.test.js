@@ -41,7 +41,7 @@ test('save/load round-trip preserves pads and stamps schemaVersion 3', async () 
   assert.deepEqual(loaded.pads, pads.map((p) => ({
     pitch: 0, cutoff: 100, resonance: 0.1, reverbSend: 0, delaySend: 0,
     pitchShiftOn: true, stretchOn: false, speed: 100, pan: 0, drive: 0,
-    attack: 0, release: 0, reverse: false, fxEnabled: true, ...p,
+    attack: 0, release: 0, reverse: false, fxEnabled: true, bpm: 0, ...p,
   })));
   assert.equal(loaded.schemaVersion, 3);
 });
@@ -79,6 +79,8 @@ test('load migrates a schemaVersion 1 session with no masterFx to a full default
     reverb: 0,
     delayTime: 250,
     delayFeedback: 0,
+    bpm: 0,
+    tune: 0,
   });
 });
 
@@ -112,6 +114,7 @@ test('load fills PAD_FX_DEFAULTS on a legacy pad with no FX fields', async () =>
     release: 0,
     reverse: false,
     fxEnabled: true,
+    bpm: 0,
   });
 });
 

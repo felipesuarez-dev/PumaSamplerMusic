@@ -160,15 +160,37 @@
                     <div class="master-strip" id="master-strip">
                       <div class="master-group master-group--global">
                         <span class="master-group-label" data-i18n="master.groupGeneral">General</span>
-                        <div class="master-knob">
-                          <div class="master-label-row">
-                            <label class="master-label" for="master-volume" data-i18n="master.volume">Volume</label>
-                            <span class="help-icon" data-i18n-tooltip="tip.volume" data-tooltip="Overall output volume.">?</span>
+                        <div class="master-knobs-row">
+                          <div class="master-knob">
+                            <div class="master-label-row">
+                              <label class="master-label" for="master-volume" data-i18n="master.volume">Volume</label>
+                              <span class="help-icon" data-i18n-tooltip="tip.volume" data-tooltip="Overall output volume.">?</span>
+                            </div>
+                            <div class="master-knob-control">
+                              <input type="range" id="master-volume" min="0" max="2" step="0.01" value="1" aria-label="Master volume">
+                            </div>
+                            <span class="master-value" id="master-volume-value">100%</span>
                           </div>
-                          <div class="master-knob-control">
-                            <input type="range" id="master-volume" min="0" max="2" step="0.01" value="1" aria-label="Master volume">
+                          <div class="master-knob">
+                            <div class="master-label-row">
+                              <label class="master-label" for="master-bpm" data-i18n="master.bpm">BPM</label>
+                              <span class="help-icon" data-i18n-tooltip="tip.masterBpm" data-tooltip="Sampler-wide target tempo. Stretches every pad that has a source BPM to this tempo, without changing pitch. Set to the minimum for OFF (no stretch).">?</span>
+                            </div>
+                            <div class="master-knob-control">
+                              <input type="range" id="master-bpm" min="0" max="220" step="1" value="0" aria-label="Global BPM">
+                            </div>
+                            <span class="master-value" id="master-bpm-value">—</span>
                           </div>
-                          <span class="master-value" id="master-volume-value">100%</span>
+                          <div class="master-knob">
+                            <div class="master-label-row">
+                              <label class="master-label" for="master-tune" data-i18n="master.tune">Tune</label>
+                              <span class="help-icon" data-i18n-tooltip="tip.masterTune" data-tooltip="Sampler-wide tuning offset in semitones, added on top of each pad's own pitch.">?</span>
+                            </div>
+                            <div class="master-knob-control">
+                              <input type="range" id="master-tune" min="-12" max="12" step="1" value="0" aria-label="Global tune">
+                            </div>
+                            <span class="master-value" id="master-tune-value">0</span>
+                          </div>
                         </div>
                       </div>
                       <div class="master-divider" aria-hidden="true"></div>

@@ -41,7 +41,7 @@ const MARKER_SNAP_RADIUS_SECONDS = 0.01;
 // in src/services/session-store.js field-for-field, plus the base pad fields
 // app.js's editor writes (label/videoId/start/end/volume/triggerMode/color/
 // loop) — never spread from an existing pad, since there may not be one.
-function buildSlicePadObject(position, videoId, slice, sliceIndex) {
+function buildSlicePadObject(position, videoId, slice, sliceIndex, bpm = 0) {
   return {
     position,
     key: '',
@@ -66,6 +66,9 @@ function buildSlicePadObject(position, videoId, slice, sliceIndex) {
     attack: 0,
     release: 0,
     reverse: false,
+    // Source tempo of this slice (from Grid mode's BPM readout; 0 when unknown,
+    // e.g. onset/manual chops). The global BPM knob stretches pads by this.
+    bpm,
   };
 }
 
@@ -548,6 +551,16 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     gridBpmEl.textContent = `${bpmFromLength(beats, currentAudioBuffer.duration).toFixed(1)} BPM`;
   }
 
+  // Source BPM stamped onto pads when slices are assigned. Only Grid mode knows
+  // a tempo (beats over the track length); Onsets/manual leave it 0 (unknown),
+  // which the global BPM knob treats as "don't stretch".
+  function currentSliceBpm() {
+    if (mode !== 'grid') return 0;
+    const beats = parseInt(gridBeatsInput.value, 10);
+    if (!currentAudioBuffer || !Number.isFinite(beats) || beats < 1 || currentAudioBuffer.duration <= 0) return 0;
+    return Math.round(bpmFromLength(beats, currentAudioBuffer.duration) * 10) / 10;
+  }
+
   // Grid mode's Generate path: synchronous (no worker/overlay/long-audio
   // confirm) since computeGridBoundaries is O(n) pure arithmetic. Guards
   // mirror the ones baked into the editing layer (minGap) plus a hard cap on
@@ -802,7 +815,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   function doAssign(sliceIndex, slice, position) {
-    const padObject = buildSlicePadObject(position, currentVideoId, slice, sliceIndex);
+    const padObject = buildSlicePadObject(position, currentVideoId, slice, sliceIndex, currentSliceBpm());
     pads.update(position, padObject);
     // A PAD position can only carry one slice's badge at a time. If another
     // slice row was previously assigned to this same position, that PAD was
@@ -1420,7 +1433,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         indices.forEach((sliceIndex, i) => {
           const position = i + 1;
           const slice = currentSlices[sliceIndex];
-          const padObject = buildSlicePadObject(position, videoId, slice, sliceIndex);
+          const padObject = buildSlicePadObject(position, videoId, slice, sliceIndex, currentSliceBpm());
           pads.update(position, padObject);
           assignedMap.set(sliceIndex, position);
         });

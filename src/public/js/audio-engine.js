@@ -74,6 +74,12 @@ export function createAudioEngine() {
   let desiredMasterVolume = 1;
   let desiredDelayTime = 0.25;
   let desiredDelayFeedback = 0;
+  // Sampler-wide (per-session) controls: a target BPM that time-stretches every
+  // pad that carries a source `bpm` (pitch-neutral, like STRETCH), and a global
+  // tune offset in semitones added on top of each pad's pitch. 0 BPM = "no
+  // global stretch".
+  let desiredMasterBpm = 0;
+  let desiredMasterTune = 0;
 
   function emit(name, detail) {
     window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -345,11 +351,64 @@ export function createAudioEngine() {
     return reversed;
   }
 
+  // Single source of truth for a voice's playbackRate + pitch-shifter ratio,
+  // folding in BOTH the per-pad pitch/speed/stretch AND the sampler-wide global
+  // BPM stretch + tune offset. `stretchTotal` = per-pad STRETCH × global BPM
+  // factor; both are pitch-neutral (the worklet ratio divides them back out when
+  // P.SHIFT is on). `effTuneRatio` folds the global tune into the pad's pitch.
+  function computeVoiceRates({ pitch, stretchOn, speed, bpm, pitchShiftOn }) {
+    const effTuneRatio = semitonesToRatio((pitch || 0) + desiredMasterTune);
+    const stretchPad = stretchOn ? Math.max(0.25, Math.min(4, speed / 100)) : 1;
+    const bpmFactor = (bpm > 0 && desiredMasterBpm > 0) ? desiredMasterBpm / bpm : 1;
+    const stretchTotal = Math.max(0.25, Math.min(4, stretchPad * bpmFactor));
+    return {
+      // Worklet path: rate carries the (pitch-neutral) stretch, the shifter
+      // ratio carries the tune and divides the stretch back out.
+      playbackRate: stretchTotal * (pitchShiftOn ? 1 : effTuneRatio),
+      pitchRatio: (pitchShiftOn ? effTuneRatio : 1) / stretchTotal,
+      // Fallback (no pitch-shifter): tempo and pitch are coupled.
+      coupledRate: stretchTotal * effTuneRatio,
+    };
+  }
+
+  // Ramps a live voice's rate/pitch to its current merged state (incl. the
+  // global BPM/tune). Shared by updateVoiceFx and the master BPM/tune setters.
+  const RATE_RAMP = 0.02;
+  function rampVoiceRates(active, now) {
+    const rates = computeVoiceRates(active);
+    if (active.pitchShifterNode) {
+      active.source.playbackRate.setTargetAtTime(rates.playbackRate, now, RATE_RAMP);
+      active.pitchShifterNode.parameters.get('pitchRatio').setTargetAtTime(rates.pitchRatio, now, RATE_RAMP);
+    } else {
+      active.source.playbackRate.setTargetAtTime(rates.coupledRate, now, RATE_RAMP);
+    }
+  }
+
+  // Re-applies the global BPM/tune to every sounding voice so a knob move is
+  // heard immediately on active pads (not only on the next trigger).
+  function reapplyMasterToVoices() {
+    if (!audioContext) return;
+    const now = audioContext.currentTime;
+    for (const active of activeSources.values()) {
+      rampVoiceRates(active, now);
+    }
+  }
+
+  function setMasterBpm(value) {
+    desiredMasterBpm = Math.max(0, Number(value) || 0);
+    reapplyMasterToVoices();
+  }
+
+  function setMasterTune(value) {
+    desiredMasterTune = Math.max(-24, Math.min(24, Number(value) || 0));
+    reapplyMasterToVoices();
+  }
+
   async function play(position, {
     videoId, start, end, volume = 1, loop = false, triggerMode = 'oneshot',
     pitch = 0, cutoff = 20000, resonance = 0.1, reverbSend = 0, delaySend = 0,
     pitchShiftOn = true, stretchOn = false, speed = 100, pan = 0, drive = 0,
-    attack = 0, release = 0, reverse = false,
+    attack = 0, release = 0, reverse = false, bpm = 0,
   }) {
     const ctx = await init();
     const workletOk = await ensureWorklet(ctx);
@@ -421,8 +480,7 @@ export function createAudioEngine() {
     // pitch change and compensates STRETCH's pitch side-effect so time-stretch
     // stays pitch-neutral. With defaults (P.SHIFT on, STRETCH off) this
     // degenerates to today's behavior: playbackRate 1, worklet ratio tuneRatio.
-    const tuneRatio = semitonesToRatio(pitch);
-    const stretch = stretchOn ? Math.max(0.25, Math.min(4, speed / 100)) : 1;
+    const rates = computeVoiceRates({ pitch, stretchOn, speed, bpm, pitchShiftOn });
 
     const channelCount = audioBuffer.numberOfChannels;
     let pitchNode = null;
@@ -434,10 +492,10 @@ export function createAudioEngine() {
         channelCountMode: 'explicit',
         outputChannelCount: [channelCount],
       });
-      source.playbackRate.value = stretch * (pitchShiftOn ? 1 : tuneRatio);
-      pitchNode.parameters.get('pitchRatio').value = (pitchShiftOn ? tuneRatio : 1) / stretch;
+      source.playbackRate.value = rates.playbackRate;
+      pitchNode.parameters.get('pitchRatio').value = rates.pitchRatio;
     } else {
-      source.playbackRate.value = stretch * tuneRatio;
+      source.playbackRate.value = rates.coupledRate;
     }
 
     const filterNode = ctx.createBiquadFilter();
@@ -528,7 +586,7 @@ export function createAudioEngine() {
     const sourceRef = {
       source, gain, pitchShifterNode: pitchNode, filterNode, driveNode, panNode, dryGain, reverbSendGain, delaySendGain,
       videoId, startTime, endTime, position, duration,
-      pitch, pitchShiftOn, stretchOn, speed,
+      pitch, pitchShiftOn, stretchOn, speed, bpm,
       releaseSec,
       // AudioContext time this voice started, so getVoiceTime() can map elapsed
       // context time back to a buffer position for an accurate playhead.
@@ -660,16 +718,7 @@ export function createAudioEngine() {
       if (pitchShiftOn !== undefined) active.pitchShiftOn = pitchShiftOn;
       if (stretchOn !== undefined) active.stretchOn = stretchOn;
       if (speed !== undefined) active.speed = speed;
-
-      const tuneRatio = semitonesToRatio(active.pitch);
-      const stretch = active.stretchOn ? Math.max(0.25, Math.min(4, active.speed / 100)) : 1;
-
-      if (active.pitchShifterNode) {
-        active.source.playbackRate.setTargetAtTime(stretch * (active.pitchShiftOn ? 1 : tuneRatio), now, RAMP);
-        active.pitchShifterNode.parameters.get('pitchRatio').setTargetAtTime((active.pitchShiftOn ? tuneRatio : 1) / stretch, now, RAMP);
-      } else {
-        active.source.playbackRate.setTargetAtTime(stretch * tuneRatio, now, RAMP);
-      }
+      rampVoiceRates(active, now);
     }
     if (cutoff !== undefined) {
       active.filterNode.frequency.setTargetAtTime(Math.max(20, Math.min(20000, cutoff)), now, RAMP);
@@ -771,5 +820,7 @@ export function createAudioEngine() {
     getAnalyser: () => (masterChain ? masterChain.analyser : null),
     setMasterVolume,
     setMasterDelay,
+    setMasterBpm,
+    setMasterTune,
   };
 }

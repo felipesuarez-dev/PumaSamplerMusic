@@ -1356,6 +1356,8 @@ function loadMasterFxDefaults() {
     volume: 1,
     delayTime: 250,
     delayFeedback: 0,
+    bpm: 0,
+    tune: 0,
   };
 }
 
@@ -1394,6 +1396,25 @@ function initMasterControls() {
       toDisplay: (v) => `${v}%`,
       apply: (v) => audio.setMasterDelay({ feedback: v / 100 }),
       key: 'delayFeedback',
+    },
+    {
+      // Sampler-wide target tempo: time-stretches every pad carrying a source
+      // bpm to this BPM (0 = off / no stretch).
+      id: 'master-bpm',
+      displayId: 'master-bpm-value',
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => (v > 0 ? `${v}` : '—'),
+      apply: (v) => audio.setMasterBpm(v),
+      key: 'bpm',
+    },
+    {
+      // Sampler-wide tune offset in semitones, added on top of each pad's pitch.
+      id: 'master-tune',
+      displayId: 'master-tune-value',
+      toValue: (v) => parseInt(v, 10),
+      toDisplay: (v) => (v > 0 ? `+${v}` : `${v}`),
+      apply: (v) => audio.setMasterTune(v),
+      key: 'tune',
     },
   ];
 
@@ -1757,6 +1778,7 @@ async function triggerPad(position, data) {
       attack: fx.attack ?? 0,
       release: fx.release ?? 0,
       reverse: fx.reverse ?? false,
+      bpm: fx.bpm ?? 0,
     });
   } catch (err) {
     showToast(t('toast.playbackFailed', { message: err.message }), 'error');
@@ -1957,6 +1979,10 @@ function renderPadEditor(position, data) {
           <label>${t('editor.endField')} <span class="help-icon" data-i18n-tooltip="tip.end" data-tooltip="${t('tip.end')}">?</span></label>
           <input type="text" id="pad-end" value="${formatTime(data?.end ?? 0)}">
         </div>
+      </div>
+      <div class="form-row">
+        <label>${t('editor.padBpm')} <span class="help-icon" data-i18n-tooltip="tip.padBpm" data-tooltip="${t('tip.padBpm')}">?</span></label>
+        <input type="number" id="pad-bpm" min="0" max="400" step="0.1" value="${data?.bpm ?? 0}">
       </div>
     </div>
 
@@ -2291,6 +2317,16 @@ function initEditorListeners(position) {
   if (loopInput) {
     loopInput.addEventListener('change', () => {
       autoCommitPad(position, { loop: loopInput.checked });
+    });
+  }
+
+  const bpmInput = document.getElementById('pad-bpm');
+  if (bpmInput) {
+    bpmInput.addEventListener('change', () => {
+      const n = parseFloat(bpmInput.value);
+      const bpm = Number.isFinite(n) && n > 0 ? Math.round(n * 10) / 10 : 0;
+      bpmInput.value = String(bpm);
+      autoCommitPad(position, { bpm });
     });
   }
 
