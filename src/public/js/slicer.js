@@ -87,6 +87,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const modeOnsetsBtn = document.getElementById('slicer-mode-onsets');
   const modeGridBtn = document.getElementById('slicer-mode-grid');
   const onsetControlsEl = document.getElementById('slicer-onset-controls');
+  const methodGroupEl = document.getElementById('slicer-method-group');
   const gridControlsEl = document.getElementById('slicer-grid-controls');
   const gridBeatsInput = document.getElementById('slicer-grid-beats');
   const gridDivisionsInput = document.getElementById('slicer-grid-divisions');
@@ -480,6 +481,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const isGrid = mode === 'grid';
     onsetControlsEl.hidden = isGrid;
     gridControlsEl.hidden = !isGrid;
+    // Method (onset-only) now lives in the generate row next to Generate, so
+    // hide it in Grid mode while Generate stays visible.
+    if (methodGroupEl) methodGroupEl.hidden = isGrid;
     modeOnsetsBtn.classList.toggle('active', !isGrid);
     modeOnsetsBtn.setAttribute('aria-pressed', String(!isGrid));
     modeGridBtn.classList.toggle('active', isGrid);

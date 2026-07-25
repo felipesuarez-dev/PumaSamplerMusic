@@ -559,15 +559,6 @@
                   <input type="number" class="slicer-sensitivity-value" id="slicer-sensitivity-value" min="0" max="1" step="0.01" value="0.50">
                   <span class="help-icon" data-i18n-tooltip="tip.slicerSensitivity" data-tooltip="How easily a change is detected as a new slice boundary. Lower finds fewer, larger slices; higher finds more, shorter ones. You can type an exact value.">?</span>
                 </div>
-                <div class="slicer-onset-subrow slicer-onset-method">
-                  <label for="slicer-method" data-i18n="slicer.method">Method</label>
-                  <select id="slicer-method" class="slicer-method-select">
-                    <option value="specflux" selected data-i18n="slicer.methodSpectralFlux">Spectral Flux</option>
-                    <option value="hfc" data-i18n="slicer.methodHfc">High Frequency</option>
-                    <option value="energy" data-i18n="slicer.methodEnergy">Energy</option>
-                  </select>
-                  <span class="help-icon" data-i18n-tooltip="tip.slicerMethod" data-tooltip="How transients are detected. Spectral Flux works well overall; High Frequency favors bright hits like cymbals and hi-hats; Energy favors loud, percussive hits.">?</span>
-                </div>
               </div>
 
               <div class="slicer-controls-row slicer-grid-controls" id="slicer-grid-controls" hidden>
@@ -590,6 +581,15 @@
               </div>
 
               <div class="slicer-controls-row" id="slicer-generate-row">
+                <div class="slicer-onset-subrow slicer-onset-method" id="slicer-method-group">
+                  <label for="slicer-method" data-i18n="slicer.method">Method</label>
+                  <select id="slicer-method" class="slicer-method-select">
+                    <option value="specflux" selected data-i18n="slicer.methodSpectralFlux">Spectral Flux</option>
+                    <option value="hfc" data-i18n="slicer.methodHfc">High Frequency</option>
+                    <option value="energy" data-i18n="slicer.methodEnergy">Energy</option>
+                  </select>
+                  <span class="help-icon" data-i18n-tooltip="tip.slicerMethod" data-tooltip="How transients are detected. Spectral Flux works well overall; High Frequency favors bright hits like cymbals and hi-hats; Energy favors loud, percussive hits.">?</span>
+                </div>
                 <button type="button" class="btn" id="slicer-generate-btn" data-i18n="slicer.generate">Generate Slices</button>
                 <span class="help-icon" data-i18n-tooltip="tip.slicerGenerate" data-tooltip="Runs onset detection on the full track in the background and marks a slice boundary at each detected onset.">?</span>
               </div>

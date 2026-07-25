@@ -808,10 +808,9 @@
   flex-shrink: 0;
 }
 
-/* Onset controls stack vertically: Sensitivity gets its own full-width row
-   (long slider for fine, precise dragging), Method drops to the row below.
-   Kept inside #slicer-onset-controls (not moved to the generate row) so
-   setMode still hides Method in Grid mode. */
+/* Onset controls now hold only Sensitivity, on its own full-width row (long
+   slider for fine, precise dragging). Method moved to the generate row so it
+   sits to the LEFT of the Generate button; setMode hides Method in Grid mode. */
 #slicer-onset-controls {
   flex-direction: column;
   align-items: stretch;
@@ -822,6 +821,12 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* Restore [hidden] over the author display:flex (UA [hidden] loses to it), so
+   setMode can hide the Method group in Grid mode. */
+.slicer-onset-subrow[hidden] {
+  display: none;
 }
 
 /* Sensitivity slider fills its full-width row for maximum range/precision. */
