@@ -627,7 +627,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const durationMs = Math.max(0, slice.end - slice.start) * 1000;
     const step = (now) => {
       const elapsedMs = now - startedAt;
-      const time = Math.min(slice.end, slice.start + elapsedMs / 1000);
+      // Prefer the real audio-clock position (voice 0 = scratch); fall back to
+      // the wall-clock estimate if the voice isn't reporting yet. This keeps
+      // the playhead aligned with the audible sound instead of drifting.
+      const wall = Math.min(slice.end, slice.start + elapsedMs / 1000);
+      const time = audio.getVoiceTime(0) ?? wall;
       setPlayheadTime(time);
       if (elapsedMs < durationMs) {
         previewAnimId = requestAnimationFrame(step);
@@ -670,9 +674,12 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     const startedAt = performance.now();
     const step = (now) => {
       if (!fullPlaying) return;
-      const time = Math.min(duration, resumeFrom + (now - startedAt) / 1000);
+      // Real audio-clock position (voice 0), wall-clock as fallback, so the
+      // playhead tracks the audible sound rather than drifting from it.
+      const wall = Math.min(duration, resumeFrom + (now - startedAt) / 1000);
+      const time = audio.getVoiceTime(0) ?? wall;
       setPlayheadTime(time);
-      if (time < duration) {
+      if (time < duration && wall < duration) {
         fullAnimId = requestAnimationFrame(step);
       } else {
         stopFullTrack();

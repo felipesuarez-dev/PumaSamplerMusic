@@ -530,6 +530,9 @@ export function createAudioEngine() {
       videoId, startTime, endTime, position, duration,
       pitch, pitchShiftOn, stretchOn, speed,
       releaseSec,
+      // AudioContext time this voice started, so getVoiceTime() can map elapsed
+      // context time back to a buffer position for an accurate playhead.
+      startedAtCtx: now,
       // Absolute AudioContext time this voice will hard-stop on its own
       // (source.start's duration arg, below) -- Infinity for loops, which
       // have no such cutoff. stop()'s release fade must never schedule
@@ -729,6 +732,20 @@ export function createAudioEngine() {
     reversedBuffers.delete(videoId);
   }
 
+  // Current buffer-time (seconds) of the voice at `position`, for an accurate
+  // playhead driven by the audio clock instead of wall-clock. Maps elapsed
+  // context time through the voice's live playbackRate (which already folds in
+  // speed/stretch/tune), clamped to the slice. Returns null when no voice is
+  // active there (caller falls back to a wall-clock estimate).
+  function getVoiceTime(position) {
+    const ref = activeSources.get(position);
+    if (!ref || !audioContext) return null;
+    const rate = ref.source.playbackRate ? ref.source.playbackRate.value : 1;
+    const elapsed = (audioContext.currentTime - ref.startedAtCtx) * rate;
+    const t = ref.startTime + elapsed;
+    return Math.max(ref.startTime, Math.min(ref.endTime, t));
+  }
+
   return {
     init,
     loadAudio,
@@ -738,6 +755,7 @@ export function createAudioEngine() {
     updateVoiceFx,
     setVoiceVolume,
     getActivePositions,
+    getVoiceTime,
     isLoaded,
     unload,
     getAudioContext: () => audioContext,

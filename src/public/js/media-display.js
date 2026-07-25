@@ -51,9 +51,14 @@ export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerC
 
   function tickClock() {
     const elapsed = (performance.now() - clockStartedAt) / 1000;
-    const time = Math.min(clockEnd, clockStart + elapsed);
+    const wall = Math.min(clockEnd, clockStart + elapsed);
+    // Prefer the real audio-clock position of the scratch voice (position 0)
+    // so the playhead sits on the audible sound. Muted pad triggers start the
+    // clock without a voice, so getVoiceTime returns null there -> wall-clock.
+    const voiceTime = audio.getVoiceTime(0);
+    const time = voiceTime != null ? voiceTime : wall;
     waveform.setPlayhead(time);
-    if (time >= clockEnd) {
+    if (wall >= clockEnd) {
       stopClock();
       return;
     }
@@ -205,9 +210,13 @@ export function createMediaDisplay({ videoDisplay, audio, waveformCanvas, rulerC
 
   function getPlaybackState() {
     if (currentKind === 'audio') {
-      const currentTime = clockPlaying
+      const wall = clockPlaying
         ? Math.min(clockEnd, clockStart + (performance.now() - clockStartedAt) / 1000)
         : clockStart;
+      // Real audio-clock position when a scratch voice is sounding; wall-clock
+      // fallback for muted triggers (no voice) and when paused.
+      const voiceTime = clockPlaying ? audio.getVoiceTime(0) : null;
+      const currentTime = voiceTime != null ? voiceTime : wall;
       return { currentTime, paused: !clockPlaying, duration: clockEnd };
     }
     const el = videoDisplay.getVideo();
