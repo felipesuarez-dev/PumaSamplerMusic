@@ -685,29 +685,43 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
       }
       ctx.restore();
 
-      // Track length: a small static timecode readout near the spindle (not
-      // rotating, so it stays legible while the label spins). Styled like a
-      // deck's time display — a monospaced value in a subtle rounded chip.
+      // Track length: a monospaced timecode laid out on a bottom arc that
+      // ROTATES WITH the disc (mirrors the title's top arc), so it reads like
+      // engraving on the label instead of a static overlay.
       const durationLabel = formatMinSec(getMediaDuration && getMediaDuration());
       if (durationLabel) {
+        const tcFs = Math.max(7 * dpr, labelR * 0.16);
+        const timeFont = `600 ${tcFs}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+        const ttr = labelR * 0.62; // arc radius for the timecode glyphs (inside the title)
+        if (!vinyl.timeCache || vinyl.timeCache.label !== durationLabel || vinyl.timeCache.fs !== tcFs) {
+          ctx.font = timeFont;
+          const glyphs = [];
+          let total = 0;
+          for (const ch of durationLabel) {
+            const aw = ctx.measureText(ch).width / ttr;
+            glyphs.push({ ch, aw });
+            total += aw;
+          }
+          // Center the arc at the BOTTOM of the label (+90°).
+          let a = Math.PI / 2 - total / 2;
+          for (const g of glyphs) { g.angle = a + g.aw / 2; a += g.aw; }
+          vinyl.timeCache = { label: durationLabel, fs: tcFs, glyphs };
+        }
         ctx.save();
-        const tcFs = Math.max(7 * dpr, labelR * 0.15);
-        ctx.font = `600 ${tcFs}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const ty = cy + labelR * 0.52;
-        const tw = ctx.measureText(durationLabel).width;
-        const padX = tcFs * 0.55, padY = tcFs * 0.34;
-        // Chip background + border (reads as a small timecode window).
-        roundRectPath(ctx, cx - tw / 2 - padX, ty - tcFs / 2 - padY, tw + padX * 2, tcFs + padY * 2, tcFs * 0.4);
-        ctx.fillStyle = 'rgba(0,0,0,0.32)';
-        ctx.fill();
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-        ctx.stroke();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle); // spin with the disc
+        ctx.font = timeFont;
         ctx.fillStyle = vinyl.textColor;
         ctx.globalAlpha = 0.85;
-        ctx.fillText(durationLabel, cx, ty);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const g of vinyl.timeCache.glyphs) {
+          ctx.save();
+          ctx.rotate(g.angle - Math.PI / 2); // glyph upright along the bottom arc
+          ctx.translate(0, ttr);
+          ctx.fillText(g.ch, 0, 0);
+          ctx.restore();
+        }
         ctx.restore();
       }
     }
