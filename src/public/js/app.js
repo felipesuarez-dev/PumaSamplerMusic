@@ -1360,10 +1360,6 @@ function saveMasterFx(state) {
   }
 }
 
-// Shown at most once per session: the first time the global BPM is turned up
-// while no pad carries a source BPM, so the knob would silently do nothing.
-let masterBpmHintShown = false;
-
 function initMasterControls() {
   const state = loadMasterFxDefaults();
 
@@ -1403,11 +1399,11 @@ function initMasterControls() {
       key: 'bpm',
       // Hint the user when the global tempo can't act yet: it only stretches
       // pads that carry a source BPM (set per pad in the SAMPLER tab / filled
-      // by Grid slices). Without one, moving this knob does nothing.
-      onChange: (v) => {
-        if (masterBpmHintShown || v <= 0) return;
+      // by Grid slices). Fired on 'change' (once per committed drag) so it
+      // shows every relevant time without spamming on each input tick.
+      onCommit: (v) => {
+        if (v <= 0) return;
         if (pads.getAll().some((p) => (p.bpm || 0) > 0)) return;
-        masterBpmHintShown = true;
         showToast(t('toast.bpmNoSource'), 'info');
       },
     },
@@ -1436,11 +1432,16 @@ function initMasterControls() {
       const v = ctrl.toValue(input.value);
       if (display) display.textContent = ctrl.toDisplay(v);
       ctrl.apply(v);
-      if (ctrl.onChange) ctrl.onChange(v);
       state[ctrl.key] = v;
       saveMasterFx(state);
       markDirty();
     });
+
+    // Fires once per committed change (knob dispatches 'change' on pointerup),
+    // not on every drag tick — used for the BPM "no source" hint.
+    if (ctrl.onCommit) {
+      input.addEventListener('change', () => ctrl.onCommit(ctrl.toValue(input.value)));
+    }
   }
 
   function getState() {
