@@ -2982,9 +2982,13 @@ async function preloadSessionAudio(session) {
   const ids = [...new Set((session.pads || []).map((p) => p.videoId).filter(Boolean))];
   if (ids.length === 0) return;
 
-  const setProgress = (done) => {
-    if (caption) caption.textContent = t('session.loadingAudio', { done, total: ids.length });
-    const fraction = ids.length ? done / ids.length : 0;
+  // `completed` may be fractional: whole files done + the current file's byte
+  // fraction. The caption shows the integer file count; the bar shows the
+  // continuous fraction, so a single-track session still animates smoothly.
+  const setProgress = (completed) => {
+    const fraction = ids.length ? Math.max(0, Math.min(1, completed / ids.length)) : 0;
+    const doneFiles = Math.min(ids.length, Math.floor(completed));
+    if (caption) caption.textContent = t('session.loadingAudio', { done: doneFiles, total: ids.length });
     if (progress) progress.value = fraction;
     if (progressValue) progressValue.textContent = `${Math.round(fraction * 100)}%`;
   };
@@ -2994,7 +2998,9 @@ async function preloadSessionAudio(session) {
   try {
     for (const id of ids) {
       try {
-        await audio.loadAudio(id, api.getAudioUrl(id));
+        // Forward per-byte download progress so the bar fills continuously
+        // within each file (mirrors the Auto-Slicer's loadAudio onProgress).
+        await audio.loadAudio(id, api.getAudioUrl(id), (f) => setProgress(done + f));
       } catch (err) {
         console.warn('Session audio preload failed for', id, err);
       } finally {
