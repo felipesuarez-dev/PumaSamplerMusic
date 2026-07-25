@@ -3575,6 +3575,13 @@ button.is-proxied {
   gap: 6px;
 }
 
+/* Restore [hidden] over the author display:flex (same origin-precedence issue
+   as .slicer-controls-row / .slicer-mode-toggle) so applyEntryMode can hide the
+   cut/play/stop key widgets in the Auto-Slicer — they're Manual-Chops-only. */
+.slicer-chop-key-group[hidden] {
+  display: none;
+}
+
 .slicer-waveform-container {
   position: relative;
   flex: 0 0 auto;
