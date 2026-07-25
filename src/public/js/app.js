@@ -753,35 +753,53 @@ function initStopKeyCapture(el) {
   });
 }
 
-// Dedicated capture for the slicer's cut-at-playhead key. Same click→listen→
-// capture shape as initStopKeyCapture, but writes its own localStorage key
-// (default Space) instead of rebinding the global stop key. slicer.js reads
-// this key at keydown time; nothing else needs a reference.
+// Slicer (Manual Chops) configurable keys — each writes its own localStorage
+// key with distinct defaults so they never collide (cut=Space, play=P, stop=S)
+// and none rebind the global stop key.
 const CHOP_KEY_STORAGE = 'puma-slicer-chop-key';
-function initChopKeyCapture(el) {
+const CHOP_PLAY_KEY_STORAGE = 'puma-slicer-play-key';
+const CHOP_STOP_KEY_STORAGE = 'puma-slicer-stop-key';
+
+// Generalized click→listen→capture widget. Unlike the old per-key versions it
+// has a CANCEL path: pressing Escape or clicking outside the widget while
+// listening reverts to the PREVIOUSLY stored key (not a default) and clears the
+// capturing state — so abandoning a rebind (or closing the panel) never leaves
+// the widget stuck in "listening" with isCapturingKey wedged true.
+function initKeyCapture(el, { storageKey, defaultKey, toastKey }) {
   if (!el) return;
-  const current = localStorage.getItem(CHOP_KEY_STORAGE) || ' ';
-  el.textContent = formatKeyLabel(current);
-  el.dataset.key = current;
+  const stored = () => localStorage.getItem(storageKey) ?? defaultKey;
+  const paint = (key) => { el.textContent = formatKeyLabel(key); el.dataset.key = key; };
+  paint(stored());
+
   el.addEventListener('click', () => {
+    if (el.classList.contains('listening')) return;
     el.classList.add('listening');
     el.textContent = t('common.pressKey');
     isCapturingKey = true;
     pads.setKeyCapturing(true);
-    const handler = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const combo = buildKeyCombo(e);
-      localStorage.setItem(CHOP_KEY_STORAGE, combo);
+
+    const finish = () => {
       el.classList.remove('listening');
-      el.textContent = formatKeyLabel(combo);
-      el.dataset.key = combo;
       isCapturingKey = false;
       pads.setKeyCapturing(false);
-      showToast(t('toast.chopKeySet', { key: formatKeyLabel(combo) }), 'success');
-      window.removeEventListener('keydown', handler);
+      window.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onOutside, true);
     };
-    window.addEventListener('keydown', handler, { once: true });
+    const cancel = () => { finish(); paint(stored()); }; // revert to previous
+    const onKey = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') { cancel(); return; }
+      const combo = buildKeyCombo(e);
+      localStorage.setItem(storageKey, combo);
+      finish();
+      paint(combo);
+      showToast(t(toastKey, { key: formatKeyLabel(combo) }), 'success');
+    };
+    const onOutside = (e) => { if (!el.contains(e.target)) cancel(); };
+
+    window.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onOutside, true);
   });
 }
 
@@ -3333,7 +3351,9 @@ const gripSession = initGripSessionMenu();
 initGripActions({ localeSwitcher, headerMore, gripSession });
 initTooltipPositioning();
 initSkinToggle();
-initChopKeyCapture(document.getElementById('slicer-chop-key'));
+initKeyCapture(document.getElementById('slicer-chop-key'), { storageKey: CHOP_KEY_STORAGE, defaultKey: ' ', toastKey: 'toast.chopKeySet' });
+initKeyCapture(document.getElementById('slicer-play-key'), { storageKey: CHOP_PLAY_KEY_STORAGE, defaultKey: 'p', toastKey: 'toast.playKeySet' });
+initKeyCapture(document.getElementById('slicer-stop-key'), { storageKey: CHOP_STOP_KEY_STORAGE, defaultKey: 's', toastKey: 'toast.stopKeyManualSet' });
 applyFontScale(getFontScale());
 refreshAutosave();
 

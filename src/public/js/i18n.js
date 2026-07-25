@@ -212,6 +212,10 @@ export const dictionaries = {
     'chops.openTitle': 'Chop this track by hand — place your own cuts and load them onto the PADs',
     'slicer.chopKeyLabel': 'Cut key',
     'tip.slicerChopKey': 'Press this key while the track is playing to drop a cut exactly at the playhead. Click the box to change it.',
+    'slicer.playKeyLabel': 'Play key',
+    'slicer.stopKeyLabel': 'Stop key',
+    'tip.slicerPlayKey': 'Press this key to play/pause the whole track. Click the box to change it.',
+    'tip.slicerStopKey': 'Press this key to stop and rewind the track. Click the box to change it.',
     'tip.chopsHelp': 'What is a chop?\nA chop (or slice) is a section of the track cut out between two points and mapped to a PAD, so each PAD plays a different piece of the audio.\n\nHow to chop by hand:\n1. The whole track starts as a single slice.\n2. Double-click the waveform where you want a cut — a good cut sits right on the transient (the attack of a hit or note).\n3. Drag a cut to fine-tune it; each cut snaps to the nearest zero-crossing so slices don\'t click.\n4. Right-click a cut to remove it. Ctrl+Z undoes the last change.\n5. Preview each chop, then assign it to a PAD — or start a new session with the selected chops.',
 
     'cache.confirmTitle': 'Clear the video cache?',
@@ -278,6 +282,8 @@ export const dictionaries = {
 
     'toast.stopKeySet': 'Stop key set to {key}',
     'toast.chopKeySet': 'Cut key set to {key}',
+    'toast.playKeySet': 'Play key set to {key}',
+    'toast.stopKeyManualSet': 'Stop key set to {key}',
     'toast.fxCleared': 'FX cleared on PAD {position}',
     'toast.allStopped': 'All stopped',
     'toast.padsResized': 'PADS resized to {n}',
@@ -612,6 +618,10 @@ export const dictionaries = {
     'chops.openTitle': 'Chopear esta pista a mano — colocá tus propios cortes y cargalos a los PADs',
     'slicer.chopKeyLabel': 'Tecla de corte',
     'tip.slicerChopKey': 'Apretá esta tecla mientras la pista reproduce para colocar un corte justo en el playhead. Hacé clic en el recuadro para cambiarla.',
+    'slicer.playKeyLabel': 'Tecla play',
+    'slicer.stopKeyLabel': 'Tecla stop',
+    'tip.slicerPlayKey': 'Apretá esta tecla para reproducir/pausar toda la pista. Hacé clic en el recuadro para cambiarla.',
+    'tip.slicerStopKey': 'Apretá esta tecla para detener y rebobinar la pista. Hacé clic en el recuadro para cambiarla.',
     'tip.chopsHelp': '¿Qué es un chop?\nUn chop (o corte) es una sección de la pista recortada entre dos puntos y asignada a un PAD, para que cada PAD reproduzca una parte distinta del audio.\n\nCómo chopear a mano:\n1. La pista entera arranca como un solo corte.\n2. Doble clic en la forma de onda donde querés un corte — un buen corte cae justo sobre el transitorio (el ataque de un golpe o nota).\n3. Arrastrá un corte para ajustarlo; cada corte se pega al cruce por cero más cercano para que los cortes no clickeen.\n4. Clic derecho sobre un corte para quitarlo. Ctrl+Z deshace el último cambio.\n5. Previsualizá cada chop y asignalo a un PAD — o creá una nueva sesión con los chops seleccionados.',
 
     'cache.confirmTitle': '¿Vaciar el caché de videos?',
@@ -678,6 +688,8 @@ export const dictionaries = {
 
     'toast.stopKeySet': 'Tecla de stop configurada a {key}',
     'toast.chopKeySet': 'Tecla de corte configurada a {key}',
+    'toast.playKeySet': 'Tecla play configurada a {key}',
+    'toast.stopKeyManualSet': 'Tecla stop configurada a {key}',
     'toast.fxCleared': 'FX limpiados en el PAD {position}',
     'toast.allStopped': 'Todo detenido',
     'toast.padsResized': 'PADS redimensionados a {n}',

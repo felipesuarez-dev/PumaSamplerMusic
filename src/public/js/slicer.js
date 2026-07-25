@@ -14,6 +14,10 @@ import { MIN_SLICE_SECONDS, snapToZeroCrossing } from './slicer-core.js';
 const CLOSE_SKIP_CONFIRM_KEY = 'puma-slicer-skip-close-confirm';
 const CHOP_KEY_STORAGE = 'puma-slicer-chop-key';
 const DEFAULT_CHOP_KEY = ' '; // Space
+const PLAY_KEY_STORAGE = 'puma-slicer-play-key';
+const DEFAULT_PLAY_KEY = 'p';
+const STOP_KEY_STORAGE = 'puma-slicer-stop-key';
+const DEFAULT_STOP_KEY = 's';
 const LONG_AUDIO_THRESHOLD_SEC = 10 * 60;
 const DEFAULT_SENSITIVITY = 0.5;
 const DEFAULT_PREVIEW_VOLUME_PCT = 50;
@@ -104,6 +108,8 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const manualStopBtn = document.getElementById('slicer-manual-stop');
   const timeOverlayEl = document.getElementById('slicer-time-overlay');
   const overlayCaptionEl = document.getElementById('slicer-overlay-caption');
+  // Configurable-key widgets (cut/play/stop) — manual-only, hidden in auto.
+  const keyGroupEls = Array.from(document.querySelectorAll('.slicer-chop-key-group'));
 
   // Bail out gracefully if the shell markup isn't present (e.g. a stale
   // index.html during incremental rollout) instead of throwing on every
@@ -373,16 +379,42 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // (which toggles the pad-editor preview) and before the page scrolls.
   function handleSlicerKeydown(e) {
     if (isInputFocused()) return;
+    // While a key-capture widget is listening, let it (and only it) receive the
+    // press — otherwise pressing the key you're rebinding would also fire the
+    // transport/cut here. The app-level isCapturingKey isn't visible from this
+    // module, so detect the listening widget in the DOM.
+    if (document.querySelector('.key-capture.listening')) return;
+
     const key = e.key ? e.key.toLowerCase() : '';
     if ((e.ctrlKey || e.metaKey) && key === 'z') {
       e.preventDefault();
       undo();
       return;
     }
+    const combo = buildKeyCombo(e).toLowerCase();
+
+    // Play/Stop keys (manual-only transport). Configurable; defaults P and S.
+    if (entryMode === 'manual') {
+      const playKey = (localStorage.getItem(PLAY_KEY_STORAGE) || DEFAULT_PLAY_KEY).toLowerCase();
+      const stopKey = (localStorage.getItem(STOP_KEY_STORAGE) || DEFAULT_STOP_KEY).toLowerCase();
+      if (combo === playKey) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (fullPlaying) pauseFullTrack(); else playFullTrack();
+        return;
+      }
+      if (combo === stopKey) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        stopFullTrack();
+        return;
+      }
+    }
+
     // Cut-at-playhead key (configurable, Space by default). Only while the
-    // track is actually playing, so there is a real playhead to cut at.
+    // track is actually playing/paused, so there is a real playhead to cut at.
     const chopKey = (localStorage.getItem(CHOP_KEY_STORAGE) || DEFAULT_CHOP_KEY).toLowerCase();
-    if (buildKeyCombo(e).toLowerCase() === chopKey) {
+    if (combo === chopKey) {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (fullPlaying || paused || previewingIndex !== null) {
@@ -461,6 +493,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     if (modeToggleEl) modeToggleEl.hidden = isManual;
     if (generateRowEl) generateRowEl.hidden = isManual;
     if (manualControlsEl) manualControlsEl.hidden = !isManual;
+    // Cut/play/stop key widgets are Manual-Chops-only (the Auto-Slicer generates
+    // cuts automatically and has no full-track transport).
+    keyGroupEls.forEach((g) => { g.hidden = !isManual; });
     if (isManual) {
       onsetControlsEl.hidden = true;
       gridControlsEl.hidden = true;
