@@ -1829,7 +1829,10 @@ function renderPadEditor(position, data) {
   if (editorWaveform) editorWaveform.destroy();
   editorWaveform = createWaveform(canvas, {
     rulerCanvas,
-    style: getWaveformStyle(),
+    // Always bars in the pad editor (locked against the global Settings
+    // preference), matching the slicer — the blocky envelope reads better.
+    style: 'bars',
+    lockStyle: true,
     onChange: (segment) => {
       const startInput = document.getElementById('pad-start');
       const endInput = document.getElementById('pad-end');
