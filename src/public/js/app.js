@@ -715,6 +715,7 @@ function collectSessionData({ silent = false } = {}) {
   return {
     pads: pads.getAll(),
     masterFx: masterFxControls ? masterFxControls.getState() : undefined,
+    cols: selectedGridCols(),
   };
 }
 
@@ -1309,22 +1310,46 @@ function autoCommitPad(position, updates) {
   store.set({ currentPad: data });
 }
 
-// Grid size selector. Each option carries data-cols (3 or 4) so the grid can
-// lay out 4-wide (AKAI-style) layouts, driven by the --pad-cols CSS variable.
+// Grid size selector. Each option carries data-count (total pads) and data-cols
+// (3 or 4) so 4-wide (AKAI-style) layouts work, and so 4×3 and 3×4 (both 12
+// pads) are distinguishable — the option value is a unique "CxR" token, NOT the
+// count. The column count drives the grid via the --pad-cols CSS variable.
 const gridSizeSelect = document.getElementById('grid-size');
 const padGridEl = document.getElementById('pad-grid');
 
+function selectedGridOption() {
+  return gridSizeSelect ? gridSizeSelect.selectedOptions[0] : null;
+}
+function selectedGridCount() {
+  const opt = selectedGridOption();
+  return opt ? parseInt(opt.dataset.count, 10) : 9;
+}
+function selectedGridCols() {
+  const opt = selectedGridOption();
+  return opt && opt.dataset.cols ? parseInt(opt.dataset.cols, 10) : 3;
+}
+
 function applyPadCols() {
-  if (!gridSizeSelect || !padGridEl) return;
-  const opt = gridSizeSelect.selectedOptions[0];
-  const cols = opt && opt.dataset.cols ? parseInt(opt.dataset.cols, 10) : 3;
-  padGridEl.style.setProperty('--pad-cols', String(cols || 3));
+  if (!padGridEl) return;
+  padGridEl.style.setProperty('--pad-cols', String(selectedGridCols() || 3));
+}
+
+// Select the option matching a count AND columns (so 4×3 vs 3×4 are correct).
+// When cols is unknown (old sessions), fall back to the first option with that
+// count — the prior count-only behavior, so old sessions are unaffected.
+function selectGridOption(count, cols) {
+  if (!gridSizeSelect) return;
+  const opts = Array.from(gridSizeSelect.options);
+  const match = (cols != null && opts.find((o) => parseInt(o.dataset.count, 10) === count && parseInt(o.dataset.cols, 10) === cols))
+    || opts.find((o) => parseInt(o.dataset.count, 10) === count);
+  if (match) gridSizeSelect.value = match.value;
+  applyPadCols();
 }
 
 if (gridSizeSelect) {
   applyPadCols(); // seed from the initial selection
   gridSizeSelect.addEventListener('change', () => {
-    const count = parseInt(gridSizeSelect.value, 10);
+    const count = selectedGridCount();
     if (count >= 1 && count <= MAX_PADS) {
       applyPadCols();
       pads.resize(count);
@@ -3107,10 +3132,12 @@ const sessionManager = createSessionManager({
     const newCount = Math.max(9, Math.min(MAX_PADS, maxPosition));
     if (newCount !== pads.getCount()) {
       pads.resize(newCount);
-      const gridSize = document.getElementById('grid-size');
-      if (gridSize) gridSize.value = String(newCount);
-      applyPadCols(); // keep --pad-cols in sync with the restored grid size
     }
+    // Restore the grid layout (count + columns). session.cols is absent on old
+    // sessions → selectGridOption falls back to the first option with that count
+    // (3 columns), preserving the previous behavior. Runs even when the count is
+    // unchanged, so switching e.g. 3×4 → 4×3 (both 12) restores the right cols.
+    selectGridOption(newCount, session.cols);
     pads.setAll(padsArray);
     store.set({ selectedPosition: null, currentPad: null });
     renderPadEditor(null, null);
@@ -3180,6 +3207,7 @@ if (exportBtn) {
         name: current.name,
         pads: pads.getAll(),
         masterFx: masterFxControls ? masterFxControls.getState() : undefined,
+        cols: selectedGridCols(),
       });
       if (!saved) return;
       window.open(api.exportSession(saved.name, format), '_blank');
