@@ -733,6 +733,23 @@
   display: none;
   z-index: 5;
   background: #0a0c10;
+  /* The turntable scratch needs raw pointer streams: without this a touch drag
+     on the record scrolls the page instead of moving it. Harmless for the other
+     skins — nothing else on this canvas is interactive. */
+  touch-action: none;
+}
+
+/* The only genuinely CSS part of the turntable — everything else is painted in
+   visualizer-skins.js. An oversized hand makes the record read as grabbable at a
+   glance; the classes are toggled from the same per-pixel hit test the grab uses,
+   so the cursor changes over the record and NOT over the platter rim, which
+   :hover could never distinguish. */
+.video-display.skin-scratchable .skin-canvas {
+  cursor: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M14 34c-3 0-5-2-6-5l-3-8c-1-2 0-4 2-4 1 0 2 1 3 2l2 3V9c0-2 1-3 3-3s3 1 3 3v8V6c0-2 1-3 3-3s3 1 3 3v11V8c0-2 1-3 3-3s3 1 3 3v9v-4c0-2 1-3 3-3s3 1 3 3v12c0 5-4 9-9 9z' fill='%23fff' stroke='%23111' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 20 20, grab;
+}
+
+.video-display.skin-scratching .skin-canvas {
+  cursor: grabbing;
 }
 
 .video-display.skin-active .skin-canvas {

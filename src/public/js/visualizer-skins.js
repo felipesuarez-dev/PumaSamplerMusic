@@ -4,6 +4,11 @@
 // the vinyl skin only uses it to detect activity for its spin speed. The module
 // owns a single overlay canvas, its own requestAnimationFrame loop, and the
 // persisted skin choice. It never touches audio routing or the video element.
+//
+// The vinyl skin also carries the turntable scratch gesture. It still owns no
+// audio knowledge: it hands out a normalized playback rate through the optional
+// deck callbacks and lets the app do the rest.
+import { RPM_33_RAD_PER_SEC, clampRate } from './turntable-core.js';
 
 const STORAGE_KEY = 'puma-visualizer-skin';
 
@@ -191,7 +196,13 @@ function formatMinSec(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function createVisualizerSkins({ container, canvas, getAnalyser, getMediaTitle, getMediaDuration, getHasSession }) {
+export function createVisualizerSkins({
+  container, canvas, getAnalyser, getMediaTitle, getMediaDuration, getHasSession,
+  // Optional turntable-deck adapter. Flat single-purpose callbacks, matching the
+  // getters above rather than introducing a grouped object. All absent (or
+  // isDeckAvailable false) => the disc stays decorative, byte-for-byte as before.
+  isDeckAvailable, onDeckGrab, onDeckRate, onDeckRelease,
+}) {
   const ctx = canvas.getContext('2d');
   // `skin` is the user's persisted preference; `activeSkin` is what actually
   // renders right now. They differ when video media forces the video view even
@@ -201,7 +212,13 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   let spinSpeed = readStoredSpinSpeed();
   let rafId = null;
   let angle = 0; // vinyl rotation, radians
+  let lastFrameMs = 0; // for dt on the deck paths only
   const particles = []; // bubbles state
+
+  // Turntable-deck gesture state. `owns` means the deck (not the free-spin
+  // accumulator) is driving `angle`; `grabbed` means the hand is on the record.
+  const deckState = { owns: false, grabbed: false, rate: 0, resume: false, pointerId: null, lastAngle: 0, lastMs: 0, omega: 0 };
+  let cursorOnDisc = false;
 
   // Reused analysis buffers, sized on first use from the live analyser.
   let freqData = null;
@@ -485,7 +502,13 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
 
     // The record turns only while a session is loaded — at a lively idle speed,
     // faster with audio. With no session it sits still (a stopped turntable).
-    if (!getHasSession || getHasSession()) {
+    //
+    // While the deck owns the disc, `angle` is written by the gesture (1:1 with
+    // the hand) or integrated from the audio rate, so the visual is not a
+    // separate approximation of the sound -- it IS the sound's position. Handing
+    // back is a no-op: `angle` is a plain accumulator, so the free spin resumes
+    // from wherever the scratch left it with no seam.
+    if (!deckState.owns && (!getHasSession || getHasSession())) {
       angle += (0.05 + lv * 0.15) * spinSpeed;
     }
 
@@ -764,7 +787,180 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
     }
   }
 
-  function tick() {
+  // ---- turntable deck gesture ----------------------------------------------
+
+  const MAX_DECK_RATE = 4;
+  // One-pole smoothing of hand speed, ~20ms. Deliberately not the 10-frame
+  // boxcar the reference implementations use: a boxcar over irregular pointer
+  // timestamps does not conserve area, so the audio ends up ~10 pointer frames
+  // behind the disc and the error grows with gesture length instead of
+  // cancelling. A one-pole has half the group delay and is timestamp-correct.
+  const OMEGA_TAU_SECONDS = 0.02;
+  // Decay of rate toward its target after release, and the band within which we
+  // declare it settled and snap exactly (see audio-engine's setDeckRate).
+  const INERTIA_TAU_SECONDS = 0.18;
+  const SETTLE_EPSILON = 0.02;
+
+  function deckEnabled() {
+    return activeSkin === 'vinyl' && typeof isDeckAvailable === 'function' && isDeckAvailable();
+  }
+
+  // Pointer CSS px -> canvas device px. Do NOT use window.devicePixelRatio:
+  // resize() ROUNDS the backing store and the CSS box can be fractional, so the
+  // true ratio is canvas.width/rect.width -- which is also immune to a dpr that
+  // changed since the last resize (monitor switch, browser zoom). Everything in
+  // `vinyl` (cx, cy, outerR) is in device px.
+  function toDevicePoint(e) {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  }
+
+  // The record only -- not the annulus out to platterR, which is the slipmat and
+  // does not turn with the record.
+  function isOnDisc(p) {
+    if (!p || !vinyl.outerR) return false;
+    return Math.hypot(p.x - vinyl.cx, p.y - vinyl.cy) <= vinyl.outerR;
+  }
+
+  function pointerAngle(p) {
+    return Math.atan2(p.y - vinyl.cy, p.x - vinyl.cx);
+  }
+
+  function setCursorState(onDisc, grabbing) {
+    container.classList.toggle('skin-scratchable', onDisc && !grabbing);
+    container.classList.toggle('skin-scratching', grabbing);
+  }
+
+  // Hover-only: gates the hand cursor on the SAME hit test the grab uses, so it
+  // appears over the record and not over the platter rim. Only writes when the
+  // value actually changes, not on every pointermove.
+  function updateDeckCursor(e) {
+    if (deckState.grabbed) return;
+    if (!deckEnabled()) {
+      if (cursorOnDisc) { cursorOnDisc = false; setCursorState(false, false); }
+      return;
+    }
+    const on = isOnDisc(toDevicePoint(e));
+    if (on === cursorOnDisc) return;
+    cursorOnDisc = on;
+    setCursorState(on, false);
+  }
+
+  function onDeckPointerDown(e) {
+    if (!deckEnabled() || deckState.grabbed) return;
+    const p = toDevicePoint(e);
+    if (!isOnDisc(p)) return;
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    deckState.pointerId = e.pointerId;
+    deckState.grabbed = true;
+    deckState.owns = true;
+    deckState.rate = 0;
+    deckState.omega = 0;
+    deckState.lastAngle = pointerAngle(p);
+    deckState.lastMs = e.timeStamp;
+    setCursorState(true, true);
+    // The app decides what "grab" means (pause the centre track, arm, seek) and
+    // tells us whether releasing should resume playing.
+    deckState.resume = Boolean(onDeckGrab && onDeckGrab());
+    if (onDeckRate) onDeckRate(0);
+  }
+
+  function onDeckPointerMove(e) {
+    if (!deckState.grabbed || e.pointerId !== deckState.pointerId) return;
+    // Chrome aligns pointermove to rAF and folds the intermediate samples
+    // inside, so without this a 120Hz pointer is sampled at 60Hz and the
+    // velocity estimate comes out jerky.
+    const samples = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+    const events = samples.length ? samples : [e];
+    for (const ev of events) {
+      const p = toDevicePoint(ev);
+      if (!p) continue;
+      const a = pointerAngle(p);
+      // Unwrap to (-PI, PI] so crossing the seam isn't read as a full turn.
+      let d = a - deckState.lastAngle;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      const dt = Math.max(0.001, (ev.timeStamp - deckState.lastMs) / 1000);
+      deckState.lastAngle = a;
+      deckState.lastMs = ev.timeStamp;
+      const instantOmega = d / dt;
+      const k = 1 - Math.exp(-dt / OMEGA_TAU_SECONDS);
+      deckState.omega += (instantOmega - deckState.omega) * k;
+      // The visual follows the hand 1:1 -- the disc IS where the finger is.
+      angle += d;
+    }
+    deckState.rate = clampRate(deckState.omega / RPM_33_RAD_PER_SEC, MAX_DECK_RATE);
+    if (onDeckRate) onDeckRate(deckState.rate);
+  }
+
+  function onDeckPointerUp(e) {
+    if (!deckState.grabbed || e.pointerId !== deckState.pointerId) return;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    deckState.grabbed = false;
+    deckState.pointerId = null;
+    setCursorState(cursorOnDisc, false);
+    // deckState.owns stays true: the inertia integrator in renderFrame keeps
+    // driving both the angle and the rate until it settles.
+  }
+
+  // Drops any live capture and hands the disc back to the free-spin accumulator.
+  // Called when the skin or media changes mid-gesture, so a pointer can never be
+  // stranded and the disc can never stay stuck "grabbed".
+  function abandonDeckGesture() {
+    if (deckState.pointerId !== null && canvas.hasPointerCapture(deckState.pointerId)) {
+      canvas.releasePointerCapture(deckState.pointerId);
+    }
+    const wasActive = deckState.owns || deckState.grabbed;
+    deckState.grabbed = false;
+    deckState.owns = false;
+    deckState.pointerId = null;
+    deckState.rate = 0;
+    deckState.omega = 0;
+    cursorOnDisc = false;
+    setCursorState(false, false);
+    if (wasActive && onDeckRelease) onDeckRelease({ resume: false, settled: true });
+  }
+
+  // Runs inside the rAF loop because the visual angle and the audio rate have to
+  // be one number. Decays toward a TARGET rather than to zero: releasing while
+  // the track was playing hands the deck back to 1x (a real turntable keeps
+  // turning), releasing while it was paused coasts to a stop.
+  function advanceDeckInertia(dt) {
+    const target = deckState.resume ? 1 : 0;
+    const k = 1 - Math.exp(-dt / INERTIA_TAU_SECONDS);
+    deckState.rate += (target - deckState.rate) * k;
+    const settled = Math.abs(deckState.rate - target) < SETTLE_EPSILON;
+    if (settled) deckState.rate = target;
+    if (onDeckRate) onDeckRate(deckState.rate, settled);
+    angle += deckState.rate * RPM_33_RAD_PER_SEC * dt;
+    if (!settled) return;
+    // Settled: hand the disc back. When resuming, the deck keeps sounding at 1x
+    // but the angle is free-spun from here -- keeping it audio-driven would mean
+    // re-deriving it every frame for no visible difference.
+    deckState.owns = false;
+    if (onDeckRelease) onDeckRelease({ resume: deckState.resume, settled: true });
+  }
+
+  canvas.addEventListener('pointerdown', onDeckPointerDown);
+  canvas.addEventListener('pointermove', onDeckPointerMove);
+  canvas.addEventListener('pointermove', updateDeckCursor);
+  canvas.addEventListener('pointerup', onDeckPointerUp);
+  canvas.addEventListener('pointercancel', onDeckPointerUp);
+  canvas.addEventListener('pointerleave', (e) => { if (!deckState.grabbed) updateDeckCursor(e); });
+
+  function tick(now) {
+    // dt is used ONLY on the deck paths, so no existing skin changes behaviour.
+    // Clamped so a backgrounded tab returning cannot teleport the disc (or, far
+    // worse, the audio position).
+    const ms = typeof now === 'number' ? now : lastFrameMs;
+    const dt = lastFrameMs ? Math.min(0.05, Math.max(0, (ms - lastFrameMs) / 1000)) : 0;
+    lastFrameMs = ms;
+    if (deckState.owns && !deckState.grabbed && dt > 0) advanceDeckInertia(dt);
     renderFrame();
     rafId = requestAnimationFrame(tick);
   }
@@ -792,6 +988,9 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   // User picking a skin from the menu: persist it AND make it active for the
   // current media (overrides the video-wins default until the next media load).
   function setSkin(next) {
+    // Release before switching: the canvas is shared by every skin, so a skin
+    // change mid-drag would otherwise strand the captured pointer.
+    abandonDeckGesture();
     skin = SKINS.includes(next) ? next : 'video';
     activeSkin = skin;
     localStorage.setItem(STORAGE_KEY, skin);
@@ -806,6 +1005,7 @@ export function createVisualizerSkins({ container, canvas, getAnalyser, getMedia
   // so users who never pick a skin still see the video, unchanged. `kind` is
   // unused now but kept in the signature for the callers.
   function onMediaLoaded() {
+    abandonDeckGesture();
     activeSkin = skin;
     particles.length = 0;
     applySkin();

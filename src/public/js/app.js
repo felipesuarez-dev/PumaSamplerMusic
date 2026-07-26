@@ -47,7 +47,15 @@ const mediaDisplay = createMediaDisplay({
   // Forwarder (visualizerSkins is declared just below; the callback only fires
   // on a media load, well after both exist). Also refresh the toggle icon so it
   // reflects the now-active view (e.g. video wins over a stored skin).
-  onMediaLoaded: (kind) => { visualizerSkins.onMediaLoaded(kind); refreshSkinToggleIcon(); },
+  onMediaLoaded: (kind) => {
+    visualizerSkins.onMediaLoaded(kind);
+    refreshSkinToggleIcon();
+    // The armed deck holds its own copy of the PREVIOUS track's samples, so a
+    // media change has to disarm it either way. Re-arming is left to the user's
+    // next skin pick: doing it here would start a multi-megabyte decode from a
+    // non-gesture callback, where AudioContext.resume() may not even be allowed.
+    if (audio.isDeckArmed()) audio.disarmDeck();
+  },
 });
 const visualizerSkins = createVisualizerSkins({
   container: document.querySelector('.video-display'),
@@ -67,6 +75,39 @@ const visualizerSkins = createVisualizerSkins({
   // be read at call time (inside the RAF loop), never captured now (TDZ). The
   // vinyl skin uses it to spin only while a session is loaded.
   getHasSession: () => sessionManager.getCurrent() != null,
+  // Turntable deck. The skin measures the hand and hands over a normalized
+  // rate; everything about audio and the centre display is decided here.
+  // "Is the disc grabbable at all", not "is it armed yet". Deliberately looser:
+  // the vinyl skin can already be the stored skin on page load, in which case no
+  // menu click ever happened and the deck was never armed -- gating on armed
+  // would leave the record dead until the user re-picked vinyl from the menu.
+  isDeckAvailable: () => Boolean(mediaDisplay.getMediaId()),
+  onDeckGrab: () => {
+    // A pointerdown IS a user gesture, so it can arm (and satisfy
+    // AudioContext.resume) just as well as the menu click. Until the slab lands
+    // the gesture degrades to visual-only -- setDeckRate/seekDeck no-op with no
+    // deck -- so the record still follows the hand and the audio joins in.
+    if (!audio.isDeckArmed()) syncDeckForSkin('vinyl');
+    // Stop only the CENTRE track: its preview voice (position 0) and the media
+    // clock. Pad voices are deliberately left running -- you scratch over a
+    // loop, the way a DJ does.
+    const resume = !mediaDisplay.getPlaybackState().paused;
+    audio.stop(0);
+    mediaDisplay.pause();
+    audio.seekDeck(mediaDisplay.getPlaybackState().currentTime);
+    return resume;
+  },
+  onDeckRate: (rate, settled) => audio.setDeckRate(rate, settled),
+  onDeckRelease: ({ resume }) => {
+    // Resync the centre display once, on settle. The <video> is not resumed:
+    // under the vinyl skin it isn't visible anyway, so playing a muted element
+    // alongside the deck would only add a drift source. Seeking keeps
+    // getPlaybackState, the pad editor and the tonearm coherent with where the
+    // scratch actually ended.
+    const at = audio.getDeckTime();
+    if (at != null) mediaDisplay.seek(at);
+    if (resume && audio.deckNeedsRearm()) rearmDeck();
+  },
 });
 const toastEl = document.getElementById('toast');
 let editorWaveform = null;
@@ -1154,6 +1195,41 @@ function refreshSkinToggleIcon() {
   if (speedBtn) speedBtn.hidden = visualizerSkins.getSkin() !== 'vinyl';
 }
 
+// Arms the turntable deck for the current centre media, or disarms it when the
+// vinyl skin isn't showing. Arming loads and decodes the track if it isn't
+// cached, so the overlay caption explains the wait instead of the disc simply
+// not responding.
+let deckArmInFlight = false;
+async function syncDeckForSkin(skinName) {
+  if (skinName !== 'vinyl') {
+    audio.disarmDeck();
+    return;
+  }
+  const videoId = mediaDisplay.getMediaId();
+  if (!videoId || deckArmInFlight) return;
+  deckArmInFlight = true;
+  const wasCached = audio.isLoaded(videoId);
+  if (!wasCached) showToast(t('deck.preparing'), 'info');
+  try {
+    const at = mediaDisplay.getPlaybackState().currentTime || 0;
+    const ok = await audio.armDeck(videoId, api.getAudioUrl(videoId), at);
+    if (!ok) showToast(t('deck.unavailable'), 'warning');
+  } catch (err) {
+    showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
+  } finally {
+    deckArmInFlight = false;
+  }
+}
+
+// Re-arms a windowed slab around the current position (long tracks only, see
+// audio-engine's DECK_MAX_BYTES).
+function rearmDeck() {
+  const videoId = mediaDisplay.getMediaId();
+  if (!videoId) return;
+  const at = audio.getDeckTime();
+  audio.armDeck(videoId, api.getAudioUrl(videoId), at == null ? 0 : at).catch(() => {});
+}
+
 function initSkinToggle() {
   const btn = document.getElementById('skin-toggle-btn');
   if (!btn || !visualizerSkins) return;
@@ -1199,6 +1275,14 @@ function initSkinToggle() {
         visualizerSkins.setSkin(name);
         updateIcon();
         closeMenu();
+        // Arm/disarm from this CLICK specifically, not from a media load. Two
+        // reasons: a click is a user gesture, which AudioContext.resume()
+        // requires, and the deck has to be able to load a track that was never
+        // opened in an editor (previewing a YouTube video plays through a
+        // <video> element and never fills the AudioBuffer cache, so waiting for
+        // one to appear would leave the disc silently unscratchable on most
+        // tracks).
+        syncDeckForSkin(name);
       });
       menu.appendChild(item);
     });
