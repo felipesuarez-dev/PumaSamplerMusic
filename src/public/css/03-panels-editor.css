@@ -201,6 +201,15 @@
   content: none;
 }
 
+/* The global `* { box-sizing: border-box }` reset does NOT reach pseudo-elements,
+   so the tooltip bubble is content-box: its real width is max-width (340) + the
+   28px padding + 2px border ≈ 370. initTooltipPositioning clamps assuming ~340
+   (half = 170), so this right-docked tooltip overran the viewport by ~15px and
+   got clipped. Making it border-box aligns the real width with the clamp. */
+.pad-fx-clear-btn::after {
+  box-sizing: border-box;
+}
+
 /* When the pad's master FX switch is off, dim the knob rows to signal the pad
    plays clean — but keep them editable so the user can prep FX for when it's
    turned back on. */
