@@ -846,6 +846,19 @@
   left: 54px;
 }
 
+/* Third in the row, after the skin toggle and the spin-speed control. */
+.vinyl-dj-btn {
+  left: 100px;
+}
+
+/* Lit while DJ mode is on, so the record's grabbable state is readable without
+   hovering it. */
+.vinyl-dj-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
 /* Horizontal row of speed pills (YouTube-style), reusing the skin-menu shell. */
 .vinyl-speed-menu {
   position: fixed;

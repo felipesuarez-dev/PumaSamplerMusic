@@ -1208,9 +1208,44 @@ function refreshSkinToggleIcon() {
   if (!btn || !visualizerSkins) return;
   const icon = btn.querySelector('.material-symbols-outlined');
   if (icon) icon.textContent = SKIN_ICONS[visualizerSkins.getSkin()] || 'movie';
-  // The spin-speed button only makes sense in vinyl mode.
+  // The spin-speed and DJ-mode buttons only make sense in vinyl mode.
+  const isVinyl = visualizerSkins.getSkin() === 'vinyl';
   const speedBtn = document.getElementById('vinyl-speed-btn');
-  if (speedBtn) speedBtn.hidden = visualizerSkins.getSkin() !== 'vinyl';
+  if (speedBtn) speedBtn.hidden = !isVinyl;
+  const djBtn = document.getElementById('vinyl-dj-btn');
+  if (djBtn) {
+    djBtn.hidden = !isVinyl;
+    refreshDjButton();
+  }
+}
+
+function refreshDjButton() {
+  const djBtn = document.getElementById('vinyl-dj-btn');
+  if (!djBtn || !visualizerSkins) return;
+  const on = visualizerSkins.getDjMode();
+  djBtn.classList.toggle('active', on);
+  djBtn.setAttribute('aria-pressed', String(on));
+  const key = on ? 'skin.djOn' : 'skin.djTitle';
+  djBtn.dataset.i18nTitle = key;
+  djBtn.title = t(key);
+}
+
+function initVinylDjToggle() {
+  const btn = document.getElementById('vinyl-dj-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const next = !visualizerSkins.getDjMode();
+    visualizerSkins.setDjMode(next);
+    refreshDjButton();
+    // Arm on the way in (this click is the user gesture AudioContext.resume
+    // needs) and free the slab on the way out -- an armed deck holds a full
+    // copy of the track's samples, so leaving it armed behind a switch the user
+    // just turned off would be pure waste.
+    if (next) syncDeckForSkin(visualizerSkins.getSkin());
+    else audio.disarmDeck();
+    showToast(t(next ? 'toast.djOn' : 'toast.djOff'), 'info');
+  });
+  refreshDjButton();
 }
 
 // Arms the turntable deck for the current centre media, or disarms it when the
@@ -1219,7 +1254,9 @@ function refreshSkinToggleIcon() {
 // not responding.
 let deckArmInFlight = false;
 async function syncDeckForSkin(skinName) {
-  if (skinName !== 'vinyl') {
+  // DJ mode is the master switch: without it the disc stays decorative and no
+  // slab is held, whatever skin is showing.
+  if (skinName !== 'vinyl' || !visualizerSkins.getDjMode()) {
     audio.disarmDeck();
     lastDeckRate = 0;
     return;
@@ -3853,6 +3890,7 @@ initGripActions({ localeSwitcher, headerMore, gripSession });
 initTooltipPositioning();
 initSkinToggle();
 initVinylSpeed();
+initVinylDjToggle();
 initKeyCapture(document.getElementById('slicer-chop-key'), { storageKey: CHOP_KEY_STORAGE, defaultKey: ' ', toastKey: 'toast.chopKeySet' });
 initKeyCapture(document.getElementById('slicer-play-key'), { storageKey: CHOP_PLAY_KEY_STORAGE, defaultKey: 'p', toastKey: 'toast.playKeySet' });
 initKeyCapture(document.getElementById('slicer-stop-key'), { storageKey: CHOP_STOP_KEY_STORAGE, defaultKey: 's', toastKey: 'toast.stopKeyManualSet' });

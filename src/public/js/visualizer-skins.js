@@ -11,6 +11,11 @@
 import { RPM_33_RAD_PER_SEC, clampRate } from './turntable-core.js';
 
 const STORAGE_KEY = 'puma-visualizer-skin';
+// DJ mode = the record is grabbable and scratches. Off by default: an armed deck
+// holds a full copy of the track's samples and a stray drag on the disc would
+// interrupt playback, so it stays opt-in rather than surprising anyone who just
+// wanted the vinyl visual.
+const DJ_KEY = 'puma-vinyl-dj-mode';
 
 // 'video' means "no skin" (show the real video/waveform underneath). Order is
 // the cycle order and the menu order.
@@ -36,6 +41,10 @@ export const SPIN_SPEEDS = [0.5, 1, 1.5, 2];
 function readStoredSpinSpeed() {
   const n = parseFloat(localStorage.getItem(SPIN_KEY));
   return SPIN_SPEEDS.includes(n) ? n : 1;
+}
+
+function readStoredDjMode() {
+  return localStorage.getItem(DJ_KEY) === '1';
 }
 
 // --- Pure helpers for the vinyl skin (stateless; safe at module scope) ---
@@ -210,6 +219,7 @@ export function createVisualizerSkins({
   let skin = readStoredSkin();
   let activeSkin = skin;
   let spinSpeed = readStoredSpinSpeed();
+  let djMode = readStoredDjMode();
   let rafId = null;
   let angle = 0; // vinyl rotation, radians
   let lastFrameMs = 0; // for dt on the deck paths only
@@ -802,7 +812,7 @@ export function createVisualizerSkins({
   const SETTLE_EPSILON = 0.02;
 
   function deckEnabled() {
-    return activeSkin === 'vinyl' && typeof isDeckAvailable === 'function' && isDeckAvailable();
+    return djMode && activeSkin === 'vinyl' && typeof isDeckAvailable === 'function' && isDeckAvailable();
   }
 
   // Pointer CSS px -> canvas device px. Do NOT use window.devicePixelRatio:
@@ -1071,5 +1081,24 @@ export function createVisualizerSkins({
     return spinSpeed;
   }
 
-  return { setSkin, getSkin, onMediaLoaded, resize, getSkins: () => SKINS.slice(), setSpinSpeed, getSpinSpeed };
+  // Turning DJ mode off mid-gesture has to land the coast and drop the cursor
+  // state, or the record would stay visually "held" and the hand cursor would
+  // survive on a disc that no longer responds. The caller disarms the deck.
+  function setDjMode(on) {
+    djMode = Boolean(on);
+    localStorage.setItem(DJ_KEY, djMode ? '1' : '0');
+    if (!djMode) {
+      abandonDeckGesture();
+      container.classList.remove('skin-scratchable', 'skin-scratching');
+      cursorOnDisc = false;
+    }
+  }
+  function getDjMode() {
+    return djMode;
+  }
+
+  return {
+    setSkin, getSkin, onMediaLoaded, resize, getSkins: () => SKINS.slice(),
+    setSpinSpeed, getSpinSpeed, setDjMode, getDjMode,
+  };
 }

@@ -173,7 +173,9 @@ Las teclas de stop y las del cortador (Auto-Slicer / Chops) son **configurables*
 
 ### Tornamesa con scratch
 
-En el skin de **vinilo**, acerca el cursor al disco: se convierte en una mano. Presiona y muévelo para rayar la pista como en una tornamesa — hacia adelante, hacia atrás y a cualquier velocidad, calibrado a 33⅓ RPM (una vuelta de mano cada ~1,8 s es velocidad normal). Al soltar, si la pista venía sonando vuelve sola a velocidad normal; si estaba pausada, frena hasta detenerse.
+En el skin de **vinilo**, activa el **Modo DJ** con el botón de la mano (junto al selector de velocidad de giro). Está apagado por defecto, porque el motor mantiene una copia completa de las muestras de la pista y un arrastre accidental sobre el disco interrumpiría la reproducción.
+
+Con el modo activo, acerca el cursor al disco: se convierte en una mano. Presiona y muévelo para rayar la pista como en una tornamesa — hacia adelante, hacia atrás y a cualquier velocidad, calibrado a 33⅓ RPM (una vuelta de mano cada ~1,8 s es velocidad normal). Al soltar, si la pista venía sonando vuelve sola a velocidad normal; si estaba pausada, frena hasta detenerse.
 
 Los PADs **siguen sonando** mientras rayas: se raya por encima del loop, como lo haría un DJ. Solo se detiene la pista central.
 

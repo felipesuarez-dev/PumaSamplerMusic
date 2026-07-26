@@ -173,7 +173,9 @@ The stop key and the slicer (Auto-Slicer / Chops) keys are **configurable** from
 
 ### Turntable scratch
 
-On the **vinyl** skin, move the cursor onto the record and it becomes a hand. Press and drag to scratch the track like a turntable — forward, backward, and at any speed in between, calibrated to 33⅓ RPM (one hand-turn every ~1.8s is normal speed). Let go and it coasts back to normal speed if the track was playing, or down to a stop if it was paused.
+On the **vinyl** skin, switch on **DJ mode** with the hand button (next to the spin-speed control). It is off by default, because the engine keeps a full copy of the track's samples and a stray drag on the record would interrupt playback.
+
+With it on, move the cursor onto the record and it becomes a hand. Press and drag to scratch the track like a turntable — forward, backward, and at any speed in between, calibrated to 33⅓ RPM (one hand-turn every ~1.8s is normal speed). Let go and it coasts back to normal speed if the track was playing, or down to a stop if it was paused.
 
 Pads **keep playing** while you scratch: you scratch over the loop, the way a DJ does. Only the centre track stops.
 
