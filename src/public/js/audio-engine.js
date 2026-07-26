@@ -61,10 +61,36 @@ export function semitonesToRatio(semitones) {
   return 2 ** ((semitones || 0) / 12);
 }
 
+// Races `promise` against `signal` aborting. Used by loadAudio's in-flight
+// joiners: a joiner's signal only ever cancels ITS OWN wait, never the
+// underlying fetch, which keeps running and still populates the cache for
+// whoever asks next. That split is what lets a joiner's Cancel button feel
+// instant without throwing away a download the app started on purpose.
+export function raceAbort(promise, signal) {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      const err = new Error('Aborted');
+      err.name = 'AbortError';
+      reject(err);
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => { signal.removeEventListener('abort', onAbort); resolve(value); },
+      (err) => { signal.removeEventListener('abort', onAbort); reject(err); },
+    );
+  });
+}
+
 export function createAudioEngine() {
   let audioContext = null;
   const buffers = new Map(); // videoId -> AudioBuffer
   const reversedBuffers = new Map(); // videoId -> reversed AudioBuffer (lazy, cached alongside `buffers`)
+  // videoId -> { promise, listeners: Set<{onProgress, onPhase}>, lastFraction }
+  const inflight = new Map();
   const activeSources = new Map(); // position -> { sourceNode, gainNode, videoId, startTime, endTime }
 
   let masterChain = null;
@@ -279,24 +305,101 @@ export function createAudioEngine() {
 
   // onProgress(fraction 0..1) is optional and only reports the DOWNLOAD phase
   // (the only phase with measurable progress -- decodeAudioData is atomic).
-  // A cache hit returns instantly without reporting. signal is an optional
-  // AbortSignal so a caller (the slicer's load overlay) can cancel a download.
-  async function loadAudio(videoId, url, onProgress, signal) {
+  // onPhase(phase) is optional and reports 'fetch' (right before the network
+  // request starts) and 'decode' (right before decodeAudioData), so a caller
+  // can show a state-aware caption instead of one generic label for the whole
+  // call. A cache hit returns instantly without reporting either. signal is an
+  // optional AbortSignal so a caller (the slicer's load overlay) can cancel
+  // its own wait.
+  //
+  // Concurrent callers for the SAME videoId never start a second fetch. The
+  // first caller for a cold id becomes its OWNER: only the owner's `signal`
+  // reaches fetch(), and only the owner drives readWithProgress/decodeAudioData.
+  // Every later caller for that id JOINS the same in-flight request instead --
+  // its {onProgress, onPhase} is added to the owner's listener set (replaying
+  // the owner's lastFraction immediately, so a late joiner's progress bar
+  // doesn't appear to jump from 0 to wherever the download already is), and if
+  // the joiner passed its own signal, its wait races that signal via
+  // raceAbort() rather than touching the owner's fetch. This inverts an
+  // assumption worth stating explicitly: a prefetch is the OWNER of a request
+  // with no signal at all. If a joining slicer could hard-abort someone else's
+  // in-flight fetch, cancelling the slicer would throw away work the app
+  // started on purpose, and the next open would just re-download from
+  // scratch. Decoupling "abort my wait" from "cancel the transfer" is what
+  // makes Cancel feel instant AND keeps the download landing in the cache.
+  async function loadAudio(videoId, url, onProgress, signal, onPhase) {
     if (buffers.has(videoId)) {
       return buffers.get(videoId);
     }
 
-    const ctx = await init();
-    const response = await fetch(url, signal ? { signal } : undefined);
-    if (!response.ok) {
-      throw new Error(`Failed to load audio: ${response.status}`);
+    const existing = inflight.get(videoId);
+    if (existing) {
+      const listener = { onProgress, onPhase };
+      existing.listeners.add(listener);
+      // Replay the owner's progress AND its current phase, so a joiner that
+      // arrives mid-download lands on the caption the transfer is actually in
+      // rather than sitting on the opening one. Without the phase replay, the
+      // flagship path this feature creates -- hover a scissors button (the
+      // prefetch owns the request), then click it once decoding has already
+      // started -- would silently skip the decode caption entirely.
+      if (onProgress) onProgress(existing.lastFraction);
+      if (onPhase && existing.phase) onPhase(existing.phase);
+      if (!signal) return existing.promise;
+      // Drop this joiner's callbacks once it abandons its own wait, so a
+      // cancelled slicer stops driving an overlay it no longer owns while the
+      // shared download keeps running for everyone else. Handle the
+      // already-aborted signal inline: addEventListener never replays an abort
+      // that fired before it was attached, so without this branch an
+      // abandoned joiner would keep driving the UI -- exactly what this is
+      // here to prevent.
+      if (signal.aborted) existing.listeners.delete(listener);
+      else signal.addEventListener('abort', () => existing.listeners.delete(listener), { once: true });
+      return raceAbort(existing.promise, signal);
     }
 
-    const arrayBuffer = await readWithProgress(response, onProgress);
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-
-    buffers.set(videoId, audioBuffer);
-    return audioBuffer;
+    const entry = {
+      promise: null,
+      listeners: new Set([{ onProgress, onPhase }]),
+      lastFraction: 0,
+      phase: null,
+      stale: false,
+    };
+    entry.promise = (async () => {
+      // `finally` (not a catch) so a rejected fetch can never poison this id
+      // forever -- the next caller for the same videoId must get a fresh
+      // attempt, not a permanently-broken cache entry.
+      // Records the phase on the entry as well as broadcasting it, so a later
+      // joiner can be caught up (see the join branch above).
+      const emitPhase = (phase) => {
+        entry.phase = phase;
+        for (const listener of entry.listeners) listener.onPhase?.(phase);
+      };
+      try {
+        const ctx = await init();
+        emitPhase('fetch');
+        const response = await fetch(url, signal ? { signal } : undefined);
+        if (!response.ok) {
+          throw new Error(`Failed to load audio: ${response.status}`);
+        }
+        const arrayBuffer = await readWithProgress(response, (f) => {
+          entry.lastFraction = f;
+          for (const listener of entry.listeners) listener.onProgress?.(f);
+        });
+        emitPhase('decode');
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        // Skip the cache write if unload() ran while this was in flight (the
+        // user deleted the video mid-download). Whoever awaited still gets
+        // their buffer -- they asked for it -- but caching it here would
+        // resurrect a deleted video: isLoaded() would report true for media
+        // that no longer exists, and the memory would never be reclaimed.
+        if (!entry.stale) buffers.set(videoId, audioBuffer);
+        return audioBuffer;
+      } finally {
+        inflight.delete(videoId);
+      }
+    })();
+    inflight.set(videoId, entry);
+    return entry.promise;
   }
 
   // Streams the response body so download progress is measurable against
@@ -776,9 +879,25 @@ export function createAudioEngine() {
     return buffers.has(videoId);
   }
 
+  // Fire-and-forget cache warm: returns early (does nothing) when the buffer
+  // is already cached or already being fetched by someone else, so hovering
+  // the same library row twice -- or hovering a track that's already open in
+  // the slicer -- costs nothing. Never throws: it's meant to run from a
+  // pointerenter/pointerdown handler that has nowhere to surface an error, and
+  // a failed prefetch just means the eventual real loadAudio() call retries.
+  function prefetchAudio(videoId, url) {
+    if (buffers.has(videoId) || inflight.has(videoId)) return;
+    loadAudio(videoId, url).catch(() => {});
+  }
+
   function unload(videoId) {
     buffers.delete(videoId);
     reversedBuffers.delete(videoId);
+    // A load/prefetch for this id may still be in flight. Flag it so its
+    // decode doesn't write the buffer back into the cache after the delete --
+    // see the cache-write guard in loadAudio.
+    const entry = inflight.get(videoId);
+    if (entry) entry.stale = true;
   }
 
   // Current buffer-time (seconds) of the voice at `position`, for an accurate
@@ -812,6 +931,7 @@ export function createAudioEngine() {
     getActivePositions,
     getVoiceTime,
     isLoaded,
+    prefetchAudio,
     unload,
     getAudioContext: () => audioContext,
     getMasterChain,

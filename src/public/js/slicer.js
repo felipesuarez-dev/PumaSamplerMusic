@@ -1064,7 +1064,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     loading = true;
     loadAbort = new AbortController();
     setProgress(0);
-    setOverlayCaption('slicer.loadingDownload');
+    // A cache hit skips straight to the render caption below (loadAudio never
+    // emits an onPhase for a hit) -- but a cold/in-flight load starts on
+    // 'fetch', and the caption right below covers that opening frame before
+    // loadAudio's first onPhase call lands.
+    setOverlayCaption(audio.isLoaded(videoId) ? 'slicer.loadingRender' : 'slicer.loadingFetch');
     // Show the overlay + spinner IMMEDIATELY (no delay-gate) so loading a big
     // track gives instant feedback. A cached re-open flashes it for a frame —
     // acceptable per the immediacy the user asked for.
@@ -1080,6 +1084,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         api.getAudioUrl(videoId),
         (f) => { if (currentVideoId === videoId) setProgress(f * 0.60); },
         loadAbort.signal,
+        (phase) => {
+          if (currentVideoId !== videoId) return;
+          if (phase === 'decode') { setOverlayCaption('slicer.loadingDecode'); setProgress(0.60); }
+        },
       );
       if (currentVideoId !== videoId || !waveform) return; // switched away mid-load
       // Download resolved; decodeAudioData already ran inside loadAudio. Move to

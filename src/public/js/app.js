@@ -2713,6 +2713,11 @@ function renderLocalList() {
   });
 }
 
+// Above this, a speculative pull costs more than the latency it saves -- skip
+// it so a cursor resting on a multi-hour set's scissors never starts a
+// hundreds-of-megabytes download the user may not have wanted.
+const PREFETCH_MAX_BYTES = 60 * 1024 * 1024; // ~60MB
+
 // Shared renderer behind renderVideoList/renderLocalList above. Handles
 // filtering, search, pagination and per-item markup/listeners; getPage/
 // setPage/getSearchTerm are closures over each tab's own module-level
@@ -2881,6 +2886,38 @@ function renderMediaList({
     const manualSliceBtn = li.querySelector('[data-slice-manual]');
     if (manualSliceBtn) {
       manualSliceBtn.addEventListener('click', () => openSlicer(slicer.openForVideoManual));
+    }
+
+    // The library rows themselves aren't clickable, so a deliberate hover or
+    // press on a SCISSORS button is the earliest honest signal that the user
+    // is about to open this track in the slicer -- warm the audio cache ahead
+    // of that click instead of starting the fetch only once loadWaveformAudio
+    // runs. Deliberately scoped to the scissors and not the whole row: the row
+    // also contains the delete button, and prefetching audio the user is about
+    // to remove is pure waste (unload() then has to void the in-flight load).
+    if (video.status === 'ready') {
+      let prefetchTimer = null;
+      const maybePrefetch = () => {
+        if (video.sizeBytes && video.sizeBytes > PREFETCH_MAX_BYTES) return;
+        audio.prefetchAudio(video.videoId, api.getAudioUrl(video.videoId));
+      };
+      for (const btn of li.querySelectorAll('.video-slice-btn')) {
+        // pointerenter also fires on touch (right before pointerdown, since
+        // contact both "enters" and "presses" at once), so a single tap can
+        // call maybePrefetch twice back-to-back -- harmless, since
+        // prefetchAudio's own cache/in-flight check no-ops the second call.
+        btn.addEventListener('pointerenter', () => {
+          clearTimeout(prefetchTimer);
+          // isConnected guard: renderMediaList rebuilds every row from
+          // scratch, and refreshVideos() fires on every download:* websocket
+          // event, so a re-render can rip this button out from under a resting
+          // cursor. pointerleave is never synthesized for a removed node, so
+          // without this the timer would still fire against a stale row.
+          prefetchTimer = setTimeout(() => { if (btn.isConnected) maybePrefetch(); }, 120);
+        });
+        btn.addEventListener('pointerleave', () => clearTimeout(prefetchTimer));
+        btn.addEventListener('pointerdown', maybePrefetch);
+      }
     }
 
     const retryBtn = li.querySelector('[data-retry-cta]');

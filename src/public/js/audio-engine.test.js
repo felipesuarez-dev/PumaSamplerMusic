@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeSliceTimes, semitonesToRatio, reverseSliceTimes, computeReleaseSchedule, clampAttackSeconds } from './audio-engine.js';
+import { computeSliceTimes, semitonesToRatio, reverseSliceTimes, computeReleaseSchedule, clampAttackSeconds, raceAbort } from './audio-engine.js';
 
 const MIN_DURATION = 0.01;
 
@@ -107,4 +107,30 @@ test('clampAttackSeconds: attack longer than the slice is floored to the slice d
 test('clampAttackSeconds: zero/negative attack clamps to 0', () => {
   assert.equal(clampAttackSeconds(0, 1), 0);
   assert.equal(clampAttackSeconds(-50, 1), 0);
+});
+
+test('raceAbort: resolves through when the promise settles before any abort', async () => {
+  const controller = new AbortController();
+  const result = await raceAbort(Promise.resolve('done'), controller.signal);
+  assert.equal(result, 'done');
+});
+
+test('raceAbort: rejects with AbortError when the signal aborts first', async () => {
+  const controller = new AbortController();
+  const inner = new Promise(() => {}); // never settles on its own
+  const raced = raceAbort(inner, controller.signal);
+  controller.abort();
+  await assert.rejects(raced, (err) => err.name === 'AbortError');
+});
+
+test('raceAbort: the inner promise still settles after the raced wait has aborted', async () => {
+  const controller = new AbortController();
+  let resolveInner;
+  const inner = new Promise((resolve) => { resolveInner = resolve; });
+  const raced = raceAbort(inner, controller.signal);
+  controller.abort();
+  await assert.rejects(raced, (err) => err.name === 'AbortError');
+  resolveInner('landed');
+  await assert.doesNotReject(inner);
+  assert.equal(await inner, 'landed');
 });
