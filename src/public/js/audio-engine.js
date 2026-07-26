@@ -95,7 +95,14 @@ export function createAudioEngine() {
 
   let masterChain = null;
   let workletReady = null;
+  let deckWorkletReady = null;
   let fallbackWarned = false;
+
+  // Turntable deck (the vinyl skin's scratch). Named deck, not scratch: audio
+  // position 0 is already "the scratch voice", the Slicer/Trim preview channel.
+  // { node, gain, rateParam, videoId, lastPos, lastFrame, lastRate, ... }
+  let deck = null;
+  let armToken = 0;
 
   let desiredMasterVolume = 1;
   let desiredDelayTime = 0.25;
@@ -132,6 +139,29 @@ export function createAudioEngine() {
         });
     }
     return workletReady;
+  }
+
+  // Mirrors ensureWorklet's posture (one cached promise, warn-and-return-false,
+  // never throws into the caller) but needs its OWN promise and its own
+  // addModule call -- workletReady is specific to the pitch module. Both resolve
+  // into the same AudioWorkletGlobalScope; the two registerProcessor names don't
+  // collide.
+  //
+  // There is deliberately no degraded fallback. Unlike pitch, where
+  // playbackRate is a usable if tempo-coupled approximation, scratching needs a
+  // negative rate at sample accuracy, which is exactly what a buffer source
+  // won't do -- so without the worklet the feature is simply unavailable.
+  function ensureDeckWorklet(ctx) {
+    if (!ctx.audioWorklet) return Promise.resolve(false);
+    if (!deckWorkletReady) {
+      deckWorkletReady = ctx.audioWorklet.addModule('/js/turntable-processor.js')
+        .then(() => true)
+        .catch((err) => {
+          console.warn('AudioWorklet unavailable, turntable scratch disabled:', err);
+          return false;
+        });
+    }
+    return deckWorkletReady;
   }
 
   function generateImpulseResponse(ctx, sampleRate, lengthSeconds, decaySeconds) {
@@ -871,6 +901,222 @@ export function createAudioEngine() {
     active.gain.gain.setTargetAtTime(clamped, audioContext.currentTime, 0.01);
   }
 
+  // ---- turntable deck -------------------------------------------------------
+
+  // A slab beyond this never gets transferred whole; a window around the grab
+  // point is sent instead. Budgeted in BYTES rather than seconds on purpose: a
+  // seconds threshold silently means wildly different memory for mono vs stereo
+  // and 44.1k vs 48k. 128MB is ~5.8 min stereo at 48k, ~11.6 min mono. The
+  // still-cached original sits alongside it, and the copy below briefly doubles
+  // the peak, so a seconds-based 15-minute cap would have meant ~330MB of slab
+  // plus ~330MB of original plus the transient -- near a gigabyte for one track.
+  const DECK_MAX_BYTES = 128 * 1024 * 1024;
+  const DECK_WINDOW_SECONDS = 120;
+  // Full-scale audio through a realistically smoothed scratch peaks at ~1.06
+  // (see turntable-core.js), and this lands on the master bus alongside running
+  // pad voices, ahead of a compressor at -10dB and a tanh soft-clip that is
+  // already saturating at low level. 0.75 keeps the deck from pumping the pads
+  // harder than a DJ mixer would.
+  const DECK_GAIN = 0.75;
+  const DECK_RAMP_SECONDS = 0.015;
+
+  function isDeckArmed() {
+    return Boolean(deck);
+  }
+
+  // Copies one channel's samples for transfer to the worklet.
+  //
+  // NEVER transfer getChannelData(ch).buffer: that array is a live view onto the
+  // AudioBuffer's internal data, and per spec a detached ArrayBuffer makes
+  // "acquire the contents" hand back a ZERO-LENGTH channel. Every pad still
+  // holding that videoId would then play silence -- with no exception and
+  // nothing in the console, which is what makes it undebuggable. copyFromChannel
+  // is the spec-recommended read and removes any chance of someone later
+  // deleting a defensive .slice().
+  function copyDeckChannels(buffer, startFrame, frameCount) {
+    const channels = [];
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const copy = new Float32Array(frameCount);
+      buffer.copyFromChannel(copy, ch, startFrame);
+      channels.push(copy);
+    }
+    return channels;
+  }
+
+  // Arms the deck on `videoId`, loading and decoding the track first if it isn't
+  // cached yet. Returns false when the worklet is unavailable or the load fails,
+  // so the caller can leave the disc decorative instead of half-working.
+  async function armDeck(videoId, url, startSeconds = 0) {
+    if (!videoId) return false;
+    // Arming is async (it may have to download and decode), so a second call --
+    // switching skins or tracks quickly -- can overtake the first. The token
+    // lets a stale arm bail instead of clobbering the newer deck.
+    const token = ++armToken;
+    const buffer = buffers.get(videoId) || await loadAudio(videoId, url);
+    const ctx = await init();
+    if (!await ensureDeckWorklet(ctx)) return false;
+    if (token !== armToken) return false;
+
+    // ensureMasterChain is otherwise only ever called from play(), so the chain
+    // is still null until the first pad trigger -- going straight to the vinyl
+    // skin would throw on chain.masterGain without this.
+    const chain = ensureMasterChain(ctx);
+
+    if (deck) disarmDeck();
+
+    const rate = buffer.sampleRate;
+    const bytesPerFrame = buffer.numberOfChannels * 4;
+    const maxFrames = Math.floor(DECK_MAX_BYTES / bytesPerFrame);
+    let startFrame = 0;
+    let frameCount = buffer.length;
+    if (frameCount > maxFrames) {
+      // Window around the grab point. A gesture clamped at 4x for a generous
+      // 10s travels at most 40s, so the hand cannot reach a +/-120s edge; only
+      // post-release 1x playback can, and it re-arms while still far from it.
+      const windowFrames = Math.min(maxFrames, Math.floor(DECK_WINDOW_SECONDS * rate) * 2);
+      startFrame = Math.max(0, Math.min(buffer.length - windowFrames,
+        Math.floor(startSeconds * rate) - Math.floor(windowFrames / 2)));
+      frameCount = windowFrames;
+    }
+
+    let channels;
+    try {
+      channels = copyDeckChannels(buffer, startFrame, frameCount);
+    } catch (err) {
+      // A very large Float32Array can fail to allocate under memory pressure
+      // (reliably so on iOS). Better to report the deck unavailable than to
+      // take the tab down.
+      console.warn('Turntable deck slab allocation failed:', err);
+      return false;
+    }
+
+    const node = new AudioWorkletNode(ctx, 'turntable-processor', {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [buffer.numberOfChannels],
+    });
+    const gain = ctx.createGain();
+    // Ramped rather than switched: a bare connect/disconnect at full gain is an
+    // audible click at both ends.
+    gain.gain.value = 0;
+    // A source, not an insert: no per-voice filter/drive/pan/sends. It joins at
+    // masterGain so it runs through the same compressor and soft-clip the pads
+    // do and, crucially, reaches the post-limiter analyser -- which is what lets
+    // the vinyl skin's loudness bloom react to the scratch itself.
+    node.connect(gain);
+    gain.connect(chain.masterGain);
+
+    deck = {
+      node,
+      gain,
+      // Cached: setDeckRate runs on every pointer move, and parameters.get() is
+      // a map lookup we'd rather not repeat at that rate.
+      rateParam: node.parameters.get('rate'),
+      videoId,
+      channelCount: buffer.numberOfChannels,
+      offsetSeconds: startFrame / rate,
+      windowEndSeconds: (startFrame + frameCount) / rate,
+      fullDuration: buffer.duration,
+      windowed: frameCount < buffer.length,
+      lastPos: startSeconds,
+      lastFrame: null,
+      lastRate: 0,
+    };
+
+    node.port.onmessage = (e) => {
+      if (!deck || !e.data || e.data.type !== 'pos') return;
+      deck.lastPos = e.data.mediaSeconds;
+      deck.lastFrame = e.data.frame;
+    };
+
+    node.port.postMessage(
+      {
+        type: 'load',
+        channels,
+        sampleRate: rate,
+        offsetSeconds: deck.offsetSeconds,
+        startSeconds,
+      },
+      channels.map((c) => c.buffer),
+    );
+
+    gain.gain.setTargetAtTime(DECK_GAIN, ctx.currentTime, DECK_RAMP_SECONDS);
+    return true;
+  }
+
+  // De-zippered per pointer move. Chaining setTargetAtTime is correct here (each
+  // one starts from the param's current value, so the result is a continuous
+  // chain of one-pole segments) and matches rampVoiceRates/updateVoiceFx.
+  //
+  // The snap matters: setTargetAtTime is asymptotic, so "back to 1x" would sit
+  // at ~0.998 forever -- a permanent 0.2% detune and ~0.4s of drift over a
+  // 3-minute track. When the caller says it has settled, land exactly.
+  function setDeckRate(rate, settled = false) {
+    if (!deck || !audioContext) return;
+    const param = deck.rateParam;
+    if (!param) return;
+    const now = audioContext.currentTime;
+    if (settled) {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(rate, now);
+    } else {
+      // Skip a move too small to hear, so a resting hand stops emitting events.
+      if (Math.abs(rate - deck.lastRate) < 1e-3) return;
+      param.setTargetAtTime(rate, now, 0.008);
+    }
+    deck.lastRate = rate;
+  }
+
+  // Age-corrects the worklet's last report: it can be a full report interval
+  // stale AND it is a render-time position, while the user hears it
+  // outputLatency later. Same correction getVoiceTime applies to pad voices, so
+  // the tonearm and the editor playhead agree.
+  function getDeckTime() {
+    if (!deck) return null;
+    if (deck.lastFrame == null || !audioContext) return deck.lastPos;
+    const latency = audioContext.outputLatency || audioContext.baseLatency || 0;
+    const reportedAt = deck.lastFrame / audioContext.sampleRate;
+    const elapsed = audioContext.currentTime - reportedAt - latency;
+    const projected = deck.lastPos + elapsed * deck.lastRate;
+    return Math.max(0, Math.min(deck.fullDuration, projected));
+  }
+
+  function seekDeck(mediaSeconds) {
+    if (!deck) return;
+    deck.lastPos = mediaSeconds;
+    deck.lastFrame = null;
+    deck.node.port.postMessage({ type: 'seek', mediaSeconds });
+  }
+
+  // True when the head has drifted near the edge of a windowed slab, so the
+  // caller can re-arm while it is still far from running out.
+  function deckNeedsRearm() {
+    if (!deck || !deck.windowed) return false;
+    const pos = getDeckTime();
+    if (pos == null) return false;
+    const margin = DECK_WINDOW_SECONDS * 0.25;
+    return pos < deck.offsetSeconds + margin || pos > deck.windowEndSeconds - margin;
+  }
+
+  function disarmDeck() {
+    if (!deck) return;
+    const current = deck;
+    deck = null;
+    if (audioContext) {
+      current.gain.gain.cancelScheduledValues(audioContext.currentTime);
+      current.gain.gain.setTargetAtTime(0, audioContext.currentTime, DECK_RAMP_SECONDS);
+    }
+    current.node.port.onmessage = null;
+    // Disconnect only AFTER the fade has actually played -- cutting it short is
+    // the click the ramp exists to avoid. 'free' drops the slab and makes the
+    // processor's next process() return false so it can be collected.
+    const holdMs = Math.ceil(DECK_RAMP_SECONDS * 1000) * 4;
+    setTimeout(() => {
+      current.node.port.postMessage({ type: 'free' });
+      try { current.node.disconnect(); } catch { /* already torn down */ }
+    }, holdMs);
+  }
+
   function getActivePositions() {
     return Array.from(activeSources.keys());
   }
@@ -893,6 +1139,9 @@ export function createAudioEngine() {
   function unload(videoId) {
     buffers.delete(videoId);
     reversedBuffers.delete(videoId);
+    // The deck holds its own copy of the samples, so it would keep playing a
+    // track the user just deleted -- and keep that memory alive with it.
+    if (deck && deck.videoId === videoId) disarmDeck();
     // A load/prefetch for this id may still be in flight. Flag it so its
     // decode doesn't write the buffer back into the cache after the delete --
     // see the cache-write guard in loadAudio.
@@ -932,6 +1181,13 @@ export function createAudioEngine() {
     getVoiceTime,
     isLoaded,
     prefetchAudio,
+    armDeck,
+    setDeckRate,
+    getDeckTime,
+    seekDeck,
+    deckNeedsRearm,
+    disarmDeck,
+    isDeckArmed,
     unload,
     getAudioContext: () => audioContext,
     getMasterChain,
