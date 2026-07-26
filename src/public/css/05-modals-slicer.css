@@ -714,6 +714,57 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
+/* ============================================
+   SLICER HALF-COLLAPSE
+   ============================================
+   A third display state between the full takeover and the 32px rail. The panel
+   keeps everything it had (waveform, results list, transport) but claims only
+   the library's half of .main, so the PADs are visible AND droppable — which
+   is what makes dragging a slice onto a pad reachable at all. The base rule's
+   inset:0 already set left:0, so pin right and free left (same technique as
+   .slicer-minimized). */
+.library-sidenav.slicer-takeover.slicer-half {
+  left: auto;
+  right: 0;
+  width: min(560px, 50%);
+  border-radius: var(--radius);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.35);
+}
+
+.main.pads-videos-swapped .library-sidenav.slicer-takeover.slicer-half {
+  right: auto;
+  left: 0;
+  border-left: none;
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
+}
+
+/* The half button reads "dock to the right" by default; when PADS and MEDIOS
+   are swapped the panel docks LEFT instead, so mirror the glyph. Same
+   derive-from-.main approach as the min-rail chevron above. */
+.main.pads-videos-swapped #slicer-half-btn .material-symbols-outlined {
+  transform: scaleX(-1);
+}
+
+/* The takeover is absolutely positioned, so it does NOT push .pads-sidenav
+   aside — it would simply cover it. Capping the PADs panel to the other half
+   is what guarantees no overlap, and therefore that elementFromPoint can reach
+   a .pad during a slice drag. 30px = .main's 20px padding + half the 20px gap.
+   Only bites because slicer.js's applyPadsCap() clears the inline width that
+   makeResizable() may have written (an inline style would outrank this). */
+.main.slicer-half-active .pads-sidenav {
+  width: min(600px, calc(50% - 30px));
+}
+
+/* A drag that auto-collapses full -> half must land instantly: a width tween
+   would leave the PADs half-covered for the first frames of the gesture,
+   exactly when the drop targets need to be live. */
+.library-sidenav.slicer-takeover.slicer-no-anim,
+.main.slicer-half-active.slicer-no-anim .pads-sidenav {
+  transition: none;
+}
+
 /* Running time over the slicer waveform, mirroring the video display's
    #video-time-overlay so playback time reads the same in both places. */
 .slicer-time-overlay {
@@ -1144,5 +1195,24 @@ input.slicer-sensitivity-value:focus {
   .slicer-assign-select {
     min-width: 100%;
     order: 10;
+  }
+
+  /* Half-collapse degrades to full width here: the asides already stack at this
+     breakpoint, so there is no second half for the PADs to occupy — a 50% panel
+     would just be a cramped panel next to nothing. The half button stays
+     functional (it toggles the class), it simply has no visual effect. */
+  .library-sidenav.slicer-takeover.slicer-half,
+  .main.pads-videos-swapped .library-sidenav.slicer-takeover.slicer-half {
+    left: 0;
+    right: 0;
+    width: auto;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+  }
+
+  .main.slicer-half-active .pads-sidenav {
+    width: auto;
   }
 }

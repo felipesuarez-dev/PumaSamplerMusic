@@ -77,6 +77,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   const videoTitleEl = document.getElementById('slicer-video-title');
   const closeBtn = document.getElementById('slicer-close-btn');
   const minimizeBtn = document.getElementById('slicer-minimize-btn');
+  const halfBtn = document.getElementById('slicer-half-btn');
   const minRail = document.getElementById('slicer-min-rail');
   const minRailLabel = document.getElementById('slicer-min-rail-label');
   const canvas = document.getElementById('slicer-waveform-canvas');
@@ -133,8 +134,17 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
   let open = false;
   let closing = false;
-  let minimized = false;
+  // Display state of the takeover, independent of open/closing:
+  //   'full' -- covers .main (the original behavior, and the default)
+  //   'half' -- docked to the library's edge at ~half of .main, PADs usable
+  //   'min'  -- the 32px collapsed rail
+  // You can never be minimized AND half at once: 'min' is already maximally
+  // collapsed. prevPanelState remembers which of full/half to restore when the
+  // rail is clicked, so minimizing from half returns to half.
+  let panelState = 'full';
+  let prevPanelState = 'full';
   let closeTimer = null;
+  let waveformResizeObserver = null;
   let currentVideoId = null;
   let waveform = null;
   let worker = null;
@@ -232,6 +242,20 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     // re-rendered.
     canvas.title = t('slicer.markerHint');
     canvas.setAttribute('data-i18n-title', 'slicer.markerHint');
+    // One observer covers every layout change the panel can undergo --
+    // full<->half<->min plus window resizes -- instead of sprinkling
+    // resize()/draw() calls through each transition. Mirrors the pad editor's
+    // editorWaveformResizeObserver in app.js. Needed because a canvas measured
+    // while its container has no layout width stays 1x1 until re-measured (a
+    // gotcha this repo has hit twice: see media-display.js's setAudioMode).
+    if (typeof ResizeObserver === 'function' && !waveformResizeObserver) {
+      waveformResizeObserver = new ResizeObserver(() => {
+        if (!waveform) return;
+        waveform.resize();
+        waveform.draw();
+      });
+      waveformResizeObserver.observe(canvas);
+    }
     return waveform;
   }
 
@@ -377,8 +401,11 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // (which toggles the pad-editor preview) and before the page scrolls.
   function handleSlicerKeydown(e) {
     // While minimized the takeover is out of the way (PADs are in focus), so
-    // the slicer's cut/play/stop keys must not fire in the background.
-    if (minimized) return;
+    // the slicer's cut/play/stop keys must not fire in the background. The
+    // 'half' state deliberately keeps them live -- the panel is still fully
+    // visible there, and being able to audition cuts while the PADs sit next
+    // to you is the whole point of that state.
+    if (panelState === 'min') return;
     // Only stand down for true text-entry targets. The old guard bailed on ANY
     // focused <input>, so dragging the range sliders (volume/sensitivity) left
     // them focused and swallowed the Play/Stop/Cut keys until you clicked away.
@@ -1228,10 +1255,22 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       closeTimer = null;
     }
     closing = false;
-    minimized = false;
-    sidenav.classList.remove('slicer-takeover', 'slicer-closing', 'slicer-minimized');
+    panelState = 'full';
+    prevPanelState = 'full';
+    sidenav.classList.remove('slicer-takeover', 'slicer-closing', 'slicer-minimized', 'slicer-half', 'slicer-no-anim');
+    if (sidenav.parentElement) {
+      sidenav.parentElement.classList.remove('slicer-half-active', 'slicer-no-anim');
+    }
+    // Closing from the half state has to hand the PADs panel its own width
+    // back -- otherwise the user silently loses the size they dragged.
+    applyPadsCap(false);
+    refreshHalfButton();
     window.removeEventListener('keydown', handleSlicerKeydown, true);
     stopFullTrack();
+    if (waveformResizeObserver) {
+      waveformResizeObserver.disconnect();
+      waveformResizeObserver = null;
+    }
     if (waveform) {
       waveform.destroy();
       waveform = null;
@@ -1268,29 +1307,78 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }, 300);
   }
 
+  // makeResizable() writes an inline `style.width` straight onto #pads-sidenav
+  // when its handle is dragged (app.js), and its takeover guard only skips the
+  // element carrying .slicer-takeover -- which is the LIBRARY sidenav, never
+  // this one. So anyone who has ever resized the PADs panel carries a
+  // persistent inline width, and an inline style beats any class selector.
+  // Without stashing it, the half-state width cap below would silently do
+  // nothing for those users, the PADs would stay covered, and dragging a slice
+  // onto a pad would be impossible. Restored on the way out so the user keeps
+  // the width they chose.
+  let padsInlineWidth = null;
+  function applyPadsCap(on) {
+    const el = document.getElementById('pads-sidenav');
+    if (!el) return;
+    if (on) {
+      if (padsInlineWidth === null) padsInlineWidth = el.style.width || '';
+      el.style.width = '';
+    } else if (padsInlineWidth !== null) {
+      el.style.width = padsInlineWidth;
+      padsInlineWidth = null;
+    }
+  }
+
+  function refreshHalfButton() {
+    if (!halfBtn) return;
+    const isHalf = panelState === 'half';
+    const icon = halfBtn.querySelector('.material-symbols-outlined');
+    if (icon) icon.textContent = isHalf ? 'open_in_full' : 'dock_to_right';
+    const key = isHalf ? 'slicer.fullTitle' : 'slicer.halfTitle';
+    halfBtn.dataset.i18nTitle = key;
+    halfBtn.title = t(key);
+    halfBtn.setAttribute('aria-label', t(key));
+    halfBtn.setAttribute('aria-pressed', String(isHalf));
+  }
+
+  // Single writer for the three display states. Everything else (minimize, the
+  // rail, the half button, and the drag-to-pad gesture) routes through here so
+  // the class/inline-width bookkeeping lives in exactly one place. Callers do
+  // NOT need to poke the waveform: the ResizeObserver in ensureWaveform()
+  // catches every layout change these transitions cause.
+  function setPanelState(next) {
+    if (!open || next === panelState) return;
+    if (next !== 'min') prevPanelState = next;
+    panelState = next;
+    sidenav.classList.toggle('slicer-half', next === 'half');
+    sidenav.classList.toggle('slicer-minimized', next === 'min');
+    // One class on .main, all layout derived from it in CSS -- the same idiom
+    // app.js uses for .main.pads-videos-swapped.
+    if (sidenav.parentElement) {
+      sidenav.parentElement.classList.toggle('slicer-half-active', next === 'half');
+    }
+    applyPadsCap(next === 'half');
+    refreshHalfButton();
+  }
+
   // Minimize the takeover to the 32px collapsed rail (keeps slicer-takeover on
   // so the panel stays in the DOM for an instant expand). The rail label shows
   // "<mode> · <track>" — e.g. "Chops Manuales · Daft Punk…".
   function minimize() {
-    if (!open || minimized) return;
+    if (!open || panelState === 'min') return;
     const mode = (panelTitleEl && panelTitleEl.textContent.trim()) || '';
     const track = (videoTitleEl && videoTitleEl.textContent.trim()) || '';
     if (minRailLabel) minRailLabel.textContent = track ? `${mode} · ${track}` : mode;
-    minimized = true;
-    sidenav.classList.add('slicer-minimized');
+    setPanelState('min');
   }
 
   function expand() {
-    if (!minimized) return;
-    minimized = false;
-    sidenav.classList.remove('slicer-minimized');
-    // The panel was display:none while minimized, so the waveform canvas had no
-    // layout width — re-measure now that it's visible again (see waveform
-    // resize()'s clientWidth sizing), then redraw so markers stay precise.
-    if (waveform) {
-      waveform.resize();
-      waveform.draw();
-    }
+    if (panelState !== 'min') return;
+    setPanelState(prevPanelState);
+  }
+
+  function toggleHalf() {
+    setPanelState(panelState === 'half' ? 'full' : 'half');
   }
 
   function openCloseConfirmModal() {
@@ -1380,6 +1468,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
   closeBtn.addEventListener('click', close);
   if (minimizeBtn) minimizeBtn.addEventListener('click', minimize);
+  if (halfBtn) halfBtn.addEventListener('click', toggleHalf);
   if (minRail) minRail.addEventListener('click', expand);
 
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
