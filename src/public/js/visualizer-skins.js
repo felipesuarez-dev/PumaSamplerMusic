@@ -946,6 +946,24 @@ export function createVisualizerSkins({
     if (onDeckRelease) onDeckRelease({ resume: deckState.resume, settled: true });
   }
 
+  // Ends a gesture or coast at once, snapping to whatever it was heading for.
+  // Used when the rAF loop is about to stop and can no longer drive the decay.
+  function finishDeckCoast() {
+    if (!deckState.owns) return;
+    if (deckState.pointerId !== null && canvas.hasPointerCapture(deckState.pointerId)) {
+      canvas.releasePointerCapture(deckState.pointerId);
+    }
+    deckState.grabbed = false;
+    deckState.pointerId = null;
+    deckState.owns = false;
+    deckState.rate = deckState.resume ? 1 : 0;
+    deckState.omega = 0;
+    setCursorState(false, false);
+    cursorOnDisc = false;
+    if (onDeckRate) onDeckRate(deckState.rate, true);
+    if (onDeckRelease) onDeckRelease({ resume: deckState.resume, settled: true });
+  }
+
   canvas.addEventListener('pointerdown', onDeckPointerDown);
   canvas.addEventListener('pointermove', onDeckPointerMove);
   canvas.addEventListener('pointermove', updateDeckCursor);
@@ -968,6 +986,9 @@ export function createVisualizerSkins({
   function startLoop() {
     if (rafId !== null) return;
     resize();
+    // Reset so the first frame after a stop computes dt = 0 instead of the whole
+    // gap since the loop was last running.
+    lastFrameMs = 0;
     rafId = requestAnimationFrame(tick);
   }
 
@@ -1018,8 +1039,16 @@ export function createVisualizerSkins({
 
   // Pause the loop when the tab is hidden; resume if a skin is active.
   function onVisibility() {
-    if (document.hidden) stopLoop();
-    else if (activeSkin !== 'video') startLoop();
+    if (document.hidden) {
+      // The AudioContext keeps running when a tab hides but rAF does not, so a
+      // gesture or coast interrupted here would leave the rate frozen at
+      // whatever it was -- the deck audibly playing at, say, -2x for as long as
+      // the tab stays in the background. Land on the target immediately instead.
+      finishDeckCoast();
+      stopLoop();
+    } else if (activeSkin !== 'video') {
+      startLoop();
+    }
   }
   document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('resize', () => { if (activeSkin !== 'video') resize(); });

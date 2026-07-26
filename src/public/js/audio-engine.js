@@ -946,7 +946,19 @@ export function createAudioEngine() {
   // Arms the deck on `videoId`, loading and decoding the track first if it isn't
   // cached yet. Returns false when the worklet is unavailable or the load fails,
   // so the caller can leave the disc decorative instead of half-working.
-  async function armDeck(videoId, url, startSeconds = 0) {
+  // Live rate of the deck, so callers can tell "the deck is the thing currently
+  // playing the centre track" apart from "nothing is playing". Null when the
+  // deck isn't armed at all, which is a different answer from rate 0.
+  function getDeckRate() {
+    return deck ? deck.lastRate : null;
+  }
+
+  // startRate matters on a RE-arm: a fresh AudioWorkletNode's rate param starts
+  // at its declared default of 0, and the skin only pushes a rate while a
+  // gesture or its coast is live. Arming after that has finished -- a windowed
+  // slab re-arming during resumed playback, or a slow decode landing after the
+  // user already let go -- would otherwise leave the new node silently parked.
+  async function armDeck(videoId, url, startSeconds = 0, startRate = 0) {
     if (!videoId) return false;
     // Arming is async (it may have to download and decode), so a second call --
     // switching skins or tracks quickly -- can overtake the first. The token
@@ -1020,7 +1032,7 @@ export function createAudioEngine() {
       windowed: frameCount < buffer.length,
       lastPos: startSeconds,
       lastFrame: null,
-      lastRate: 0,
+      lastRate: startRate,
     };
 
     node.port.onmessage = (e) => {
@@ -1040,6 +1052,7 @@ export function createAudioEngine() {
       channels.map((c) => c.buffer),
     );
 
+    if (startRate !== 0 && deck.rateParam) deck.rateParam.setValueAtTime(startRate, ctx.currentTime);
     gain.gain.setTargetAtTime(DECK_GAIN, ctx.currentTime, DECK_RAMP_SECONDS);
     return true;
   }
@@ -1185,6 +1198,7 @@ export function createAudioEngine() {
     setDeckRate,
     getDeckTime,
     seekDeck,
+    getDeckRate,
     deckNeedsRearm,
     disarmDeck,
     isDeckArmed,

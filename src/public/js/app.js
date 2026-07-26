@@ -57,6 +57,10 @@ const mediaDisplay = createMediaDisplay({
     if (audio.isDeckArmed()) audio.disarmDeck();
   },
 });
+// Last rate the vinyl skin asked the deck for. Lives out here because the skin
+// only pushes a rate while a gesture or its coast is live, so an arm that
+// completes after that has to inherit it from somewhere.
+let lastDeckRate = 0;
 const visualizerSkins = createVisualizerSkins({
   container: document.querySelector('.video-display'),
   canvas: document.getElementById('skin-canvas'),
@@ -88,16 +92,30 @@ const visualizerSkins = createVisualizerSkins({
     // the gesture degrades to visual-only -- setDeckRate/seekDeck no-op with no
     // deck -- so the record still follows the hand and the audio joins in.
     if (!audio.isDeckArmed()) syncDeckForSkin('vinyl');
+    // "Was the centre track sounding?" has TWO sources, and missing the second
+    // one is why this has to be spelled out: before the first scratch it's the
+    // preview voice via mediaDisplay, but after a scratch resumes it's the DECK
+    // itself. mediaDisplay.pause() is never undone (the <video> is deliberately
+    // not resumed), so reading only its paused flag would report "not playing"
+    // from the second grab onward and coast every later release to a dead stop.
+    const deckRate = audio.getDeckRate();
+    const resume = !mediaDisplay.getPlaybackState().paused
+      || (deckRate != null && Math.abs(deckRate) > 0.05);
     // Stop only the CENTRE track: its preview voice (position 0) and the media
     // clock. Pad voices are deliberately left running -- you scratch over a
     // loop, the way a DJ does.
-    const resume = !mediaDisplay.getPlaybackState().paused;
+    const at = mediaDisplay.getPlaybackState().currentTime;
     audio.stop(0);
     mediaDisplay.pause();
-    audio.seekDeck(mediaDisplay.getPlaybackState().currentTime);
+    audio.seekDeck(at);
     return resume;
   },
-  onDeckRate: (rate, settled) => audio.setDeckRate(rate, settled),
+  onDeckRate: (rate, settled) => {
+    // Remembered so an arm that lands after the gesture is over still starts at
+    // the right rate (see armDeck's startRate).
+    lastDeckRate = rate;
+    audio.setDeckRate(rate, settled);
+  },
   onDeckRelease: ({ resume }) => {
     // Resync the centre display once, on settle. The <video> is not resumed:
     // under the vinyl skin it isn't visible anyway, so playing a muted element
@@ -1203,6 +1221,7 @@ let deckArmInFlight = false;
 async function syncDeckForSkin(skinName) {
   if (skinName !== 'vinyl') {
     audio.disarmDeck();
+    lastDeckRate = 0;
     return;
   }
   const videoId = mediaDisplay.getMediaId();
@@ -1212,7 +1231,10 @@ async function syncDeckForSkin(skinName) {
   if (!wasCached) showToast(t('deck.preparing'), 'info');
   try {
     const at = mediaDisplay.getPlaybackState().currentTime || 0;
-    const ok = await audio.armDeck(videoId, api.getAudioUrl(videoId), at);
+    // lastDeckRate, not 0: a flick-and-release during a slow decode finishes its
+    // coast before the slab arrives, and arming at 0 would then park the new node
+    // silently even though the user is expecting playback.
+    const ok = await audio.armDeck(videoId, api.getAudioUrl(videoId), at, lastDeckRate);
     if (!ok) showToast(t('deck.unavailable'), 'warning');
   } catch (err) {
     showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
@@ -1222,12 +1244,15 @@ async function syncDeckForSkin(skinName) {
 }
 
 // Re-arms a windowed slab around the current position (long tracks only, see
-// audio-engine's DECK_MAX_BYTES).
+// audio-engine's DECK_MAX_BYTES). Carries the live rate across, since this runs
+// after the gesture's coast has settled and nothing would push a rate again.
 function rearmDeck() {
   const videoId = mediaDisplay.getMediaId();
   if (!videoId) return;
   const at = audio.getDeckTime();
-  audio.armDeck(videoId, api.getAudioUrl(videoId), at == null ? 0 : at).catch(() => {});
+  const rate = audio.getDeckRate();
+  audio.armDeck(videoId, api.getAudioUrl(videoId), at == null ? 0 : at, rate == null ? 0 : rate)
+    .catch(() => {});
 }
 
 function initSkinToggle() {
