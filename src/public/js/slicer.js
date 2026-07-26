@@ -564,6 +564,51 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     applyBoundaries([0, currentAudioBuffer.duration]);
   }
 
+  // Confirm first: clearing throws away every cut in one click, and the cut
+  // count is exactly what the user has been building by hand. Undo can recover
+  // it, but only if they realise what happened -- the modal is cheaper.
+  function requestClearCuts() {
+    if (!currentVideoId || !currentAudioBuffer) return;
+    const count = currentSlices.length;
+    // A single whole-track slice means there is nothing to clear yet.
+    if (count <= 1) return;
+    openConfirmModal({
+      title: t('slicer.clearConfirmTitle'),
+      body: t('slicer.clearConfirmBody', { count }),
+      confirmLabel: t('slicer.clearConfirm'),
+      onConfirm: clearManualCuts,
+    });
+  }
+
+  // Deleting a slice means dropping the boundary it starts at, so its time is
+  // absorbed by the slice before it -- the list stays a contiguous cover of the
+  // track, which is the invariant boundariesToSlices/slicesToBoundaries rely on.
+  // The first slice has no removable start (index 0 is the track anchor), so it
+  // merges forward into its neighbour instead.
+  function deleteSlice(index) {
+    const boundaries = slicesToBoundaries(currentSlices);
+    // Two boundaries = one whole-track slice; there is no cut left to remove.
+    if (boundaries.length <= 2) return;
+    const removeAt = index === 0 ? 1 : index;
+    const next = removeBoundary(boundaries, removeAt);
+    if (next === boundaries) return; // no-op guard rejected it
+    stopPreview();
+    pushUndoSnapshot(true);
+    assignedMap.clear();
+    selected.clear();
+    applyBoundaries(next);
+  }
+
+  // Single place that flips the loading flag, mirroring setAnalyzing below, so
+  // the results list's locked styling can never drift out of step with it. The
+  // class goes on the list rather than each grip because the rows are already
+  // rendered by the time loading starts (they hold cached slices), so this must
+  // work without a re-render.
+  function setLoading(value) {
+    loading = value;
+    if (listEl) listEl.classList.toggle('slices-locked', value);
+  }
+
   // Single place that flips the analyzing flag, so the mode toggle is always
   // disabled in lockstep with it -- prevents a late worker `done` message
   // from landing after the user switched to Grid mid-analysis (the toggle
@@ -931,6 +976,9 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
 
     listEl.innerHTML = '';
     newSessionBtn.disabled = selected.size === 0;
+    // One whole-track slice means there are no cuts to clear, so the button
+    // reads as unavailable instead of opening a modal about nothing.
+    if (manualClearBtn) manualClearBtn.disabled = currentSlices.length <= 1;
     if (!currentSlices.length) return;
 
     const limit = pads.getCount();
@@ -981,6 +1029,15 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         : '<span class="material-symbols-outlined">play_arrow</span>';
       previewBtn.addEventListener('click', () => togglePreview(index, slice));
 
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn btn-transport slice-delete-btn';
+      deleteBtn.title = t('slicer.deleteSlice');
+      deleteBtn.dataset.i18nTitle = 'slicer.deleteSlice';
+      deleteBtn.dataset.index = String(index);
+      deleteBtn.innerHTML = '<span class="material-symbols-outlined">delete</span>';
+      deleteBtn.addEventListener('click', () => deleteSlice(index));
+
       const assignSelect = document.createElement('select');
       assignSelect.className = 'slicer-assign-select session-modal-select';
       buildAssignOptions(assignSelect);
@@ -995,19 +1052,29 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       // than the whole <li>: unlike a .pad, a slice row already contains a
       // checkbox, a <select> and a button, and a whole-row gesture would fight
       // all three for the pointer.
+      //
+      // The icon MUST be a child, not the grip itself: every
+      // .material-symbols-outlined in this app carries pointer-events:none
+      // (02-buttons-layout.css) so clicks fall through to the parent button, so
+      // a grip that *was* the icon could never receive pointerdown at all.
       const grip = document.createElement('span');
-      grip.className = 'slice-row-grip material-symbols-outlined';
-      grip.textContent = 'drag_indicator';
+      grip.className = 'slice-row-grip';
       grip.title = t('slicer.dragToPad');
       // applyTranslations() only re-derives elements carrying data-i18n-title,
       // so without this the tooltip would stay in the previous locale until the
       // next unrelated re-render happened to rebuild the row.
       grip.dataset.i18nTitle = 'slicer.dragToPad';
-      // No audio buffer means no thumbnail to draw, so there's nothing to drag.
-      if (!currentAudioBuffer) grip.classList.add('disabled');
-      else grip.addEventListener('pointerdown', (e) => startSliceDrag(index, slice, li, grip, e));
+      const gripIcon = document.createElement('span');
+      gripIcon.className = 'material-symbols-outlined';
+      gripIcon.textContent = 'drag_indicator';
+      grip.appendChild(gripIcon);
+      // Always listen, and read the buffer at gesture time instead of render
+      // time: the panel renders its cached slices BEFORE loadWaveformAudio
+      // resolves, so gating listener attachment on currentAudioBuffer left
+      // every grip permanently inert on reopen.
+      grip.addEventListener('pointerdown', (e) => startSliceDrag(index, slice, li, grip, e));
 
-      li.append(grip, checkbox, indexEl, timeEl, durEl, previewBtn, assignSelect);
+      li.append(grip, checkbox, indexEl, timeEl, durEl, previewBtn, deleteBtn, assignSelect);
 
       if (assignedMap.has(index)) {
         const badge = document.createElement('span');
@@ -1118,7 +1185,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   async function loadWaveformAudio(videoId, cachedSlices) {
     const wf = ensureWaveform();
     wf.setLoading();
-    loading = true;
+    setLoading(true);
     loadAbort = new AbortController();
     setProgress(0);
     // A cache hit skips straight to the render caption below (loadAudio never
@@ -1181,7 +1248,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
       }
     } finally {
-      loading = false;
+      setLoading(false);
       loadAbort = null;
       // On a clean completion, snap to 100% and hold briefly so the bar is
       // visibly seen filling before the overlay closes (the render phase can
@@ -1289,11 +1356,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     prevPanelState = 'full';
     sidenav.classList.remove('slicer-takeover', 'slicer-closing', 'slicer-minimized', 'slicer-half', 'slicer-no-anim');
     if (sidenav.parentElement) {
-      sidenav.parentElement.classList.remove('slicer-half-active', 'slicer-no-anim');
+      sidenav.parentElement.classList.remove('slicer-no-anim');
     }
-    // Closing from the half state has to hand the PADs panel its own width
-    // back -- otherwise the user silently loses the size they dragged.
-    applyPadsCap(false);
+    observePadsEdge(false);
+    if (sidenav.parentElement) sidenav.parentElement.style.removeProperty('--slicer-half-edge');
     refreshHalfButton();
     window.removeEventListener('keydown', handleSlicerKeydown, true);
     stopFullTrack();
@@ -1337,26 +1403,53 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     }, 300);
   }
 
-  // makeResizable() writes an inline `style.width` straight onto #pads-sidenav
-  // when its handle is dragged (app.js), and its takeover guard only skips the
-  // element carrying .slicer-takeover -- which is the LIBRARY sidenav, never
-  // this one. So anyone who has ever resized the PADs panel carries a
-  // persistent inline width, and an inline style beats any class selector.
-  // Without stashing it, the half-state width cap below would silently do
-  // nothing for those users, the PADs would stay covered, and dragging a slice
-  // onto a pad would be impossible. Restored on the way out so the user keeps
-  // the width they chose.
-  let padsInlineWidth = null;
-  function applyPadsCap(on) {
-    const el = document.getElementById('pads-sidenav');
-    if (!el) return;
-    if (on) {
-      if (padsInlineWidth === null) padsInlineWidth = el.style.width || '';
-      el.style.width = '';
-    } else if (padsInlineWidth !== null) {
-      el.style.width = padsInlineWidth;
-      padsInlineWidth = null;
+  // Half mode spans from the PADs panel's edge to the far edge of .main, rather
+  // than claiming a fixed fraction. That means the panel keeps every pixel the
+  // PADs aren't using -- and, crucially, it GROWS when the PADs collapse.
+  //
+  // An earlier attempt capped the PADs' width from CSS instead. That was wrong
+  // twice over: it fought the inline width makeResizable() writes, and a
+  // three-class cap outranked `.pads-sidenav:not(.expanded)` (two classes), so
+  // collapsing the PADs faded their body out but never shrank the panel.
+  // Measuring the real edge removes the conflict instead of trying to win it.
+  let padsEdgeObserver = null;
+
+  // The panel is absolutely positioned, so it falls out of .main's flex flow and
+  // loses the gap that would have separated it from the PADs. Read the real gap
+  // back rather than hardcoding 20px, so this can't silently drift into a double
+  // gap or an overlap if .main's layout is ever retuned.
+  function mainGapPx(main) {
+    const raw = parseFloat(getComputedStyle(main).columnGap);
+    return Number.isFinite(raw) ? raw : 20;
+  }
+
+  function syncHalfEdge() {
+    if (panelState !== 'half') return;
+    const main = sidenav.parentElement;
+    const padsEl = document.getElementById('pads-sidenav');
+    if (!main || !padsEl) return;
+    const mainRect = main.getBoundingClientRect();
+    const padsRect = padsEl.getBoundingClientRect();
+    // An absolutely positioned child resolves left/right against .main's
+    // padding box, so both offsets are measured from .main's own rect edges.
+    const edge = main.classList.contains('pads-videos-swapped')
+      ? mainRect.right - padsRect.left
+      : padsRect.right - mainRect.left;
+    main.style.setProperty('--slicer-half-edge', `${Math.max(0, Math.round(edge + mainGapPx(main)))}px`);
+  }
+
+  // Observing the PADs panel covers every way its width can change -- the
+  // resize handle, the collapse rail, a window resize, a grid-size change --
+  // with one signal, instead of trying to hook each of them.
+  function observePadsEdge(on) {
+    const padsEl = document.getElementById('pads-sidenav');
+    if (!on) {
+      if (padsEdgeObserver) { padsEdgeObserver.disconnect(); padsEdgeObserver = null; }
+      return;
     }
+    if (padsEdgeObserver || !padsEl || typeof ResizeObserver !== 'function') return;
+    padsEdgeObserver = new ResizeObserver(syncHalfEdge);
+    padsEdgeObserver.observe(padsEl);
   }
 
   function refreshHalfButton() {
@@ -1384,11 +1477,27 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     sidenav.classList.toggle('slicer-minimized', next === 'min');
     // One class on .main, all layout derived from it in CSS -- the same idiom
     // app.js uses for .main.pads-videos-swapped.
-    if (sidenav.parentElement) {
-      sidenav.parentElement.classList.toggle('slicer-half-active', next === 'half');
-    }
-    applyPadsCap(next === 'half');
+    observePadsEdge(next === 'half');
+    syncHalfEdge();
+    updateMinRailLabel();
     refreshHalfButton();
+  }
+
+  // The rail is the panel's collapse affordance in BOTH half and minimized
+  // state, so its label has to be current in both -- not just set on the way
+  // into minimize().
+  function updateMinRailLabel() {
+    if (!minRailLabel) return;
+    const mode = (panelTitleEl && panelTitleEl.textContent.trim()) || '';
+    const track = (videoTitleEl && videoTitleEl.textContent.trim()) || '';
+    minRailLabel.textContent = track ? `${mode} · ${track}` : mode;
+  }
+
+  // One rail, two jobs: collapse further when the panel is showing, restore
+  // when it is already minimized.
+  function handleMinRailClick() {
+    if (panelState === 'min') expand();
+    else minimize();
   }
 
   // Minimize the takeover to the 32px collapsed rail (keeps slicer-takeover on
@@ -1396,9 +1505,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   // "<mode> · <track>" — e.g. "Chops Manuales · Daft Punk…".
   function minimize() {
     if (!open || panelState === 'min') return;
-    const mode = (panelTitleEl && panelTitleEl.textContent.trim()) || '';
-    const track = (videoTitleEl && videoTitleEl.textContent.trim()) || '';
-    if (minRailLabel) minRailLabel.textContent = track ? `${mode} · ${track}` : mode;
+    updateMinRailLabel();
     setPanelState('min');
   }
 
@@ -1479,7 +1586,15 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   function startSliceDrag(index, slice, rowEl, grip, e) {
-    if (loading || !currentAudioBuffer || sliceDrag) return;
+    if (sliceDrag) return;
+    // Cached slices render before loadWaveformAudio resolves, so a row can be
+    // on screen while its audio isn't decoded yet. Say so instead of letting
+    // the grip look draggable and then do nothing -- a silent no-op here is
+    // indistinguishable from the feature being broken.
+    if (loading || !currentAudioBuffer) {
+      showToast(t('slicer.audioNotReady'), 'info');
+      return;
+    }
     grip.setPointerCapture(e.pointerId);
     sliceDrag = {
       index, slice, rowEl, grip,
@@ -1671,7 +1786,10 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   closeBtn.addEventListener('click', close);
   if (minimizeBtn) minimizeBtn.addEventListener('click', minimize);
   if (halfBtn) halfBtn.addEventListener('click', toggleHalf);
-  if (minRail) minRail.addEventListener('click', expand);
+  if (minRail) minRail.addEventListener('click', handleMinRailClick);
+  // The measured edge depends on viewport geometry, so a window resize has to
+  // recompute it even when the PADs panel's own box didn't change.
+  window.addEventListener('resize', syncHalfEdge);
 
   sensitivityInput.addEventListener('input', updateSensitivityLabel);
   sensitivityValueEl.addEventListener('input', onSensitivityNumberInput);
@@ -1738,7 +1856,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     cancelWorker();
   });
 
-  if (manualClearBtn) manualClearBtn.addEventListener('click', clearManualCuts);
+  if (manualClearBtn) manualClearBtn.addEventListener('click', requestClearCuts);
   if (manualPlayBtn) manualPlayBtn.addEventListener('click', playFullTrack);
   if (manualPauseBtn) manualPauseBtn.addEventListener('click', pauseFullTrack);
   if (manualStopBtn) manualStopBtn.addEventListener('click', stopFullTrack);
