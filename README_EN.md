@@ -92,6 +92,21 @@ npm start          # node src/server.js — listens on 0.0.0.0:4070
 
 With any of the three options, open **http://localhost:4070**. Service state is available at `GET /api/health`.
 
+#### Reaching it from another machine: you need HTTPS or localhost
+
+Two features use **AudioWorklet**: the turntable scratch and P.SHIFT (retuning without changing speed). Browsers only expose that API in a [secure context](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts) — **HTTPS** or **`localhost`**.
+
+Opening the app over `http://` at an **IP address** (say `http://192.168.1.50:4070`) puts it outside a secure context: the scratch reports that it needs a secure page, and P.SHIFT silently falls back to a speed change that drags pitch along with it. Everything else works normally.
+
+If you serve the app from another box, the simplest fix is an SSH tunnel, which turns the access into `localhost`:
+
+```bash
+ssh -L 4070:localhost:4070 user@server
+# then open http://localhost:4070 in your browser
+```
+
+For something permanent, put HTTPS in front of it with a reverse proxy and a domain name (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, or `tailscale serve` if you use Tailscale with HTTPS certificates enabled on the tailnet). A valid certificate needs a **DNS name**: no public CA issues certificates for private IP addresses, so `https://192.168.x.x` is not an option.
+
 ### Keyboard shortcuts
 
 The stop key and the slicer (Auto-Slicer / Chops) keys are **configurable** from **Settings**; the defaults are listed below. Global shortcuts stand down while you're typing in a text field.
@@ -153,6 +168,14 @@ The stop key and the slicer (Auto-Slicer / Chops) keys are **configurable** from
 6. **Save your session** — the **Save** button opens a modal to name it; load it later from the selector or the **Manage** modal (with search and per-session delete). Starting a new session opens a template modal: start from a blank layout, or copy the pads from an existing session as a starting point.
 7. **Organize the grid** — toggle **Organize** (next to the PADS selector) to drag and swap/move pads, copy one to another, or clear it; pads don't trigger audio while it's active.
 
+### Turntable scratch
+
+On the **vinyl** skin, move the cursor onto the record and it becomes a hand. Press and drag to scratch the track like a turntable — forward, backward, and at any speed in between, calibrated to 33⅓ RPM (one hand-turn every ~1.8s is normal speed). Let go and it coasts back to normal speed if the track was playing, or down to a stop if it was paused.
+
+Pads **keep playing** while you scratch: you scratch over the loop, the way a DJ does. Only the centre track stops.
+
+Needs a secure page (see [Reaching it from another machine](#reaching-it-from-another-machine-you-need-https-or-localhost)).
+
 ### Auto-Slicer
 
 Analyzes a full track (spectral-flux onset detection or a beat grid), lets you preview each cut, and assigns them to pads or spins up a new session from the selected ones.
@@ -162,6 +185,8 @@ Analyzes a full track (spectral-flux onset detection or a beat grid), lets you p
 ### Manual chops
 
 Chop the track by hand: double-click the waveform to drop each cut, preview them, and assign them to pads or start a new session from the selected ones.
+
+In both modes, the **half-width** button in the panel header pulls it back to the edge of the pads, leaving them visible and usable at the same time — and collapsing the pads hands the freed space to the panel. From there you can **drag a slice** by its grip and drop it on any pad, with a translucent thumbnail of that slice's waveform following the cursor. The assignment combobox still works; both paths share the same logic, including the confirm prompt when a pad is already taken. Each slice also gets its own delete button, and **Clear cuts** asks before discarding them all.
 
 <img src="docs/screenshot-chops.png" alt="Manual chops: waveform with hand-placed cuts and a slice list" width="100%" />
 
@@ -175,7 +200,9 @@ Chop the track by hand: double-click the waveform to drop each cut, preview them
 | **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor; every edit auto-commits, no per-pad save button |
 | **Per-pad FX** | Tune (±12 semitones), Cut, Res, Reverb send, and Delay send knobs per pad; P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH switch with a Speed knob (50–200%, time-stretch); tweaking these live while a pad loops warps it in real time |
 | **Rotary knobs** | Master and per-pad FX controls as rotary knobs: vertical drag, mouse wheel, Shift for fine adjustment, keyboard accessible |
-| **Auto-Slicer / Manual chops** | Automatic cut detection (adjustable sensitivity, real progress bar) or hand-placed cuts on the waveform; slice list with durations, preview, and selective assignment bounded by the pads in the grid |
+| **Auto-Slicer / Manual chops** | Automatic cut detection (adjustable sensitivity, real progress bar) or hand-placed cuts on the waveform; slice list with durations, preview, per-slice delete, and selective assignment bounded by the pads in the grid |
+| **Slices to pads** | Half-width mode parks the panel beside the pads (and grows when you collapse them); drag a slice by its grip onto a pad, with a translucent thumbnail of its waveform tracking the cursor; the assignment combobox stays available and shares the same confirm logic |
+| **Turntable scratch** | On the vinyl skin, grab the record with the mouse to scratch the track forward and backward at any speed (AudioWorklet engine, calibrated to 33⅓ RPM); release to coast back to speed or to a stop, and pads keep playing while you scratch. Needs a secure page (HTTPS or localhost) |
 | **Waveform Zoom/Pan** | `Ctrl` + mouse wheel to zoom, drag to pan, plus zoom in/out/reset buttons for precise slicing on long samples |
 | **Transport** | Play preview, mark in, mark out, stop; playhead synced to the video position; Material Symbols icons |
 | **Session Manager** | Save (name modal), load, or delete sessions; Manage modal with search and per-row delete; new-session modal to start fresh or copy pads from an existing session as a template |
@@ -333,7 +360,9 @@ data/
 ## Notes
 
 - Beyond YouTube URLs (`youtube.com/watch?v=...` and `youtu.be/...`), you can upload local audio or video files from the **Local** tab.
-- First playback of a media item may have a short load time while the browser decodes the audio buffer.
+- First playback of a media item may have a short load time while the browser decodes the audio buffer. These are two different transfers: the Library download goes from YouTube to the server, while the editor's goes from the server to the browser (plus decoding). The editor's captions name them separately, an already-decoded track opens instantly, and hovering the scissors prefetches it.
+- The decoded-audio cache lives in memory, so it empties on a page reload.
+- The turntable scratch and P.SHIFT need **AudioWorklet**, which browsers only expose on secure pages (HTTPS or `localhost`). See [Reaching it from another machine](#reaching-it-from-another-machine-you-need-https-or-localhost).
 - One-shot mode plays the full segment on key press; gate mode plays while the key is held.
 - The media cache uses disk, not RAM, because full 1080p videos exceed practical tmpfs limits.
 - If YouTube shows the bot-check error despite the PO-token provider, load a browser-exported `cookies.txt` from **Settings** (or via `COOKIES_FILE`).

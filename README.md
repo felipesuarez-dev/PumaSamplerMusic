@@ -92,6 +92,21 @@ npm start          # node src/server.js — escucha en 0.0.0.0:4070
 
 En cualquiera de las tres opciones, abre **http://localhost:4070**. El estado del servicio se consulta en `GET /api/health`.
 
+#### Acceso desde otra máquina: necesitas HTTPS o localhost
+
+Dos funciones usan **AudioWorklet**: el scratch de la tornamesa y el P.SHIFT (afinar sin cambiar la velocidad). El navegador solo expone esa API en un [contexto seguro](https://developer.mozilla.org/es/docs/Web/Security/Secure_Contexts), es decir **HTTPS** o **`localhost`**.
+
+Abrir la app por `http://` con una **dirección IP** (por ejemplo `http://192.168.1.50:4070`) la deja fuera del contexto seguro: el scratch avisa que hace falta una página segura, y P.SHIFT cae en silencio a un cambio de velocidad acoplado al tono. El resto de la app funciona igual.
+
+Si sirves la app desde otro equipo, la forma más simple es un túnel SSH, que convierte el acceso en `localhost`:
+
+```bash
+ssh -L 4070:localhost:4070 usuario@servidor
+# luego abre http://localhost:4070 en tu navegador
+```
+
+Para algo permanente, ponle HTTPS delante con un proxy inverso y un nombre de dominio (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, o `tailscale serve` si usas Tailscale con los certificados HTTPS habilitados en el tailnet). Un certificado válido requiere un **nombre DNS**: no existen certificados públicos para direcciones IP privadas, así que `https://192.168.x.x` no es una opción.
+
 ### Atajos de teclado
 
 Las teclas de stop y las del cortador (Auto-Slicer / Chops) son **configurables** desde **Configuración**; abajo se listan los valores por defecto. Los atajos globales se desactivan mientras escribes en un campo de texto.
@@ -153,6 +168,14 @@ Las teclas de stop y las del cortador (Auto-Slicer / Chops) son **configurables*
 6. **Guardar la sesión** — el botón **Save** abre un modal para nombrarla; cárgala después desde el selector o desde el modal **Gestionar** (con búsqueda y eliminación por sesión). Al iniciar una sesión nueva se abre un modal de plantilla: empezar desde una disposición en blanco, o copiar los PADs de una sesión existente como punto de partida.
 7. **Organizar la grilla** — activa **Organizar** (junto al selector de PADS) para arrastrar e intercambiar o mover PADs, copiar uno a otro o limpiarlo; mientras está activo los PADs no disparan audio.
 
+### Tornamesa con scratch
+
+En el skin de **vinilo**, acerca el cursor al disco: se convierte en una mano. Presiona y muévelo para rayar la pista como en una tornamesa — hacia adelante, hacia atrás y a cualquier velocidad, calibrado a 33⅓ RPM (una vuelta de mano cada ~1,8 s es velocidad normal). Al soltar, si la pista venía sonando vuelve sola a velocidad normal; si estaba pausada, frena hasta detenerse.
+
+Los PADs **siguen sonando** mientras rayas: se raya por encima del loop, como lo haría un DJ. Solo se detiene la pista central.
+
+Requiere una página segura (ver [Acceso desde otra máquina](#acceso-desde-otra-máquina-necesitas-https-o-localhost)).
+
 ### Auto-Slicer
 
 Analiza una pista completa (detección de onsets por flujo espectral o cuadrícula por beats), previsualiza cada corte y asígnalos a PADs o crea una sesión nueva con los seleccionados.
@@ -162,6 +185,8 @@ Analiza una pista completa (detección de onsets por flujo espectral o cuadrícu
 ### Chops manuales
 
 Corta la pista a mano: doble clic en la forma de onda para colocar cada corte, previsualízalos y asígnalos a los PADs o crea una sesión nueva con los seleccionados.
+
+En ambos modos, el botón de **media pantalla** en la cabecera del panel lo achica hasta el borde de los PADs, dejándolos visibles y utilizables al mismo tiempo — y si colapsas los PADs, el panel crece para ocupar el espacio. Desde ahí puedes **arrastrar un corte** por su manija y soltarlo sobre el PAD que quieras: mientras arrastras te sigue una miniatura translúcida de la forma de onda de ese corte. El combobox de asignación sigue funcionando igual; ambos caminos comparten la misma lógica, incluida la confirmación si el PAD ya está ocupado. Cada corte tiene además su botón de eliminar, y **Limpiar cortes** pide confirmación antes de borrarlos todos.
 
 <img src="docs/screenshot-chops.png" alt="Chops manuales: forma de onda con cortes colocados a mano y lista de cortes" width="100%" />
 
@@ -175,7 +200,9 @@ Corta la pista a mano: doble clic en la forma de onda para colocar cada corte, p
 | **Editor de PAD** | Etiqueta, tecla, volumen, color, modo de disparo (one-shot / gate), loop, editor de segmento de forma de onda; cada edición se guarda automáticamente, sin botón de guardado por PAD |
 | **FX por PAD** | Knobs de Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD; switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, time-stretch); ajustar en vivo mientras el PAD hace loop lo deforma en tiempo real |
 | **Knobs rotativos** | Controles de FX maestros y por PAD como knobs giratorios: arrastre vertical, rueda del mouse, Shift para ajuste fino, navegables por teclado |
-| **Auto-Slicer / Chops manuales** | Detección automática de cortes (sensibilidad ajustable, barra de progreso real) o corte manual sobre la forma de onda; lista de slices con duración, previsualización y asignación selectiva a los PADs de la grilla |
+| **Auto-Slicer / Chops manuales** | Detección automática de cortes (sensibilidad ajustable, barra de progreso real) o corte manual sobre la forma de onda; lista de slices con duración, previsualización, eliminar por corte y asignación selectiva a los PADs de la grilla |
+| **Cortes a los PADs** | Modo media pantalla que deja el panel junto a los PADs (y crece si los colapsas); arrastra un corte por su manija hasta el PAD, con miniatura translúcida de su forma de onda siguiendo al cursor; el combobox de asignación sigue disponible y comparte la misma lógica de confirmación |
+| **Tornamesa con scratch** | En el skin de vinilo, agarra el disco con el mouse para rayar la pista hacia adelante y atrás a cualquier velocidad (motor AudioWorklet, calibrado a 33⅓ RPM); al soltar vuelve a velocidad normal o frena, y los PADs siguen sonando mientras rayas. Requiere página segura (HTTPS o localhost) |
 | **Zoom/Pan de forma de onda** | `Ctrl` + rueda del mouse para zoom, arrastrar para pan, más botones de zoom in/out/reset para cortes precisos en muestras largas |
 | **Transporte** | Reproducir previsualización, marcar entrada, marcar salida, detener; playhead sincronizado con la posición del video; íconos Material Symbols |
 | **Gestor de sesiones** | Guardar (modal con nombre), cargar o eliminar sesiones; modal Gestionar con búsqueda y eliminación por fila; modal de sesión nueva para empezar de cero o copiar PADs de una sesión existente como plantilla |
@@ -333,7 +360,9 @@ data/
 ## Notas
 
 - Además de URLs de YouTube (`youtube.com/watch?v=...` y `youtu.be/...`), puedes subir archivos locales de audio o video desde la pestaña **Local**.
-- La primera reproducción de un medio puede tener una breve carga mientras el navegador decodifica el buffer de audio.
+- La primera reproducción de un medio puede tener una breve carga mientras el navegador decodifica el buffer de audio. Son dos transferencias distintas: la descarga de la Biblioteca va de YouTube al servidor, y la del editor va del servidor al navegador (más la decodificación). Los rótulos del editor lo indican por separado, y una pista ya decodificada abre al instante; pasar el mouse sobre las tijeras la precarga.
+- El caché de audio decodificado vive en memoria, así que se vacía al recargar la página.
+- El scratch de la tornamesa y el P.SHIFT necesitan **AudioWorklet**, que el navegador solo expone en páginas seguras (HTTPS o `localhost`). Ver [Acceso desde otra máquina](#acceso-desde-otra-máquina-necesitas-https-o-localhost).
 - El modo one-shot reproduce el segmento completo al presionar la tecla; el modo gate reproduce mientras la tecla se mantiene presionada.
 - El caché de medios usa disco, no RAM, porque los videos 1080p completos exceden los límites prácticos de tmpfs.
 - Si YouTube muestra el error de bot-check a pesar del proveedor de PO tokens, carga un `cookies.txt` exportado del navegador desde **Configuración** (o vía `COOKIES_FILE`).
