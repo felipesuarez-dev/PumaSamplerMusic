@@ -743,13 +743,22 @@
    visualizer-skins.js. An oversized hand makes the record read as grabbable at a
    glance; the classes are toggled from the same per-pixel hit test the grab uses,
    so the cursor changes over the record and NOT over the platter rim, which
-   :hover could never distinguish. */
+   :hover could never distinguish.
+
+   Both states are custom SVGs at the SAME 40x40 box with the same hotspot: the
+   native `grabbing` keyword renders at the system cursor size, so pairing it
+   with an oversized open hand made the hand appear to shrink the instant you
+   pressed. The keyword stays only as the final fallback in each list. */
 .video-display.skin-scratchable .skin-canvas {
   cursor: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M14 34c-3 0-5-2-6-5l-3-8c-1-2 0-4 2-4 1 0 2 1 3 2l2 3V9c0-2 1-3 3-3s3 1 3 3v8V6c0-2 1-3 3-3s3 1 3 3v11V8c0-2 1-3 3-3s3 1 3 3v9v-4c0-2 1-3 3-3s3 1 3 3v12c0 5-4 9-9 9z' fill='%23fff' stroke='%23111' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 20 20, grab;
 }
 
+/* Closed fist: same box, same hotspot, three knuckles so it reads as the same
+   hand having gripped. Deliberately drawn to fill nearly the whole box rather
+   than to anatomical scale — a real fist is much shorter than an open hand, and
+   drawing it that way made the cursor appear to shrink on press. */
 .video-display.skin-scratching .skin-canvas {
-  cursor: grabbing;
+  cursor: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M6 28V18a5 5 0 0 1 10 0v-3a5 5 0 0 1 10 0v2a5 5 0 0 1 10 0v11a11 11 0 0 1-11 11h-8A11 11 0 0 1 6 28z' fill='%23fff' stroke='%23111' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E") 20 20, grabbing;
 }
 
 .video-display.skin-active .skin-canvas {
