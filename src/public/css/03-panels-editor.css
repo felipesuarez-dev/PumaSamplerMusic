@@ -165,7 +165,12 @@
   /* Sits left of the panel's collapse chevron (which is at right:12px) so the
      two icons don't overlap. */
   right: 36px;
-  z-index: 3;
+  /* No z-index on purpose: any z-index here makes this absolutely-positioned
+     button a stacking context, which traps its fixed ::after tooltip at that
+     level — and the central media viewer stacks children up to z:2500, so they
+     paint over the tooltip's right half (clipping it at the viewer's edge).
+     Without a z-index the tooltip (z-index:9999) rises to the root layer above
+     the viewer, and the button still sits over the header via DOM order. */
   display: flex;
   align-items: center;
   justify-content: center;
