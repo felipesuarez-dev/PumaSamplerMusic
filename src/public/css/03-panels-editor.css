@@ -789,6 +789,15 @@
   transition: var(--transition);
 }
 
+/* Restore [hidden] over the author display:flex above: an author rule beats the
+   UA `[hidden] { display: none }` by ORIGIN, not specificity, so without this
+   the vinyl-only controls (spin speed, DJ mode) stayed visible on every skin
+   even though refreshSkinToggleIcon sets .hidden on them. Same fix already
+   applied to .video-library[hidden], .slicer-mode-toggle[hidden] and friends. */
+.skin-toggle-btn[hidden] {
+  display: none;
+}
+
 .skin-toggle-btn:hover {
   background: rgba(0, 0, 0, 0.8);
   border-color: var(--accent);
