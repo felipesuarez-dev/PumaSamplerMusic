@@ -1122,6 +1122,74 @@ input.slicer-sensitivity-value:focus {
   flex-wrap: wrap;
 }
 
+/* Drag handle for slice -> PAD assignment. touch-action:none is required or a
+   touch drag scrolls the results list instead of starting the gesture. */
+.slice-row-grip {
+  flex: 0 0 auto;
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.slice-row-grip:active {
+  cursor: grabbing;
+}
+
+/* No decoded buffer yet means no thumbnail can be drawn, so the gesture is
+   unavailable rather than silently doing nothing. */
+.slice-row-grip.disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.slice-row.dragging {
+  opacity: 0.4;
+}
+
+/* Slice drag ghost: a translucent mini-waveform of the slice being dragged, so
+   the user sees WHAT they're dropping. Same fixed/centred/pointer-events-none
+   posture as .pad-drag-ghost (that last one is what lets elementFromPoint see
+   the pad underneath), but landscape, since a waveform needs a wide box. Kept
+   clearly translucent so the target pad stays readable through it. */
+/* The ghost sizes itself AROUND the canvas rather than declaring its own width.
+   With the global `* { box-sizing: border-box }` reset, a fixed 132px here
+   would make 132px the outer box, leaving the canvas only 116px of content
+   width -- and since the bitmap is authored at 132 CSS px, the browser would
+   squash the waveform ~12% on every drag. Letting the canvas state its own
+   width keeps the bitmap and its display size in agreement at every dpr. */
+.slice-drag-ghost {
+  position: fixed;
+  z-index: 3000;
+  width: max-content;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border-radius: var(--radius);
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  opacity: 0.5;
+  box-shadow: var(--shadow);
+  padding: 6px;
+}
+
+/* Must match THUMB_CSS_WIDTH / THUMB_CSS_HEIGHT in slicer.js's
+   buildThumbCanvas, which authors the backing store at these dimensions. */
+.slice-drag-ghost canvas {
+  display: block;
+  width: 132px;
+  height: 44px;
+}
+
+.slice-drag-ghost-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 .slice-row-checkbox {
   flex: 0 0 auto;
 }

@@ -10,6 +10,7 @@ import {
   bpmFromLength,
 } from './slicer-slices.js';
 import { MIN_SLICE_SECONDS, snapToZeroCrossing } from './slicer-core.js';
+import { buildSlicePeaks, drawSlicePeaks } from './slice-thumbnail.js';
 
 const CLOSE_SKIP_CONFIRM_KEY = 'puma-slicer-skip-close-confirm';
 const CHOP_KEY_STORAGE = 'puma-slicer-chop-key';
@@ -903,6 +904,19 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   }
 
   function renderResultsList() {
+    // A slice drag holds a plain index plus the row's DOM node, and this
+    // function rebuilds both from scratch (listEl.innerHTML = ''). The keys
+    // that mutate the list -- the cut key and Ctrl+Z -- stay live in the 'half'
+    // state that a drag auto-collapses into, so this is reachable with one hand
+    // on the mouse and one on the keyboard. Cancelling is the honest outcome:
+    // the slice the user grabbed no longer exists at that index, and dropping a
+    // stale index would assign the wrong audio and then have its own badge
+    // pruned right back out by pruneStaleAssignments below.
+    // Safe against re-entry: endSliceDrag() clears sliceDrag BEFORE calling
+    // requestAssign, so the assign path's own re-render never lands here with a
+    // live gesture.
+    if (sliceDrag) cancelSliceDrag();
+
     pruneStaleAssignments();
 
     if (!currentSlices.length) {
@@ -977,7 +991,23 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
         requestAssign(index, slice, position);
       });
 
-      li.append(checkbox, indexEl, timeEl, durEl, previewBtn, assignSelect);
+      // Drag handle, first in the row. Deliberately a dedicated grip rather
+      // than the whole <li>: unlike a .pad, a slice row already contains a
+      // checkbox, a <select> and a button, and a whole-row gesture would fight
+      // all three for the pointer.
+      const grip = document.createElement('span');
+      grip.className = 'slice-row-grip material-symbols-outlined';
+      grip.textContent = 'drag_indicator';
+      grip.title = t('slicer.dragToPad');
+      // applyTranslations() only re-derives elements carrying data-i18n-title,
+      // so without this the tooltip would stay in the previous locale until the
+      // next unrelated re-render happened to rebuild the row.
+      grip.dataset.i18nTitle = 'slicer.dragToPad';
+      // No audio buffer means no thumbnail to draw, so there's nothing to drag.
+      if (!currentAudioBuffer) grip.classList.add('disabled');
+      else grip.addEventListener('pointerdown', (e) => startSliceDrag(index, slice, li, grip, e));
+
+      li.append(grip, checkbox, indexEl, timeEl, durEl, previewBtn, assignSelect);
 
       if (assignedMap.has(index)) {
         const badge = document.createElement('span');
@@ -1380,6 +1410,178 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
   function toggleHalf() {
     setPanelState(panelState === 'half' ? 'full' : 'half');
   }
+
+  // ---- slice -> PAD drag ----------------------------------------------------
+  // Mirrors organize-mode's pointer gesture in pads.js (capture, 8px threshold,
+  // fixed ghost, elementFromPoint drop target, cleanup before the terminal
+  // action) rather than the HTML5 drag&drop API, which this codebase uses
+  // nowhere. The terminal action is requestAssign() -- the SAME function the
+  // assign <select> calls -- so the occupied-pad confirm, assignedMap
+  // bookkeeping, toast and re-render are identical between the two paths by
+  // construction, and the combobox keeps working untouched.
+  const SLICE_DRAG_THRESHOLD_PX = 8;
+  // Must match the canvas rule in .slice-drag-ghost (05-modals-slicer.css):
+  // the bitmap is authored at these CSS dimensions, so a mismatch would scale
+  // and distort the waveform.
+  const THUMB_CSS_WIDTH = 132;
+  const THUMB_CSS_HEIGHT = 44;
+  const THUMB_CACHE_LIMIT = 8;
+  // Keyed by index AND boundaries, not index alone: currentSlices is reassigned
+  // from seven places (analysis, grid, manual cuts, undo, cache restore, close),
+  // and keying on the boundaries makes a stale entry unservable instead of
+  // relying on every one of those sites remembering to invalidate.
+  const thumbCache = new Map();
+
+  let sliceDrag = null;
+
+  function buildThumbCanvas(index, slice) {
+    const key = `${index}:${slice.start}:${slice.end}`;
+    const cached = thumbCache.get(key);
+    if (cached) {
+      // Re-insert so this key becomes the newest: Map iteration is insertion
+      // order and .get() does not reorder, so without this the eviction below
+      // would be plain FIFO and could drop the entry being used most.
+      thumbCache.delete(key);
+      thumbCache.set(key, cached);
+      return cached;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const canvasEl = document.createElement('canvas');
+    canvasEl.width = Math.round(THUMB_CSS_WIDTH * dpr);
+    canvasEl.height = Math.round(THUMB_CSS_HEIGHT * dpr);
+    const ctx2d = canvasEl.getContext('2d');
+    const data = currentAudioBuffer.getChannelData(0);
+    const rate = currentAudioBuffer.sampleRate;
+    const peaks = buildSlicePeaks(data, slice.start * rate, slice.end * rate, canvasEl.width);
+    drawSlicePeaks(ctx2d, peaks, {
+      width: canvasEl.width,
+      height: canvasEl.height,
+      color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff9f1c',
+      dpr,
+    });
+    // Tiny LRU: re-dragging the same row is free, and a bounded map keeps this
+    // from retaining a canvas per slice on a 512-slice grid.
+    if (thumbCache.size >= THUMB_CACHE_LIMIT) thumbCache.delete(thumbCache.keys().next().value);
+    thumbCache.set(key, canvasEl);
+    return canvasEl;
+  }
+
+  function createSliceGhost(index, slice) {
+    const ghost = document.createElement('div');
+    ghost.className = 'slice-drag-ghost';
+    ghost.appendChild(buildThumbCanvas(index, slice));
+    const label = document.createElement('span');
+    label.className = 'slice-drag-ghost-label';
+    label.textContent = `#${index + 1} · ${(slice.end - slice.start).toFixed(2)}s`;
+    ghost.appendChild(label);
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+
+  function startSliceDrag(index, slice, rowEl, grip, e) {
+    if (loading || !currentAudioBuffer || sliceDrag) return;
+    grip.setPointerCapture(e.pointerId);
+    sliceDrag = {
+      index, slice, rowEl, grip,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      dragging: false,
+      ghostEl: null,
+      targetPosition: null,
+      onKeydown: null,
+    };
+  }
+
+  function beginSliceDrag() {
+    // A drag started from the FULL takeover can never reach a PAD -- the panel
+    // covers .main. Collapse to half on the spot, skipping the width tween so
+    // the drop targets are live from the very first pointermove instead of
+    // arriving a few frames late. The source row reflowing underneath is
+    // harmless: the pointer is captured on the grip and the ghost already
+    // follows the cursor, so nothing the user is touching moves.
+    if (panelState === 'full') {
+      sidenav.classList.add('slicer-no-anim');
+      if (sidenav.parentElement) sidenav.parentElement.classList.add('slicer-no-anim');
+      setPanelState('half');
+    }
+    sliceDrag.dragging = true;
+    sliceDrag.rowEl.classList.add('dragging');
+    sliceDrag.ghostEl = createSliceGhost(sliceDrag.index, sliceDrag.slice);
+    // Escape abandons the drag. Registered in the capture phase with
+    // stopPropagation so the press is consumed here rather than reaching
+    // anything downstream that might also treat Escape as "close". Note this
+    // cannot outrank handleSlicerKeydown: both sit on window in the same phase,
+    // and same-phase listeners on the same target fire in REGISTRATION order,
+    // so the slicer's handler (registered at open time) always runs first. That
+    // is fine today because it has no Escape branch -- but it means a future
+    // window-level Escape-to-close would need its own is-a-drag-active guard,
+    // not this stopPropagation.
+    sliceDrag.onKeydown = (ev) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      cancelSliceDrag();
+    };
+    window.addEventListener('keydown', sliceDrag.onKeydown, true);
+  }
+
+  function moveSliceGhost(x, y) {
+    if (!sliceDrag || !sliceDrag.ghostEl) return;
+    sliceDrag.ghostEl.style.left = `${x}px`;
+    sliceDrag.ghostEl.style.top = `${y}px`;
+  }
+
+  function updateSliceDrag(e) {
+    if (!sliceDrag || e.pointerId !== sliceDrag.pointerId) return;
+    if (!sliceDrag.dragging) {
+      const dx = e.clientX - sliceDrag.startX;
+      const dy = e.clientY - sliceDrag.startY;
+      if (Math.hypot(dx, dy) < SLICE_DRAG_THRESHOLD_PX) return;
+      beginSliceDrag();
+    }
+    moveSliceGhost(e.clientX, e.clientY);
+    sliceDrag.targetPosition = pads.highlightDropTarget(document.elementFromPoint(e.clientX, e.clientY));
+  }
+
+  function cleanupSliceDrag() {
+    if (!sliceDrag) return;
+    const { grip, pointerId, rowEl, ghostEl, onKeydown } = sliceDrag;
+    if (onKeydown) window.removeEventListener('keydown', onKeydown, true);
+    if (grip.hasPointerCapture && grip.hasPointerCapture(pointerId)) grip.releasePointerCapture(pointerId);
+    rowEl.classList.remove('dragging');
+    if (ghostEl) ghostEl.remove();
+    pads.clearDropTargets();
+    sidenav.classList.remove('slicer-no-anim');
+    if (sidenav.parentElement) sidenav.parentElement.classList.remove('slicer-no-anim');
+    sliceDrag = null;
+  }
+
+  // Abandon a drag without assigning anything (Escape, pointercancel, or the
+  // results list being rebuilt underneath the gesture).
+  function cancelSliceDrag() {
+    if (!sliceDrag) return;
+    sliceDrag.targetPosition = null;
+    cleanupSliceDrag();
+  }
+
+  function endSliceDrag(e) {
+    if (!sliceDrag || e.pointerId !== sliceDrag.pointerId) return;
+    const { index, slice, targetPosition, dragging } = sliceDrag;
+    // Tear the ghost and highlights down BEFORE the terminal action:
+    // requestAssign can open a confirm modal, and anything left behind would
+    // survive on top of it (same reason pads.js cleans up before swap()).
+    cleanupSliceDrag();
+    if (dragging && targetPosition !== null) requestAssign(index, slice, targetPosition);
+  }
+
+  // Registered on window once (createSlicer runs a single time) rather than
+  // per-element like pads.js does: the results list is rebuilt wholesale on
+  // every re-render, so an element-scoped listener would be torn down with its
+  // row. Every handler no-ops unless a gesture is actually live.
+  window.addEventListener('pointermove', updateSliceDrag);
+  window.addEventListener('pointerup', endSliceDrag);
+  window.addEventListener('pointercancel', cancelSliceDrag);
 
   function openCloseConfirmModal() {
     if (closeModalOpen) return;

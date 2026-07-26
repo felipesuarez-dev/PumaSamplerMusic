@@ -369,6 +369,22 @@ export function createPads(container, options = {}, initialCount = 9) {
     }
   }
 
+  // Drop-target highlighting for an EXTERNAL drag source -- currently the
+  // slicer's slice -> PAD gesture. Takes whatever elementFromPoint returned and
+  // does the containment/position validation here, so no other module has to
+  // know about `.pad[data-position]` or the drop-target class names, and the
+  // swap/move highlight vocabulary stays identical to organize-mode's own drag.
+  // Returns the target position, or null when the point isn't over a real pad.
+  function highlightDropTarget(el) {
+    clearDropTargets();
+    const padEl = el && el.closest && el.closest('.pad[data-position]');
+    if (!padEl || !container.contains(padEl)) return null;
+    const position = Number(padEl.dataset.position);
+    if (!pads.has(position)) return null;
+    padEl.classList.add(state.get(position) ? 'drop-target-swap' : 'drop-target-move');
+    return position;
+  }
+
   function applyColorActive(el, color) {
     if (!color) return;
     el.style.background = `${color}22`;
@@ -499,6 +515,8 @@ export function createPads(container, options = {}, initialCount = 9) {
     swap,
     copyPad,
     clear,
+    highlightDropTarget,
+    clearDropTargets,
   };
 }
 
