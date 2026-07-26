@@ -152,7 +152,17 @@ export function createAudioEngine() {
   // negative rate at sample accuracy, which is exactly what a buffer source
   // won't do -- so without the worklet the feature is simply unavailable.
   function ensureDeckWorklet(ctx) {
-    if (!ctx.audioWorklet) return Promise.resolve(false);
+    if (!ctx.audioWorklet) {
+      // Almost always an insecure context rather than an old browser:
+      // AudioWorklet is secure-context-only, so reaching this app over plain
+      // http:// on a LAN IP hides the API entirely even on current Chrome/Edge.
+      // localhost counts as secure; a bare IP does not.
+      console.warn(
+        'AudioWorklet API missing. isSecureContext =', window.isSecureContext,
+        '- AudioWorklet requires HTTPS or localhost, so an http:// LAN address will not expose it.',
+      );
+      return Promise.resolve(false);
+    }
     if (!deckWorkletReady) {
       deckWorkletReady = ctx.audioWorklet.addModule('/js/turntable-processor.js')
         .then(() => true)

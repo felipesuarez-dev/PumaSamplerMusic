@@ -1235,7 +1235,11 @@ async function syncDeckForSkin(skinName) {
     // coast before the slab arrives, and arming at 0 would then park the new node
     // silently even though the user is expecting playback.
     const ok = await audio.armDeck(videoId, api.getAudioUrl(videoId), at, lastDeckRate);
-    if (!ok) showToast(t('deck.unavailable'), 'warning');
+    // Distinguish the two failures, because they need opposite responses from
+    // the user. AudioWorklet is secure-context-only, so serving this app over
+    // plain http:// on a LAN IP hides the API on browsers that fully support it
+    // -- blaming the browser there sends people looking in the wrong place.
+    if (!ok) showToast(t(window.isSecureContext ? 'deck.unavailable' : 'deck.insecure'), 'warning');
   } catch (err) {
     showToast(t('toast.audioLoadFailed', { message: err.message }), 'error');
   } finally {
