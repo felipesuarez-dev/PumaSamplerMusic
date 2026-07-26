@@ -130,6 +130,7 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
       isOpen: () => false,
       close() {},
       handleVideoRemoved() {},
+      handlePadsChanged() {},
     };
   }
 
@@ -909,6 +910,26 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     assignedMap.set(sliceIndex, position);
     showToast(t('slicer.assigned', { position }), 'success');
     renderResultsList();
+  }
+
+  // pruneStaleAssignments only runs from renderResultsList, so a PAD cleared
+  // from outside the panel (Organize mode's clear, the pad context menu, a
+  // session load) left its badge behind claiming an assignment that no longer
+  // existed. app.js forwards every pads change here.
+  //
+  // Coalesced through a microtask for two reasons: one user action can write
+  // several pads (assigning, or "new session from selected" writing a whole
+  // grid), and pads.update() emits synchronously -- including from inside
+  // doAssign, which fires it BEFORE recording the new entry. Deferring means
+  // one render per action, and it always observes final state.
+  let padsChangeQueued = false;
+  function handlePadsChanged() {
+    if (!open || padsChangeQueued) return;
+    padsChangeQueued = true;
+    Promise.resolve().then(() => {
+      padsChangeQueued = false;
+      if (open) renderResultsList();
+    });
   }
 
   // A slice's assignedMap entry can go stale without going through
@@ -1896,5 +1917,5 @@ export function createSlicer({ api, audio, pads, store, sessionManager, showToas
     });
   });
 
-  return { openForVideo, openForVideoManual, isOpen, close, handleVideoRemoved };
+  return { openForVideo, openForVideoManual, isOpen, close, handleVideoRemoved, handlePadsChanged };
 }

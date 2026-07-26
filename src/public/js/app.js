@@ -1359,6 +1359,12 @@ const pads = createPads(document.getElementById('pad-grid'), {
   },
   onChange() {
     markDirty();
+    // Forwarder (slicer is declared further down; this only fires at runtime,
+    // long after both exist -- same pattern as the visualizerSkins forwarder
+    // above). The slicer prunes badges for slices whose PAD no longer holds
+    // them, but it only did so when it re-rendered on its own -- so clearing a
+    // PAD from Organize mode or the context menu left a stale "assigned" badge.
+    slicer.handlePadsChanged();
   },
   }, 9);
 
