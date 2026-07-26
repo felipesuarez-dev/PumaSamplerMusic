@@ -46,6 +46,15 @@
   gap: 8px;
 }
 
+/* Icon-only "collapse/expand all panels" button, sits just left of STOP. */
+.collapse-all-btn {
+  padding: 7px 9px;
+}
+
+.collapse-all-btn .material-symbols-outlined {
+  font-size: 1.2rem;
+}
+
 .btn-stop {
   background: var(--danger-dim);
   color: var(--danger);
@@ -344,5 +353,22 @@
    would only span the title text instead of the full panel width. */
 .pads-sidenav-body .library-sidenav-header {
   align-self: stretch;
+}
+
+/* After a PADS⇄MEDIOS swap, keep each collapse rail facing the center. The
+   swap reparents the asides but not their internal child order, so without
+   this the rail toggles land on the outer edge. `order` (not flex-direction:
+   row-reverse) flips only the toggle — it leaves the responsive column stacking
+   untouched and doesn't affect the position:absolute resize handle. Desktop
+   only: on mobile the asides stack as full-width rows where "center-facing"
+   has no meaning. */
+@media (min-width: 901px) {
+  .main.pads-videos-swapped .pads-sidenav-toggle {
+    order: -1;
+  }
+
+  .main.pads-videos-swapped .library-sidenav-toggle {
+    order: 1;
+  }
 }
 

@@ -3767,6 +3767,59 @@ if (padEditorPanelEl && padEditorToggle) {
   });
 }
 
+// "Collapse/expand all" — a single control (mirrored in the full header and the
+// collapsed grip) that folds or unfolds the four primary panels together:
+// header, PADS, MEDIOS and PAD EDITOR. It targets an EXPLICIT list, not
+// syncableToggles, because that array also holds the two inner pad-toolbar
+// strips (master/pad-fx), which must not fold with the panels.
+const collapseAllTargets = [
+  headerToggle,
+  padsSidenavToggle,
+  librarySidenavToggle,
+  padEditorToggle,
+].filter(Boolean);
+
+const collapseAllButtons = [
+  document.getElementById('btn-collapse-all'),
+  document.getElementById('grip-collapse-all-btn'),
+].filter(Boolean);
+
+// If ANY panel is collapsed the next action expands them all; only when every
+// panel is open does it collapse them. The icon mirrors that next action.
+function refreshCollapseAllIcon() {
+  const anyCollapsed = collapseAllTargets.some((c) => c.isCollapsed());
+  const title = t(anyCollapsed ? 'header.expandAllTitle' : 'header.collapseAllTitle');
+  collapseAllButtons.forEach((btn) => {
+    const icon = btn.querySelector('.material-symbols-outlined');
+    if (icon) icon.textContent = anyCollapsed ? 'unfold_more' : 'unfold_less';
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+  });
+}
+
+function toggleCollapseAll() {
+  const anyCollapsed = collapseAllTargets.some((c) => c.isCollapsed());
+  collapseAllTargets.forEach((c) => (anyCollapsed ? c.expand() : c.collapse()));
+  refreshCollapseAllIcon();
+}
+
+collapseAllButtons.forEach((btn) => btn.addEventListener('click', toggleCollapseAll));
+
+// Keep the icon truthful when a panel is toggled on its own: each underlying
+// toggle flips its state in a listener registered first by
+// createCollapsibleToggle, so ours runs afterwards with the state already set.
+['header-toggle', 'pads-sidenav-toggle', 'library-sidenav-toggle'].forEach((id) => {
+  document.getElementById(id)?.addEventListener('click', refreshCollapseAllIcon);
+});
+padEditorPanelEl?.querySelector('.panel-toggle')?.addEventListener('click', refreshCollapseAllIcon);
+
+// Locale switches run syncAllToggles(); the pseudo-controller re-localizes the
+// state-aware title (applyTranslations resets data-i18n-title) and re-sets the
+// glyph for free.
+syncableToggles.push({ sync: refreshCollapseAllIcon });
+
+refreshCollapseAllIcon();
+
 // PADS ⇄ VIDEOS swap. Physical DOM reorder (keeps DOM=visual=tab order) that
 // never touches .right-panel (holds the live <video>; reparenting it would
 // reload playback). After a swap, each panel's resize handle must flip to the
@@ -3781,6 +3834,11 @@ function applyPadsVideosSwap(swapped) {
   main.appendChild(second); // .right-panel is forced to the middle, never moved
   padsSidenavResize?.setEdge(swapped ? 'left' : 'right');
   librarySidenavResize?.setEdge(swapped ? 'right' : 'left');
+  // Single source of truth for the swapped layout. Purely presentational
+  // consumers (the collapse rails' center-facing order, the minimized Slicer
+  // rail's dock/direction) derive their side from this class instead of
+  // duplicating the swap state.
+  main.classList.toggle('pads-videos-swapped', swapped);
 }
 
 function initPadsVideosSwap() {

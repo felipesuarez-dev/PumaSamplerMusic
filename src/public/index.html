@@ -26,6 +26,9 @@
       </div>
       <div class="header-actions">
         <div class="stop-group">
+          <button type="button" id="btn-collapse-all" class="btn btn-secondary collapse-all-btn" data-i18n-title="header.collapseAllTitle" title="Collapse all panels" aria-label="Collapse all panels">
+            <span class="material-symbols-outlined">unfold_less</span>
+          </button>
           <button id="btn-stop-all" class="btn btn-stop" data-i18n-title="header.stopAllTitle" title="Stop all">
             <svg class="stop-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
               <rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/>
@@ -124,6 +127,9 @@
         <span class="chev">▾</span>
       </button>
       <div class="grip-actions">
+        <button type="button" class="grip-btn grip-collapse-all" id="grip-collapse-all-btn" data-i18n-title="header.collapseAllTitle" title="Collapse all panels" aria-label="Collapse all panels">
+          <span class="material-symbols-outlined">unfold_less</span>
+        </button>
         <button type="button" class="grip-btn grip-stop" id="grip-stop-btn" data-i18n-title="header.stopAllTitle" title="Stop all">
           <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="2" fill="currentColor"/></svg>
         </button>
@@ -237,7 +243,7 @@
                 <!-- Sibling of the header <button> (a nested button would be
                      invalid HTML and would toggle the panel). Absolutely
                      positioned over the right of the title bar via CSS. -->
-                <button type="button" class="btn btn-secondary pad-fx-clear-btn has-tip" id="pad-fx-clear" data-i18n-title="pads.clearFx" data-i18n-tooltip="tip.clearFx" data-tooltip="Clear FX: wipes this PAD's effect settings back to their defaults. Unlike the FX switch (which just bypasses them and keeps your settings), this erases them — you'll have to set any effects again." aria-label="Clear FX" disabled><span class="material-symbols-outlined">restart_alt</span></button>
+                <button type="button" class="btn btn-secondary pad-fx-clear-btn has-tip" id="pad-fx-clear" data-i18n-tooltip="tip.clearFx" data-tooltip="Clear FX: wipes this PAD's effect settings back to their defaults. Unlike the FX switch (which just bypasses them and keeps your settings), this erases them — you'll have to set any effects again." aria-label="Clear FX" disabled><span class="material-symbols-outlined">restart_alt</span></button>
                 <div class="panel-content" id="pad-fx-strip-content">
                   <div class="panel-content-inner">
                     <div class="pad-fx-strip" id="pad-fx-strip">

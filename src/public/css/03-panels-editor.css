@@ -157,11 +157,15 @@
    this (see .collapsible-strip below). Icon-only, tooltip explains it. */
 .pad-fx-clear-btn {
   position: absolute;
-  top: 6px;
+  /* Pinned near the top so it stays in the title bar. The absolute anchor is
+     .collapsible-strip (the WHOLE box: header + content), so top:50% would drop
+     it onto the knob rows — a small fixed top keeps it in the header, centered
+     with the collapse chevron. */
+  top: 3px;
   /* Sits left of the panel's collapse chevron (which is at right:12px) so the
      two icons don't overlap. */
   right: 36px;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -169,13 +173,32 @@
   line-height: 1;
 }
 
+/* Keep it perfectly still on hover: the global .btn:hover applies
+   transform: translateY(-1px), which would nudge it. Cancel it (the background
+   hover cue still applies via .btn-secondary:hover). */
+.pad-fx-clear-btn.btn:hover {
+  transform: none;
+}
+
 .pad-fx-clear-btn .material-symbols-outlined {
   font-size: 1.1rem;
 }
 
+/* Keep the disabled button hit-testable (no pointer-events:none) so it absorbs
+   hover instead of leaking it through to the collapse header behind it, which
+   would otherwise show the "Collapse panel" tooltip. The click handler already
+   guards on a selected pad, so the disabled state stays inert. */
 .pad-fx-clear-btn:disabled {
   opacity: 0.4;
-  pointer-events: none;
+  cursor: default;
+}
+
+/* Suppress the .has-tip tooltip while disabled (no pad selected). Otherwise the
+   still-hit-testable button shows its bubble on hover, dimmed by the 0.4 opacity
+   above, which reads as a broken half-transparent tooltip. content:none stops
+   the pseudo-element from generating at all. */
+.pad-fx-clear-btn:disabled::after {
+  content: none;
 }
 
 /* When the pad's master FX switch is off, dim the knob rows to signal the pad

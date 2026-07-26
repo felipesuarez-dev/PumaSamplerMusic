@@ -663,6 +663,17 @@
   text-transform: uppercase;
   transition: var(--transition);
   overflow: hidden;
+  /* Open effect: the rail slides in from its docked (right) edge when the
+     takeover is minimized. Runs on the rail itself — independent of the
+     takeover's own entrance animation — so expanding never replays it. */
+  animation: slicerMinRailIn 0.2s ease;
+}
+
+/* The chevron reads horizontally (points left, toward the expand direction)
+   instead of being rotated to point "up" by the rail's vertical writing-mode.
+   The label below it stays vertical, matching the PADS/MEDIOS rails. */
+.slicer-min-rail .material-symbols-outlined {
+  writing-mode: horizontal-tb;
 }
 
 .library-sidenav.slicer-takeover.slicer-minimized > .slicer-min-rail:hover {
@@ -674,6 +685,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@keyframes slicerMinRailIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* When PADS and MEDIOS are swapped, the Media rail lives on the LEFT edge, so
+   the minimized Slicer rail docks left, its chevron points right (toward the
+   new expand direction), and it slides in from the left. Derives entirely from
+   the single `.main.pads-videos-swapped` source of truth — no JS in slicer.js. */
+.main.pads-videos-swapped .library-sidenav.slicer-takeover.slicer-minimized {
+  right: auto;
+  left: 0;
+}
+
+.main.pads-videos-swapped .slicer-min-rail .material-symbols-outlined {
+  transform: rotate(180deg);
+}
+
+.main.pads-videos-swapped .library-sidenav.slicer-takeover.slicer-minimized > .slicer-min-rail {
+  animation-name: slicerMinRailInLeft;
+}
+
+@keyframes slicerMinRailInLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 /* Running time over the slicer waveform, mirroring the video display's
