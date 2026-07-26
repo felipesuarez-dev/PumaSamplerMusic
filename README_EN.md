@@ -105,7 +105,10 @@ ssh -L 4070:localhost:4070 user@server
 # then open http://localhost:4070 in your browser
 ```
 
-For something permanent, put HTTPS in front of it with a reverse proxy and a domain name (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, or `tailscale serve` if you use Tailscale with HTTPS certificates enabled on the tailnet). A valid certificate needs a **DNS name**: no public CA issues certificates for private IP addresses, so `https://192.168.x.x` is not an option.
+For something permanent, put HTTPS in front of it with a reverse proxy and a domain name (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, or `tailscale serve` if you use Tailscale with HTTPS certificates enabled on the tailnet). Two details that save time:
+
+- A valid certificate needs a **DNS name**: no public CA issues certificates for private IP addresses, so `https://192.168.x.x` is not an option.
+- The port does not matter. What makes a context secure is the `https://` scheme plus a valid certificate, so if 443 is already taken by another service, any other port works just as well (`https://host:8443`).
 
 ### Keyboard shortcuts
 

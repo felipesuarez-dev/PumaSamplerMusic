@@ -105,7 +105,10 @@ ssh -L 4070:localhost:4070 usuario@servidor
 # luego abre http://localhost:4070 en tu navegador
 ```
 
-Para algo permanente, ponle HTTPS delante con un proxy inverso y un nombre de dominio (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, o `tailscale serve` si usas Tailscale con los certificados HTTPS habilitados en el tailnet). Un certificado válido requiere un **nombre DNS**: no existen certificados públicos para direcciones IP privadas, así que `https://192.168.x.x` no es una opción.
+Para algo permanente, ponle HTTPS delante con un proxy inverso y un nombre de dominio (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, o `tailscale serve` si usas Tailscale con los certificados HTTPS habilitados en el tailnet). Dos detalles que ahorran tiempo:
+
+- Un certificado válido requiere un **nombre DNS**: no existen certificados públicos para direcciones IP privadas, así que `https://192.168.x.x` no es una opción.
+- El puerto no importa. Lo que define un contexto seguro es el esquema `https://` y un certificado válido, así que si el 443 ya está ocupado por otro servicio puedes usar cualquier otro puerto (`https://host:8443`) sin perder nada.
 
 ### Atajos de teclado
 
