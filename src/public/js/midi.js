@@ -95,8 +95,8 @@ export function createMidiController() {
 
     access.onstatechange = () => {
       // Unplugging the selected port drops its object; clearing it here lets
-      // autoSelectInput pick it back up (by id/name) when it reconnects, or
-      // fall back to the only remaining port.
+      // autoSelectInput pick it back up (by id/name) when it reconnects — or
+      // pick the only remaining port when nothing was ever saved.
       if (selectedInput && selectedInput.state === 'disconnected') {
         selectedInput.onmidimessage = null;
         selectedInput = null;
@@ -119,13 +119,20 @@ export function createMidiController() {
     }));
   }
 
-  function selectInput(id) {
+  // `persist` distinguishes a real choice from a convenience fallback: the
+  // saved device preference must only be written by an explicit pick (the
+  // modal) or by a match against the saved id/name — never by the "only input
+  // around" fallback, which would overwrite the configured controller with an
+  // unrelated device.
+  function selectInput(id, { persist = true } = {}) {
     if (selectedInput) selectedInput.onmidimessage = null;
     const port = access ? access.inputs.get(id) : null;
     selectedInput = port || null;
     if (selectedInput) {
       selectedInput.onmidimessage = handleMessage;
-      write(DEVICE_STORAGE, JSON.stringify({ id: selectedInput.id, name: selectedInput.name || '' }));
+      if (persist) {
+        write(DEVICE_STORAGE, JSON.stringify({ id: selectedInput.id, name: selectedInput.name || '' }));
+      }
     }
     emit('devices');
   }
@@ -140,7 +147,11 @@ export function createMidiController() {
   }
 
   // Reconnect preference: exact port id, then same name (ids can change when
-  // the OS re-enumerates), then the only port when there is just one.
+  // the OS re-enumerates). The "only input around" convenience applies ONLY on
+  // a fresh setup (nothing saved): with a saved device missing, selecting an
+  // unrelated controller would let it drive the sampler uninvited — the user
+  // can still pick it in the modal, and autoConnect's strict match below is
+  // what decides whether the saved controller "came back".
   function autoSelectInput() {
     if (!access) return;
     const saved = loadSavedDevice();
@@ -148,9 +159,14 @@ export function createMidiController() {
     const byName = !byId && saved?.name
       ? [...access.inputs.values()].find((input) => input.name === saved.name)
       : null;
-    const only = !byId && !byName && access.inputs.size === 1 ? [...access.inputs.values()][0] : null;
-    const port = byId || byName || only;
-    if (port) selectInput(port.id);
+    const match = byId || byName;
+    if (match) {
+      selectInput(match.id);
+      return;
+    }
+    const hasSaved = Boolean(saved?.id || saved?.name);
+    const only = !hasSaved && access.inputs.size === 1 ? [...access.inputs.values()][0] : null;
+    if (only) selectInput(only.id, { persist: false });
     else emit('devices');
   }
 
@@ -204,12 +220,6 @@ export function createMidiController() {
 
   // --- Auto-reconnect on load -------------------------------------------------
 
-  // True when this browser holds a controller configuration worth restoring:
-  // a remembered device and/or learned note/CC mappings.
-  function hasSavedConfig() {
-    return loadSavedDevice() != null || noteMapping.size > 0 || ccMapping.size > 0;
-  }
-
   // Permission probe that NEVER prompts: the Permissions API reports the state
   // of the 'midi' permission without opening a dialog. Browsers that don't
   // know the name throw, which is treated as "not granted" — the modal stays
@@ -224,16 +234,25 @@ export function createMidiController() {
     }
   }
 
-  // Load-time reconnect for a previously configured controller. Resolves to the
-  // connected device ({ id, name }) when one came back online, or null when
-  // there is nothing to restore, permission isn't granted yet (so opening the
-  // app never pops a dialog), or no device is currently present.
+  // Load-time reconnect for the previously configured controller. Resolves to
+  // the connected device ({ id, name }) ONLY when the live port actually
+  // matches the saved device (by id, or by name when the OS re-enumerated it);
+  // null otherwise — no saved device, permission not granted yet (opening the
+  // app must never pop a dialog), or no matching device present.
+  //
+  // The strict match matters: autoSelectInput's "only input around" fallback
+  // would otherwise let any unrelated single device masquerade as the saved
+  // controller and fire the "previously configured controller connected"
+  // toast (and this must never lie).
   async function autoConnect() {
-    if (!hasSavedConfig()) return null;
+    const saved = loadSavedDevice();
+    if (!saved || (!saved.id && !saved.name)) return null;
     if (!(await permissionGranted())) return null;
     if ((await init()) !== 'ready') return null;
     const port = selectedInput;
     if (!port || port.state !== 'connected') return null;
+    const isSavedDevice = (saved.id && port.id === saved.id) || (saved.name && port.name === saved.name);
+    if (!isSavedDevice) return null;
     return { id: port.id, name: port.name || port.id };
   }
 
