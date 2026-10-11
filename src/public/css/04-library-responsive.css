@@ -627,6 +627,12 @@
   .waveform-container {
     height: 150px;
   }
+
+  /* MIDI modal: the two-column target list becomes one column so labels and
+     learn buttons stay tappable. */
+  .midi-target-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 480px) {
@@ -669,6 +675,13 @@
   .pad-fx-strip .master-label,
   .pad-fx-strip .master-value {
     font-size: 0.54rem;
+  }
+
+  .midi-modal {
+    padding: 16px;
+    /* .session-modal's 360px min-width would overflow a very narrow phone;
+       scoped to this modal so the other modals keep their current sizing. */
+    min-width: 0;
   }
 }
 

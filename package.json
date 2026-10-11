@@ -1,6 +1,6 @@
 {
   "name": "pumasamplermusic",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "Web sampler from YouTube videos with keyboard-triggered pads",
   "main": "src/server.js",
   "type": "module",
@@ -9,7 +9,7 @@
     "dev": "node --watch src/server.js",
     "test": "node --test"
   },
-  "keywords": ["sampler", "youtube", "audio", "video"],
+  "keywords": ["sampler", "youtube", "audio", "video", "midi"],
   "author": "",
   "license": "MIT",
   "dependencies": {

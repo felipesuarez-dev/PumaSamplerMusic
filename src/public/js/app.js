@@ -10,6 +10,8 @@ import { getWaveformStyle, setWaveformStyle } from './waveform-style.js';
 import { createVisualizerSkins, SKIN_ICONS, SPIN_SPEEDS } from './visualizer-skins.js';
 import { createSessionManager } from './session.js';
 import { createSlicer } from './slicer.js';
+import { createMidiController } from './midi.js';
+import { positionForNote, targetForCc, scaleCc, ccDelta, applyCcDelta, ccCrossed, noteName } from './midi-core.js';
 import { t, getLocale, setLocale, applyTranslations } from './i18n.js';
 import { enhanceKnobs } from './knob.js';
 
@@ -517,6 +519,11 @@ function openSettingsModal() {
           <input type="number" id="settings-autosave-interval" min="${AUTOSAVE_INTERVAL_MIN}" max="${AUTOSAVE_INTERVAL_MAX}" step="1">
         </div>
       </div>
+    </div>
+    <div class="settings-section">
+      <a class="btn btn-secondary settings-repo-link" href="https://github.com/felipesuarez-dev/PumaSamplerMusic" target="_blank" rel="noopener noreferrer">
+        <span class="material-symbols-outlined">open_in_new</span>${t('settings.repoLink')}
+      </a>
     </div>
     <button class="session-modal-close" id="settings-close" title="${t('common.cancel')}">&times;</button>
   `;
@@ -1478,6 +1485,9 @@ const pads = createPads(document.getElementById('pad-grid'), {
   onSelect(position, data) {
     store.set({ selectedPosition: position, currentPad: data });
     renderPadEditor(position, data);
+    // Pad-fx inputs were just rebound to this PAD's values behind the knobs'
+    // backs: an absolute knob must pick the new value up before it moves it.
+    resetMidiPickup((targetId) => targetId.startsWith('pad-fx-'));
   },
   async onTrigger(position, data) {
     if (!data || !data.videoId) return;
@@ -1580,6 +1590,441 @@ if (gridSizeSelect) {
     // captures letter keys for typeahead) — mirrors the knob's blur-on-commit.
     gridSizeSelect.blur();
   });
+}
+
+// --- MIDI controller --------------------------------------------------------
+// The controller is environment config, not session data: notes and CCs map
+// onto pad positions and knob inputs, and everything persists in localStorage
+// (see midi.js). Pad markers are painted through pads.setMidiMap, so pads.js
+// stays the only module that owns .pad DOM.
+const midi = createMidiController();
+pads.setMidiMap(midi.getNoteMapping());
+midi.on('mapping', () => {
+  pads.setMidiMap(midi.getNoteMapping());
+  resetMidiPickup();
+});
+
+// A controller hit mirrors a mouse click: select (so the PAD editor and the
+// FX strip target that pad) and trigger. Only re-select when the position
+// actually changed — drum rolls on the same PAD must not rebuild the editor
+// on every hit. The keyboard keeps working independently, so a controller and
+// the computer keyboard can play different pads at the same time.
+midi.on('noteon', (message) => {
+  const position = positionForNote(midi.getNoteMapping(), message.note);
+  if (position == null) return;
+  if (midi.getAutoSelect() && store.get().selectedPosition !== position) {
+    pads.select(position);
+  }
+  pads.trigger(position);
+});
+
+midi.on('noteoff', (message) => {
+  const position = positionForNote(midi.getNoteMapping(), message.note);
+  if (position != null) pads.release(position);
+});
+
+// Soft-takeover state for absolute CCs: targetId -> { lastCc, pickedUp }. An
+// absolute knob only starts moving a parameter once its value crosses the
+// parameter's current position, so a knob parked far away — or a bank switch
+// that re-sends positions — can never slam a parameter. The state resets
+// whenever a parameter is re-seeded behind the knob's back: mapping changes
+// and pad-selection changes (which rebind every pad-fx input to the new PAD).
+const midiPickup = new Map();
+
+function resetMidiPickup(predicate = () => true) {
+  for (const targetId of [...midiPickup.keys()]) {
+    if (predicate(targetId)) midiPickup.delete(targetId);
+  }
+}
+
+// CC -> parameter: drives the knob's own <input type="range">, the single
+// source of truth for every FX control, so the whole existing pipeline runs
+// (display, live audio, pad auto-commit, autosave) exactly as if the user had
+// dragged the knob. Disabled inputs (no pad selected, STRETCH off) stay inert,
+// mirroring what the UI allows.
+function applyMidiCc({ controller, value }) {
+  const targetId = targetForCc(midi.getCcMapping(), controller);
+  if (!targetId) return;
+  const input = document.getElementById(targetId);
+  if (!input || input.disabled) return;
+
+  const min = parseFloat(input.min);
+  const max = parseFloat(input.max);
+  const step = parseFloat(input.step);
+  const current = parseFloat(input.value);
+
+  // Relative knobs move from the current value; they need no takeover.
+  if (midi.getKnobMode() === 'rel') {
+    const next = applyCcDelta(current, ccDelta(value), min, max, step);
+    if (next !== current) {
+      input.value = next;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return;
+  }
+
+  const next = scaleCc(value, min, max, step);
+  const state = midiPickup.get(targetId) || { lastCc: null, pickedUp: false };
+
+  if (!state.pickedUp && next !== current) {
+    const currentCc = max === min ? 0 : ((current - min) / (max - min)) * 127;
+    if (!ccCrossed(state.lastCc, currentCc, value)) {
+      midiPickup.set(targetId, { lastCc: value, pickedUp: false });
+      return;
+    }
+  }
+
+  midiPickup.set(targetId, { lastCc: value, pickedUp: true });
+  if (next === current) return;
+  input.value = next;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+midi.on('cc', (message) => applyMidiCc(message));
+
+// Mappable parameters for the modal's knob section. Each id IS the DOM id of
+// the knob's range input, so applying a CC is a single lookup. Label keys
+// reuse the strips' existing i18n strings so the modal speaks the same
+// language as the controls it drives.
+const MIDI_CC_TARGETS = [
+  { id: 'master-volume', group: 'general', labelKey: 'master.volume' },
+  { id: 'master-bpm', group: 'general', labelKey: 'master.bpm' },
+  { id: 'master-tune', group: 'general', labelKey: 'master.tune' },
+  { id: 'master-delay-time', group: 'general', labelKey: 'master.delayTime' },
+  { id: 'master-delay-feedback', group: 'general', labelKey: 'master.delayFeedback' },
+  { id: 'pad-fx-pitch', group: 'pad', labelKey: 'editor.pitchField' },
+  { id: 'pad-fx-speed', group: 'pad', labelKey: 'editor.speedField' },
+  { id: 'pad-fx-cutoff', group: 'pad', labelKey: 'editor.cutoffField' },
+  { id: 'pad-fx-resonance', group: 'pad', labelKey: 'editor.resonanceField' },
+  { id: 'pad-fx-drive', group: 'pad', labelKey: 'editor.driveField' },
+  { id: 'pad-fx-pan', group: 'pad', labelKey: 'editor.panField' },
+  { id: 'pad-fx-reverb-send', group: 'pad', labelKey: 'editor.reverbSendField' },
+  { id: 'pad-fx-delay-send', group: 'pad', labelKey: 'editor.delaySendField' },
+  { id: 'pad-fx-attack', group: 'pad', labelKey: 'midi.targetPadAttack' },
+  { id: 'pad-fx-release', group: 'pad', labelKey: 'midi.targetPadRelease' },
+];
+
+// Mirrors the MPK mini's physical layout: hardware pads 1–4 (notes 36–39) are
+// the BOTTOM row and pads 5–8 (40–43) the top one, while the visual grid
+// numbers the top row first — so the preset swaps the rows and the physical
+// pad a user hits is the one that lights up. Enthusiast devices with other
+// defaults just re-learn.
+const MIDI_DEFAULT_PAD_NOTES = { 1: 40, 2: 41, 3: 42, 4: 43, 5: 36, 6: 37, 7: 38, 8: 39 };
+
+let activeMidiModal = null;
+
+function openMidiModal() {
+  if (activeMidiModal) return;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'session-modal-backdrop';
+  const modal = document.createElement('div');
+  // auto-scroll: the app's own thin, hover-revealed scrollbar (same as the
+  // panels) instead of the chunky default one.
+  modal.className = 'session-modal midi-modal auto-scroll';
+  modal.innerHTML = `
+    <h3>${t('midi.title')}</h3>
+    <p class="session-modal-hint midi-intro">${t('midi.intro')}</p>
+    <div class="midi-status-row">
+      <span class="midi-status" id="midi-status"></span>
+      <span class="midi-activity" id="midi-activity" title="${t('midi.activityTitle')}">—</span>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label" for="midi-device-select">${t('midi.inputLabel')}</label>
+      <div class="midi-device-row">
+        <select id="midi-device-select" class="session-modal-select"></select>
+        <button type="button" class="btn btn-secondary" id="midi-retry" hidden>${t('midi.retry')}</button>
+      </div>
+      <p class="session-modal-hint">${t('midi.deviceHint')}</p>
+    </div>
+    <div class="settings-section">
+      <label class="settings-label" for="midi-grid-size">PADS</label>
+      <div class="midi-grid-controls">
+        <select id="midi-grid-size" class="session-modal-select"></select>
+        <button type="button" class="btn btn-secondary" id="midi-defaults" title="${t('midi.defaultsTitle')}">${t('midi.defaults')}</button>
+        <button type="button" class="btn btn-secondary" id="midi-clear-notes" title="${t('midi.clearMappingsTitle')}">${t('midi.clearMappings')}</button>
+      </div>
+      <div class="pad-grid midi-preview-grid" id="midi-preview-grid"></div>
+      <p class="session-modal-hint" id="midi-learn-hint">${t('midi.learnHint')}</p>
+    </div>
+    <div class="settings-section">
+      <span class="settings-label">${t('midi.knobsTitle')}</span>
+      <p class="session-modal-hint">${t('midi.knobsHint')}</p>
+      <div class="midi-knob-mode-row">
+        <label class="midi-knob-mode-label" for="midi-knob-mode">${t('midi.knobModeLabel')}</label>
+        <select id="midi-knob-mode" class="session-modal-select">
+          <option value="abs">${t('midi.knobModeAbs')}</option>
+          <option value="rel">${t('midi.knobModeRel')}</option>
+        </select>
+      </div>
+      <p class="session-modal-hint">${t('midi.knobModeHint')}</p>
+      <div id="midi-target-groups"></div>
+      <p class="session-modal-hint">${t('midi.padTargetsHint')}</p>
+      <label class="settings-toggle-row">
+        <input type="checkbox" id="midi-autoselect">
+        <span class="settings-label">${t('midi.autoSelect')}</span>
+      </label>
+    </div>
+    <button class="session-modal-close" id="midi-close" title="${t('common.cancel')}">&times;</button>
+  `;
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  const statusEl = modal.querySelector('#midi-status');
+  const activityEl = modal.querySelector('#midi-activity');
+  const deviceSelect = modal.querySelector('#midi-device-select');
+  const retryBtn = modal.querySelector('#midi-retry');
+  const previewSelect = modal.querySelector('#midi-grid-size');
+  const previewGrid = modal.querySelector('#midi-preview-grid');
+  const learnHint = modal.querySelector('#midi-learn-hint');
+  const knobModeEl = modal.querySelector('#midi-knob-mode');
+  const targetGroups = modal.querySelector('#midi-target-groups');
+  const autoSelectEl = modal.querySelector('#midi-autoselect');
+
+  // The preview combobox is a clone of the main grid's, so both always offer
+  // the exact same layouts from a single source of truth (index.html).
+  if (gridSizeSelect) {
+    previewSelect.innerHTML = gridSizeSelect.innerHTML;
+    previewSelect.value = gridSizeSelect.value;
+  }
+
+  let previewPads = new Map();
+
+  function previewSelection() {
+    const opt = previewSelect.selectedOptions[0];
+    return {
+      count: opt ? parseInt(opt.dataset.count, 10) : 9,
+      cols: opt && opt.dataset.cols ? parseInt(opt.dataset.cols, 10) : 3,
+    };
+  }
+
+  function buildPreview() {
+    const { count, cols } = previewSelection();
+    previewGrid.style.setProperty('--pad-cols', String(cols || 3));
+    previewGrid.innerHTML = '';
+    previewPads = new Map();
+    for (let position = 1; position <= count; position++) {
+      const el = document.createElement('div');
+      el.className = 'pad midi-preview-pad';
+      el.dataset.position = position;
+      el.innerHTML = `<span class="pad-position">${position}</span><span class="pad-label midi-pad-note"></span>`;
+      el.addEventListener('click', () => toggleNoteLearn(position));
+      previewGrid.appendChild(el);
+      previewPads.set(position, el);
+    }
+    renderPreview();
+  }
+
+  function renderPreview() {
+    const mapping = midi.getNoteMapping();
+    const learning = midi.getLearn();
+    for (const [position, el] of previewPads) {
+      const note = mapping.get(position);
+      el.querySelector('.midi-pad-note').textContent = note != null ? noteName(note) : '—';
+      el.classList.toggle('mapped', note != null);
+      el.classList.toggle('learning', learning?.type === 'note' && learning.position === position);
+      el.title = note != null
+        ? t('midi.padNoteTitle', { note: noteName(note) })
+        : t('midi.padUnmapped');
+    }
+    learnHint.textContent = learning?.type === 'note' ? t('midi.learnArmed') : t('midi.learnHint');
+  }
+
+  function toggleNoteLearn(position) {
+    const learning = midi.getLearn();
+    if (learning?.type === 'note' && learning.position === position) midi.cancelLearn();
+    else midi.startNoteLearn(position);
+  }
+
+  function buildTargetRow(target, mapping, learning) {
+    const row = document.createElement('div');
+    row.className = 'midi-target-row';
+
+    const label = document.createElement('span');
+    label.className = 'midi-target-label';
+    label.textContent = t(target.labelKey);
+
+    const cc = mapping.get(target.id);
+    const chip = document.createElement('span');
+    chip.className = 'midi-target-cc';
+    chip.classList.toggle('bound', cc != null);
+    chip.textContent = cc != null ? `CC ${cc}` : '—';
+
+    const armed = learning?.type === 'cc' && learning.targetId === target.id;
+    const learnBtn = document.createElement('button');
+    learnBtn.type = 'button';
+    learnBtn.className = 'btn btn-secondary midi-learn-btn';
+    learnBtn.classList.toggle('armed', armed);
+    learnBtn.textContent = armed ? t('midi.ccLearning') : t('midi.ccLearn');
+    learnBtn.title = armed ? t('midi.ccLearningTitle') : t('midi.ccLearnTitle');
+    learnBtn.addEventListener('click', () => {
+      if (armed) midi.cancelLearn();
+      else midi.startCcLearn(target.id);
+    });
+
+    row.append(label, chip, learnBtn);
+
+    if (cc != null) {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'midi-cc-clear';
+      clearBtn.title = t('midi.ccClear');
+      clearBtn.textContent = '×';
+      clearBtn.addEventListener('click', () => midi.unbindCc(target.id));
+      row.appendChild(clearBtn);
+    }
+    return row;
+  }
+
+  function renderTargets() {
+    const mapping = midi.getCcMapping();
+    const learning = midi.getLearn();
+    targetGroups.innerHTML = '';
+    for (const [groupId, labelKey] of [['general', 'midi.targetGroupGeneral'], ['pad', 'midi.targetGroupPad']]) {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'midi-target-group';
+      const title = document.createElement('span');
+      title.className = 'midi-target-group-title';
+      title.textContent = t(labelKey);
+      groupEl.appendChild(title);
+      const list = document.createElement('div');
+      list.className = 'midi-target-list';
+      for (const target of MIDI_CC_TARGETS.filter((entry) => entry.group === groupId)) {
+        list.appendChild(buildTargetRow(target, mapping, learning));
+      }
+      groupEl.appendChild(list);
+      targetGroups.appendChild(groupEl);
+    }
+  }
+
+  function renderDevice() {
+    const status = midi.getStatus();
+    const inputs = status === 'ready' ? midi.listInputs() : [];
+    const selectedId = midi.getSelectedInputId();
+
+    retryBtn.hidden = status !== 'denied';
+    deviceSelect.disabled = status !== 'ready';
+    deviceSelect.innerHTML = '';
+    if (status === 'ready' && inputs.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = t('midi.noDevices');
+      deviceSelect.appendChild(opt);
+    } else {
+      // Multiple ports and nothing remembered: make the "pick one" state
+      // explicit instead of letting the browser display the first entry as if
+      // it were connected.
+      if (inputs.length > 0 && !selectedId) {
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = t('midi.selectDevice');
+        deviceSelect.appendChild(placeholder);
+      }
+      for (const input of inputs) {
+        const opt = document.createElement('option');
+        opt.value = input.id;
+        opt.textContent = input.name;
+        deviceSelect.appendChild(opt);
+      }
+      if (selectedId) deviceSelect.value = selectedId;
+    }
+
+    let statusText = '';
+    if (status === 'idle' || status === 'requesting') statusText = t('midi.permissionPending');
+    else if (status === 'denied') statusText = t('midi.permissionDenied');
+    else if (status === 'unsupported') statusText = t('midi.unsupported');
+    else if (status === 'insecure') statusText = t('midi.insecure');
+    else if (status === 'ready') {
+      const selected = inputs.find((input) => input.id === selectedId);
+      if (inputs.length === 0) statusText = t('midi.noDevices');
+      else if (selected && selected.state === 'connected') statusText = t('midi.connected', { name: selected.name });
+      else if (selected) statusText = t('midi.disconnected', { name: selected.name });
+    }
+    statusEl.textContent = statusText;
+  }
+
+  function renderActivity(message) {
+    if (message.type === 'cc') {
+      activityEl.textContent = t('midi.activityCc', { controller: message.controller, value: message.value });
+    } else {
+      activityEl.textContent = t('midi.activityNote', { note: noteName(message.note), velocity: message.velocity });
+    }
+  }
+
+  const unsubs = [
+    midi.on('noteon', (message) => {
+      const position = positionForNote(midi.getNoteMapping(), message.note);
+      if (position != null) previewPads.get(position)?.classList.add('active');
+    }),
+    midi.on('noteoff', (message) => {
+      const position = positionForNote(midi.getNoteMapping(), message.note);
+      if (position != null) previewPads.get(position)?.classList.remove('active');
+    }),
+    midi.on('mapping', () => { renderPreview(); renderTargets(); }),
+    midi.on('learn', () => { renderPreview(); renderTargets(); }),
+    midi.on('devices', renderDevice),
+    midi.on('status', renderDevice),
+    midi.on('activity', renderActivity),
+  ];
+
+  function cleanup() {
+    unsubs.forEach((off) => off());
+    midi.cancelLearn();
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+    if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    window.removeEventListener('keydown', onKeydown);
+    activeMidiModal = null;
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') cleanup();
+  }
+
+  previewSelect.addEventListener('change', () => {
+    buildPreview();
+    previewSelect.blur(); // same focus-release precedent as the main combobox
+  });
+  modal.querySelector('#midi-defaults').addEventListener('click', () => {
+    for (const [position, note] of Object.entries(MIDI_DEFAULT_PAD_NOTES)) {
+      midi.bindNote(Number(position), note);
+    }
+    showToast(t('midi.defaultsApplied'), 'success');
+  });
+  modal.querySelector('#midi-clear-notes').addEventListener('click', () => {
+    midi.clearNotes();
+    showToast(t('midi.notesCleared'), 'info');
+  });
+  knobModeEl.value = midi.getKnobMode();
+  knobModeEl.addEventListener('change', () => {
+    midi.setKnobMode(knobModeEl.value);
+    knobModeEl.blur();
+  });
+  autoSelectEl.checked = midi.getAutoSelect();
+  autoSelectEl.addEventListener('change', () => {
+    midi.setAutoSelect(autoSelectEl.checked);
+    autoSelectEl.blur();
+  });
+  retryBtn.addEventListener('click', async () => {
+    await midi.init();
+    renderDevice();
+  });
+  deviceSelect.addEventListener('change', () => {
+    if (deviceSelect.value) midi.selectInput(deviceSelect.value);
+    deviceSelect.blur();
+  });
+  modal.querySelector('#midi-close').addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', onKeydown);
+
+  activeMidiModal = { cleanup };
+
+  buildPreview();
+  renderTargets();
+  renderDevice();
+  // Ask for MIDI access here, never at page load: the browser permission
+  // prompt appears when the user actually opens this modal.
+  midi.init().then(renderDevice);
 }
 
 // Master controls
@@ -3432,6 +3877,9 @@ const sessionManager = createSessionManager({
       // inherits the previous session's or the global localStorage values.
       masterFxControls.applyState(session.masterFx || {});
     }
+    // Every mapped input was just re-seeded from the session: absolute knobs
+    // must pick their values up again before driving anything.
+    resetMidiPickup();
   },
   // Warm the audio buffers for the session's pads behind a blocking spinner, so
   // the first pad trigger is instant instead of stalling on fetch+decode.
@@ -3791,6 +4239,10 @@ function initHeaderMoreMenu() {
       return;
     }
     setOpen(false);
+    if (item.dataset.action === 'midi') {
+      openMidiModal();
+      return;
+    }
     if (item.dataset.action === 'settings') {
       openSettingsModal();
       return;
@@ -3910,6 +4362,14 @@ initKeyCapture(document.getElementById('slicer-play-key'), { storageKey: CHOP_PL
 initKeyCapture(document.getElementById('slicer-stop-key'), { storageKey: CHOP_STOP_KEY_STORAGE, defaultKey: 's', toastKey: 'toast.stopKeyManualSet' });
 applyFontScale(getFontScale());
 refreshAutosave();
+
+// Restore a previously configured MIDI controller in the background. Only
+// fires when the browser has already granted MIDI permission (see
+// midi.autoConnect), so loading the app never shows a permission dialog; the
+// modal still handles the first-time grant and the "no device yet" cases.
+midi.autoConnect().then((connected) => {
+  if (connected) showToast(t('midi.toastConnected', { name: connected.name }), 'success');
+});
 
 // Toggles whose title/aria-expanded depend on collapsed state, not just the
 // static data-i18n-title attribute. applyTranslations() resets el.title from

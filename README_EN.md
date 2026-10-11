@@ -4,7 +4,7 @@
 
 # PumaSamplerMusic
 
-**Turn YouTube videos or local files into a keyboard sampler.** Download a video (or upload your own audio/video), pick any slice of time, and assign it to a key. Press the key — hear the audio and see the video play.
+**Turn YouTube videos or local files into a keyboard sampler and MIDI controller.** Download a video (or upload your own audio/video), pick any slice of time, and assign it to a key. Press the key — hear the audio and see the video play.
 
 📖 [Leer en español](README.md)
 
@@ -38,10 +38,11 @@ PumaSamplerMusic solves that in one browser window: paste a YouTube URL (or uplo
 - **Session persistence** — save or load your pad layout as a JSON file, or start a new session from a template copied from an existing one. The session manager adds search and per-session delete.
 - **DAW export** — export the session as a `.zip` package (`.opus` + `.wav` audio + manifest), as a re-importable `.pss`, or to instrument formats: **SFZ, DecentSampler, MPC (.xpm), FL Slicer, Ableton, and Logic**.
 - **Organize mode** — rearrange the grid without triggering audio: drag to swap or move pads, copy one pad to another, or clear it with a confirmation modal; a context menu (right-click / long-press) offers the same.
-- **Compact header** — secondary actions (New, Manage, Export, Import, Logs, Settings) live in a three-dots (⋯) menu; each of the five actions can be pinned to the toolbar as a button. The STOP button shows only its icon and the configured key.
+- **Compact header** — secondary actions (New, Manage, Export, Import, Logs, MIDI Controller, Settings) live in a three-dots (⋯) menu; each of the five actions can be pinned to the toolbar as a button. The STOP button shows only its icon and the configured key.
 - **Flexible workspace** — the MEDIA and PADS panels can swap sides, and a single control collapses or expands every menu at once.
-- **Settings** — a modal with the configurable stop key, the slicer keys, and the app text size; preferences persist across sessions.
-- **Configurable pads** — 9 to 27 pads with per-pad color, volume, key, trigger mode, and loop; trigger by keyboard, mouse, or touch.
+- **Settings** — a modal with the configurable stop key, the slicer keys, the app text size, and a link to the repository; preferences persist across sessions.
+- **Configurable pads** — 8 to 27 pads with per-pad color, volume, key, trigger mode, and loop; the 4×2 layout gives 8 AKAI-style pads; trigger by keyboard, mouse, or touch.
+- **MIDI controller** — connect your controller from the ⋯ menu (tested with the AKAI MPK mini IV): learn pads, light up the mapped PADs in the grid, and map up to 8 knobs to the general controls or to the selected PAD's FX. Requires a secure page and a Web MIDI browser (Chrome, Edge or Firefox).
 - **Master FX chain** — master volume, low-pass filter (cutoff/resonance), reverb, and delay (time/feedback) applied to everything that plays.
 - **Per-pad FX** — Tune (±12 semitones), Cut, Res, Reverb send, and Delay send per pad, plus the P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH with a Speed knob (50–200%, changes speed while keeping pitch); tweaking these while a pad loops warps it live.
 - **Visualizer skins** — the central display switches between video, waveform, spectrum bars, bubbles, and an animated vinyl turntable that spins with the audio.
@@ -98,12 +99,16 @@ Two features use **AudioWorklet**: the turntable scratch and P.SHIFT (retuning w
 
 Opening the app over `http://` at an **IP address** (say `http://192.168.1.50:4070`) puts it outside a secure context: the scratch reports that it needs a secure page, and P.SHIFT silently falls back to a speed change that drags pitch along with it. Everything else works normally.
 
+**Web MIDI** (the MIDI Controller) also requires a secure context: over `http://` at a network address the modal says so, and the browser hides MIDI device access.
+
 If you serve the app from another box, the simplest fix is an SSH tunnel, which turns the access into `localhost`:
 
 ```bash
 ssh -L 4070:localhost:4070 user@server
 # then open http://localhost:4070 in your browser
 ```
+
+If you don't want a proxy or a tunnel, Chrome and Edge can treat that origin as secure during development: in `chrome://flags/#unsafely-treat-insecure-origin-as-secure` add the exact origin (say `http://192.168.1.2:4070`), enable the flag, and relaunch the browser. It is a per-browser, per-machine setting — good for testing, not a permanent fix.
 
 For something permanent, put HTTPS in front of it with a reverse proxy and a domain name (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, or `tailscale serve` if you use Tailscale with HTTPS certificates enabled on the tailnet). Two details that save time:
 
@@ -126,6 +131,8 @@ The stop key and the slicer (Auto-Slicer / Chops) keys are **configurable** from
 | Key | Action |
 |---|---|
 | Key or combo assigned to the pad | Triggers the pad on press and releases it on release; set in the Pad Editor and supports combos like `shift+a` |
+
+> With a MIDI controller connected (see [MIDI controller](#midi-controller)), hitting a pad triggers and **selects** the PAD; mapped knobs act on that PAD's FX or on the general controls.
 
 **Pad Editor** (with a pad selected)
 
@@ -195,6 +202,16 @@ In both modes, the **half-width** button in the panel header pulls it back to th
 
 <img src="docs/screenshot-chops.png" alt="Manual chops: waveform with hand-placed cuts and a slice list" width="100%" />
 
+### MIDI controller
+
+Open **⋯ → MIDI Controller**. The browser will ask for permission to access MIDI devices — never before: only when you open the modal. Pick your controller from the list.
+
+- **Pads**: click a PAD in the preview, then press a physical pad to map it. Mapped PADs light up in the preview and in the main grid when you hit the controller, and get marked with their note (e.g. `C1`). The **Default mapping** button binds notes 36–43 in the MPK mini's physical pad order. Your computer keyboard keeps working on the other PADs, so you can combine both.
+- **Knobs**: in the Knobs (CC) section, hit **Learn** next to a parameter and turn the knob you want to use. You can map the general controls (volume, BPM, tune, delay) or the selected PAD's FX (Tune, Speed, Cut, Res, Drive, Pan, Rev, Dly, Atk, Rel). Pick **Absolute** or **Relative** mode to match `KnobM` on your controller (SHIFT + PROG EDIT).
+- Hitting a pad on the controller also **selects** that PAD in the app (like a click), so the knobs act on it. The activity monitor shows the last message received, handy for verifying the mapping.
+
+The controller configuration is stored in the browser (not in the session) and requires a secure page (see [Reaching it from another machine](#reaching-it-from-another-machine-you-need-https-or-localhost)).
+
 ## Features
 
 | Area | What it does |
@@ -205,6 +222,7 @@ In both modes, the **half-width** button in the panel header pulls it back to th
 | **Pad Editor** | Label, key, volume, color, trigger mode (one-shot / gate), loop, waveform segment editor; every edit auto-commits, no per-pad save button |
 | **Per-pad FX** | Tune (±12 semitones), Cut, Res, Reverb send, and Delay send knobs per pad; P.SHIFT switch (tune shifts pitch without changing speed) and STRETCH switch with a Speed knob (50–200%, time-stretch); tweaking these live while a pad loops warps it in real time |
 | **Rotary knobs** | Master and per-pad FX controls as rotary knobs: vertical drag, mouse wheel, Shift for fine adjustment, keyboard accessible |
+| **MIDI controller** | Learn pads and knobs from its own modal (⋯ → MIDI Controller): mapped PADs light up on screen, hitting a pad **selects** it for FX edits, and knobs map to the general controls or the selected PAD's FX; Absolute/Relative modes; configuration persists in the browser. Requires HTTPS/localhost |
 | **Auto-Slicer / Manual chops** | Automatic cut detection (adjustable sensitivity, real progress bar) or hand-placed cuts on the waveform; slice list with durations, preview, per-slice delete, and selective assignment bounded by the pads in the grid |
 | **Slices to pads** | Half-width mode parks the panel beside the pads (and grows when you collapse them); drag a slice by its grip onto a pad, with a translucent thumbnail of its waveform tracking the cursor; the assignment combobox stays available and shares the same confirm logic |
 | **Turntable scratch** | On the vinyl skin, grab the record with the mouse to scratch the track forward and backward at any speed (AudioWorklet engine, calibrated to 33⅓ RPM); release to coast back to speed or to a stop, and pads keep playing while you scratch. Needs a secure page (HTTPS or localhost) |
@@ -214,7 +232,7 @@ In both modes, the **half-width** button in the panel header pulls it back to th
 | **Export** | `.zip` package (opus + WAV + manifest) or re-importable `.pss`; exporters to SFZ, DecentSampler, MPC (.xpm), FL Slicer, Ableton, and Logic |
 | **Visualizer skins** | Central display switchable between video, waveform, spectrum bars, bubbles, and an animated vinyl turntable |
 | **Compact header / ⋯ menu** | Secondary actions in a three-dots menu; each can be pinned to the toolbar as a button (remembered); STOP shows only icon + key |
-| **Settings** | Modal with configurable stop key, slicer keys, and app text size; preferences persist |
+| **Settings** | Modal with configurable stop key, slicer keys, app text size, and a link to the repository; preferences persist |
 | **Master FX** | Master volume, filter (cutoff/resonance), reverb, and delay (time/feedback) applied to everything that plays |
 | **Collapsible workspace** | MEDIA, PADS, pad editor, and General/Pad FX strip panels collapse and are drag-resizable; MEDIA and PADS can swap sides and a single control collapses/expands everything |
 | **Global Stop** | STOP button or **Escape** key silences all pads and pauses the video |
@@ -226,7 +244,7 @@ In both modes, the **half-width** button in the panel header pulls it back to th
 ```mermaid
 flowchart TD
     subgraph Browser["Browser - Vanilla JS ES modules"]
-        UI[UI Layer] --> Pads[Pad grid up to 27 keys]
+        UI[UI Layer] --> Pads[Pad grid up to 27, keyboard or MIDI]
         UI --> Editor[Pad editor and transport]
         UI --> Library[Media Library YouTube and Local]
         Pads --> AudioEngine[Web Audio Engine]
@@ -359,7 +377,7 @@ data/
 
 - Each media item is identified by an 11-character id (local ones get a generated id in the same format).
 - The cache applies **LRU** eviction by last-use date (`updatedAt`) when it exceeds `MAX_CACHE_GB`. **Local media is never auto-evicted**: only re-downloadable YouTube content is reclaimed.
-- A session is a JSON file with `schemaVersion`, `masterFx` (volume, cutoff, resonance, reverb, delay, bpm, tune), and `pads[]` (position, key, `videoId`, `start`/`end`, plus FX and UI fields like label, color, volume, trigger mode, and loop).
+- A session is a JSON file with `schemaVersion`, `masterFx` (volume, cutoff, resonance, reverb, delay, bpm, tune), and `pads[]` (position, key, `videoId`, `start`/`end`, plus FX and UI fields like label, color, volume, trigger mode, and loop). It also stores the grid shape (`count` and `cols`), so an 8-pad (4×2) layout comes back exactly as saved.
 - Export bundles are generated on demand; they aren't stored in `data/`. There's no default `cookies.txt` either — it's created only if you configure one.
 
 ## Notes
@@ -367,7 +385,7 @@ data/
 - Beyond YouTube URLs (`youtube.com/watch?v=...` and `youtu.be/...`), you can upload local audio or video files from the **Local** tab.
 - First playback of a media item may have a short load time while the browser decodes the audio buffer. These are two different transfers: the Library download goes from YouTube to the server, while the editor's goes from the server to the browser (plus decoding). The editor's captions name them separately, an already-decoded track opens instantly, and hovering the scissors prefetches it.
 - The decoded-audio cache lives in memory, so it empties on a page reload.
-- The turntable scratch and P.SHIFT need **AudioWorklet**, which browsers only expose on secure pages (HTTPS or `localhost`). See [Reaching it from another machine](#reaching-it-from-another-machine-you-need-https-or-localhost).
+- The turntable scratch, P.SHIFT, and the MIDI Controller (Web MIDI) need APIs that browsers only expose on secure pages (HTTPS or `localhost`). See [Reaching it from another machine](#reaching-it-from-another-machine-you-need-https-or-localhost).
 - One-shot mode plays the full segment on key press; gate mode plays while the key is held.
 - The media cache uses disk, not RAM, because full 1080p videos exceed practical tmpfs limits.
 - If YouTube shows the bot-check error despite the PO-token provider, load a browser-exported `cookies.txt` from **Settings** (or via `COOKIES_FILE`).

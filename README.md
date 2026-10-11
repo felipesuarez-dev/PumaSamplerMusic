@@ -4,7 +4,7 @@
 
 # PumaSamplerMusic
 
-**Convierte videos de YouTube o archivos locales en un sampler de teclado.** Descarga un video (o sube tu propio audio/video), elige cualquier fragmento de tiempo y asígnalo a una tecla. Presiona la tecla — escucha el audio y mira el video reproducirse.
+**Convierte videos de YouTube o archivos locales en un sampler de teclado y controlador MIDI.** Descarga un video (o sube tu propio audio/video), elige cualquier fragmento de tiempo y asígnalo a una tecla. Presiona la tecla — escucha el audio y mira el video reproducirse.
 
 📖 [Read in English](README_EN.md)
 
@@ -38,10 +38,11 @@ PumaSamplerMusic resuelve esto en una sola ventana del navegador: pega una URL d
 - **Persistencia de sesiones** — guarda o carga la disposición de PADs como un archivo JSON, o inicia una sesión nueva a partir de una plantilla copiada de una sesión existente. El gestor de sesiones ofrece búsqueda y eliminación por sesión.
 - **Exportación a DAW** — exporta la sesión como paquete `.zip` (audio `.opus` + `.wav` + manifiesto), como `.pss` reimportable, o a formatos de instrumento: **SFZ, DecentSampler, MPC (.xpm), FL Slicer, Ableton y Logic**.
 - **Modo Organizar** — reorganiza la grilla sin disparar audio: arrastra para intercambiar o mover PADs, copia un PAD a otro, o límpialo con un modal de confirmación; también hay un menú contextual (clic derecho o mantener presionado).
-- **Barra superior compacta** — las acciones secundarias (Nueva, Gestionar, Exportar, Importar, Logs, Configuración) viven en un menú de tres puntos (⋯); cada una de las cinco acciones puede anclarse (pin) a la barra como botón. El botón STOP muestra solo el ícono y la tecla configurada.
+- **Barra superior compacta** — las acciones secundarias (Nueva, Gestionar, Exportar, Importar, Logs, Controlador MIDI, Configuración) viven en un menú de tres puntos (⋯); cada una de las cinco acciones puede anclarse (pin) a la barra como botón. El botón STOP muestra solo el ícono y la tecla configurada.
 - **Espacio de trabajo flexible** — los paneles MEDIOS y PADS pueden intercambiar de lado, y un control único contrae o expande todos los menús a la vez.
 - **Configuración** — un modal con la tecla de stop configurable, las teclas del cortador y el tamaño de texto de la aplicación; las preferencias se recuerdan entre sesiones.
-- **PADs configurables** — de 9 a 27 PADs con color, volumen, tecla, modo de disparo y loop por PAD; se disparan con teclado, mouse o toque.
+- **PADs configurables** — de 8 a 27 PADs con color, volumen, tecla, modo de disparo y loop por PAD; la disposición 4×2 ofrece 8 PADs estilo AKAI; se disparan con teclado, mouse o toque.
+- **Controlador MIDI** — conecta tu controlador desde el menú ⋯ (probado con el AKAI MPK mini IV): aprende pads, ilumina los PADs mapeados en la grilla y mapea hasta 8 knobs a los controles generales o a los FX del PAD seleccionado. Requiere una página segura y un navegador con Web MIDI (Chrome, Edge o Firefox).
 - **Cadena de FX maestra** — volumen maestro, filtro pasabajos (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena.
 - **FX por PAD** — Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD, más los switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, cambia la velocidad conservando el tono); ajustar los controles mientras el PAD suena lo deforma (warp) en tiempo real.
 - **Skins del visualizador** — el display central alterna entre video, forma de onda, barras de espectro, burbujas y un tornamesa de vinilo animado que gira con el audio.
@@ -98,12 +99,16 @@ Dos funciones usan **AudioWorklet**: el scratch de la tornamesa y el P.SHIFT (af
 
 Abrir la app por `http://` con una **dirección IP** (por ejemplo `http://192.168.1.50:4070`) la deja fuera del contexto seguro: el scratch avisa que hace falta una página segura, y P.SHIFT cae en silencio a un cambio de velocidad acoplado al tono. El resto de la app funciona igual.
 
+**Web MIDI** (el Controlador MIDI) también exige contexto seguro: por `http://` con dirección de red el modal lo avisa y el navegador oculta el acceso a los dispositivos.
+
 Si sirves la app desde otro equipo, la forma más simple es un túnel SSH, que convierte el acceso en `localhost`:
 
 ```bash
 ssh -L 4070:localhost:4070 usuario@servidor
 # luego abre http://localhost:4070 en tu navegador
 ```
+
+Si no quieres proxy ni túnel, Chrome y Edge pueden tratar ese origen como seguro durante el desarrollo: en `chrome://flags/#unsafely-treat-insecure-origin-as-secure` agrega el origen exacto (por ejemplo `http://192.168.1.2:4070`), activa la opción y reinicia el navegador. Es un ajuste por navegador y por equipo: sirve para pruebas, no como solución permanente.
 
 Para algo permanente, ponle HTTPS delante con un proxy inverso y un nombre de dominio (Caddy, nginx + Let's Encrypt, Cloudflare Tunnel, o `tailscale serve` si usas Tailscale con los certificados HTTPS habilitados en el tailnet). Dos detalles que ahorran tiempo:
 
@@ -126,6 +131,8 @@ Las teclas de stop y las del cortador (Auto-Slicer / Chops) son **configurables*
 | Tecla | Acción |
 |---|---|
 | Tecla o combinación asignada al PAD | Dispara el PAD al presionar y lo suelta al soltar; se asigna en el Editor de PAD y admite combinaciones como `shift+a` |
+
+> Con un controlador MIDI conectado (ver [Controlador MIDI](#controlador-midi)), tocar un pad dispara y **selecciona** el PAD; los knobs mapeados actúan sobre los FX de ese PAD o sobre los controles generales.
 
 **Editor de PAD** (con un PAD seleccionado)
 
@@ -195,6 +202,16 @@ En ambos modos, el botón de **media pantalla** en la cabecera del panel lo achi
 
 <img src="docs/screenshot-chops.png" alt="Chops manuales: forma de onda con cortes colocados a mano y lista de cortes" width="100%" />
 
+### Controlador MIDI
+
+Abre **⋯ → Controlador MIDI**. El navegador pedirá permiso para acceder a los dispositivos MIDI — nunca antes: solo al abrir el modal. Elige tu controlador en la lista.
+
+- **Pads**: haz clic en un PAD de la vista previa y luego presiona un pad físico para asignarlo. Los PADs asignados se iluminan en la vista previa y en la grilla principal al tocar el controlador, y quedan marcados con su nota (por ejemplo `C1`). El botón **Asignación por defecto** mapea las notas 36–43 en el orden físico del MPK mini. El teclado de tu PC sigue funcionando sobre los demás PADs, así que puedes combinar ambos.
+- **Knobs**: en la sección Knobs (CC), pulsa **Aprender** junto a un parámetro y gira el knob que quieras usar. Puedes mapear los controles generales (volumen, BPM, tune, delay) o los FX del PAD seleccionado (Tune, Speed, Cut, Res, Drive, Pan, Rev, Dly, Atk, Rel). Elige el modo **Absoluto** o **Relativo** igual que `KnobM` en tu controlador (SHIFT + PROG EDIT).
+- Tocar un pad en el controlador también **selecciona** ese PAD en la app (como un clic), así los knobs actúan sobre él. El monitor de actividad muestra el último mensaje recibido, útil para verificar el mapeo.
+
+La configuración del controlador se guarda en el navegador (no en la sesión) y requiere una página segura (ver [Acceso desde otra máquina](#acceso-desde-otra-máquina-necesitas-https-o-localhost)).
+
 ## Características
 
 | Área | Qué hace |
@@ -205,6 +222,7 @@ En ambos modos, el botón de **media pantalla** en la cabecera del panel lo achi
 | **Editor de PAD** | Etiqueta, tecla, volumen, color, modo de disparo (one-shot / gate), loop, editor de segmento de forma de onda; cada edición se guarda automáticamente, sin botón de guardado por PAD |
 | **FX por PAD** | Knobs de Tune (±12 semitonos), Cut, Res, envío a Rev y a Dly por PAD; switches P.SHIFT (afinar sin cambiar velocidad) y STRETCH con knob de Speed (50–200%, time-stretch); ajustar en vivo mientras el PAD hace loop lo deforma en tiempo real |
 | **Knobs rotativos** | Controles de FX maestros y por PAD como knobs giratorios: arrastre vertical, rueda del mouse, Shift para ajuste fino, navegables por teclado |
+| **Controlador MIDI** | Aprende pads y knobs desde su propio modal (⋯ → Controlador MIDI): ilumina los PADs mapeados en pantalla, toca y **selecciona** el PAD para editar sus FX, y mapea knobs a los controles generales o del PAD seleccionado; modo Absoluto/Relativo; la configuración persiste en el navegador. Requiere HTTPS/localhost |
 | **Auto-Slicer / Chops manuales** | Detección automática de cortes (sensibilidad ajustable, barra de progreso real) o corte manual sobre la forma de onda; lista de slices con duración, previsualización, eliminar por corte y asignación selectiva a los PADs de la grilla |
 | **Cortes a los PADs** | Modo media pantalla que deja el panel junto a los PADs (y crece si los colapsas); arrastra un corte por su manija hasta el PAD, con miniatura translúcida de su forma de onda siguiendo al cursor; el combobox de asignación sigue disponible y comparte la misma lógica de confirmación |
 | **Tornamesa con scratch** | En el skin de vinilo, agarra el disco con el mouse para rayar la pista hacia adelante y atrás a cualquier velocidad (motor AudioWorklet, calibrado a 33⅓ RPM); al soltar vuelve a velocidad normal o frena, y los PADs siguen sonando mientras rayas. Requiere página segura (HTTPS o localhost) |
@@ -214,7 +232,7 @@ En ambos modos, el botón de **media pantalla** en la cabecera del panel lo achi
 | **Exportación** | Paquete `.zip` (opus + WAV + manifiesto) o `.pss` reimportable; exportadores a SFZ, DecentSampler, MPC (.xpm), FL Slicer, Ableton y Logic |
 | **Skins del visualizador** | Display central conmutable entre video, forma de onda, barras de espectro, burbujas y tornamesa de vinilo animado |
 | **Barra compacta / menú ⋯** | Acciones secundarias en un menú de tres puntos; cada una puede anclarse (pin) a la barra como botón (se recuerda); STOP muestra solo ícono + tecla |
-| **Configuración** | Modal con tecla de stop configurable, teclas del cortador y tamaño de texto de la app; las preferencias persisten |
+| **Configuración** | Modal con tecla de stop configurable, teclas del cortador, tamaño de texto de la app y enlace al repositorio; las preferencias persisten |
 | **FX maestros** | Volumen maestro, filtro (cutoff/resonancia), reverb y delay (tiempo/feedback) aplicados a todo lo que suena |
 | **Espacio de trabajo colapsable** | Paneles MEDIOS, PADS, editor de PAD y tiras de FX general/por PAD se colapsan y son redimensionables por arrastre; MEDIOS y PADS pueden intercambiar de lado y un control único contrae/expande todo |
 | **Detención global** | El botón STOP o la tecla **Escape** silencia todos los PADs y pausa el video |
@@ -226,7 +244,7 @@ En ambos modos, el botón de **media pantalla** en la cabecera del panel lo achi
 ```mermaid
 flowchart TD
     subgraph Browser["Navegador - Modulos ES de JS vanilla"]
-        UI[Capa de UI] --> Pads[Grilla de PADs hasta 27 teclas]
+        UI[Capa de UI] --> Pads[Grilla de PADs hasta 27 con teclado o MIDI]
         UI --> Editor[Editor de PAD y transporte]
         UI --> Library[Biblioteca de medios YouTube y Local]
         Pads --> AudioEngine[Motor Web Audio]
@@ -359,7 +377,7 @@ data/
 
 - Cada medio se identifica con un id de 11 caracteres (los locales reciben uno generado con el mismo formato).
 - La caché aplica evicción **LRU** por fecha de uso (`updatedAt`) cuando supera `MAX_CACHE_GB`. Los medios **locales nunca se evictan** automáticamente: solo se recupera espacio de contenido de YouTube redescargable.
-- Una sesión es un JSON con `schemaVersion`, `masterFx` (volumen, cutoff, resonancia, reverb, delay, bpm, tune) y `pads[]` (posición, tecla, `videoId`, `start`/`end`, más FX y campos de UI como etiqueta, color, volumen, modo de disparo y loop).
+- Una sesión es un JSON con `schemaVersion`, `masterFx` (volumen, cutoff, resonancia, reverb, delay, bpm, tune) y `pads[]` (posición, tecla, `videoId`, `start`/`end`, más FX y campos de UI como etiqueta, color, volumen, modo de disparo y loop). También guarda la forma de la grilla (`count` y `cols`), para que una disposición de 8 PADs (4×2) vuelva tal cual al recargar.
 - La exportación genera bundles bajo demanda; no se guardan en `data/`. Tampoco existe un `cookies.txt` por defecto: se crea solo si lo configuras.
 
 ## Notas
@@ -367,7 +385,7 @@ data/
 - Además de URLs de YouTube (`youtube.com/watch?v=...` y `youtu.be/...`), puedes subir archivos locales de audio o video desde la pestaña **Local**.
 - La primera reproducción de un medio puede tener una breve carga mientras el navegador decodifica el buffer de audio. Son dos transferencias distintas: la descarga de la Biblioteca va de YouTube al servidor, y la del editor va del servidor al navegador (más la decodificación). Los rótulos del editor lo indican por separado, y una pista ya decodificada abre al instante; pasar el mouse sobre las tijeras la precarga.
 - El caché de audio decodificado vive en memoria, así que se vacía al recargar la página.
-- El scratch de la tornamesa y el P.SHIFT necesitan **AudioWorklet**, que el navegador solo expone en páginas seguras (HTTPS o `localhost`). Ver [Acceso desde otra máquina](#acceso-desde-otra-máquina-necesitas-https-o-localhost).
+- El scratch de la tornamesa, el P.SHIFT y el Controlador MIDI (Web MIDI) necesitan APIs que el navegador solo expone en páginas seguras (HTTPS o `localhost`). Ver [Acceso desde otra máquina](#acceso-desde-otra-máquina-necesitas-https-o-localhost).
 - El modo one-shot reproduce el segmento completo al presionar la tecla; el modo gate reproduce mientras la tecla se mantiene presionada.
 - El caché de medios usa disco, no RAM, porque los videos 1080p completos exceden los límites prácticos de tmpfs.
 - Si YouTube muestra el error de bot-check a pesar del proveedor de PO tokens, carga un `cookies.txt` exportado del navegador desde **Configuración** (o vía `COOKIES_FILE`).

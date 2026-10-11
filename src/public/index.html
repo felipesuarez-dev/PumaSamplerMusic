@@ -22,7 +22,7 @@
       <div class="brand">
         <img src="/logo.png" alt="PumaSamplerMusic" class="logo">
         <h1>PumaSamplerMusic</h1>
-        <span class="version">v1.0</span>
+        <a class="version" href="https://github.com/felipesuarez-dev/PumaSamplerMusic" target="_blank" rel="noopener noreferrer" data-i18n-title="header.repoTitle" title="View the repository on GitHub">v1.5</a>
       </div>
       <div class="header-actions">
         <div class="stop-group">
@@ -78,7 +78,8 @@
                 <span class="menu-label" data-i18n="header.logs">Logs</span>
                 <button type="button" class="menu-pin" data-pin="btn-view-logs" aria-pressed="false" data-i18n-title="header.pinToolbar" title="Pin to toolbar"><span class="material-symbols-outlined">push_pin</span></button>
               </li>
-              <!-- Settings is intentionally pin-less (menu-only). -->
+              <!-- MIDI Controller and Settings are intentionally pin-less (menu-only). -->
+              <li role="menuitem" data-action="midi" data-i18n="midi.menuItem">MIDI Controller</li>
               <li role="menuitem" data-action="settings" data-i18n="settings.menuItem">Settings</li>
             </ul>
           </div>
@@ -122,7 +123,10 @@
         <span class="grip-brand">
           <img src="/logo.png" alt="" class="grip-logo">
           <span class="grip-app-name">PumaSamplerMusic</span>
-          <span class="version">v1.0</span>
+          <!-- Plain span, not a link: this lives inside the grip's toggle
+               <button>, where an interactive element would be invalid. The
+               full header's version badge is the clickable one. -->
+          <span class="version">v1.5</span>
         </span>
         <span class="chev">▾</span>
       </button>

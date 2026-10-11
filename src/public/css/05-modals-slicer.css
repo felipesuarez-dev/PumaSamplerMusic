@@ -216,6 +216,210 @@
   display: none;
 }
 
+/* --- MIDI controller modal ------------------------------------------------- */
+
+.midi-modal {
+  width: min(640px, 94vw);
+  /* More content than the settings modal: cap it and scroll instead of
+     letting it grow past short viewports. */
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Quick-start block under the title: reads as instructions, not as another
+   setting. The accent edge separates it from the control sections below. */
+.midi-intro {
+  background: var(--bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.midi-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.midi-status {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+.midi-activity {
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.midi-device-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* .btn declares display:inline-flex, so the `hidden` attribute needs the
+   compound guard (same technique as the autosave options above). */
+.midi-device-row .btn[hidden] {
+  display: none;
+}
+
+.midi-grid-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.midi-grid-controls select {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Preview grid (same .pad vocabulary as the main grid, no Organize) */
+.midi-preview-grid {
+  margin: 0 auto;
+  gap: 10px;
+}
+
+.midi-preview-pad {
+  cursor: pointer;
+}
+
+.midi-preview-pad .midi-pad-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.midi-preview-pad.mapped .midi-pad-note {
+  color: var(--success);
+}
+
+/* Armed for note-learn: the next controller pad press binds to this PAD. */
+.midi-preview-pad.learning {
+  border-style: dashed;
+  border-color: var(--warning);
+  outline: 2px solid var(--warning);
+  outline-offset: 2px;
+}
+
+.midi-knob-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.midi-knob-mode-row select {
+  flex: 0 0 auto;
+  min-width: 130px;
+}
+
+.midi-knob-mode-label {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.midi-target-group {
+  margin-bottom: 10px;
+}
+
+.midi-target-group-title {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.midi-target-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.midi-target-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+.midi-target-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.midi-target-cc {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  min-width: 44px;
+  text-align: right;
+}
+
+.midi-target-cc.bound {
+  color: var(--success);
+}
+
+.midi-learn-btn {
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.midi-learn-btn.armed {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: #0a0c10;
+}
+
+.midi-cc-clear {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.midi-cc-clear:hover {
+  background: var(--surface-hover);
+  color: var(--danger);
+}
+
+/* "View repository" link in the Settings modal, styled as a button. */
+.settings-repo-link {
+  text-decoration: none;
+}
+
+
 /* Auto-save status indicator (beside the Save button) */
 .autosave-status {
   display: inline-flex;

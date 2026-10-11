@@ -1,4 +1,6 @@
 import { buildKeyCombo, formatTime, isTypingTarget } from './state.js';
+import { noteName } from './midi-core.js';
+import { t } from './i18n.js';
 
 export function createPads(container, options = {}, initialCount = 9) {
   const { onSelect, onTrigger, onRelease, onBeforeChange, onAfterSwap, onContextMenu, onChange } = options;
@@ -9,6 +11,10 @@ export function createPads(container, options = {}, initialCount = 9) {
   }
   const pads = new Map(); // position -> pad element
   const state = new Map(); // position -> pad data
+  // position -> MIDI note. Controller config owned by the app (setMidiMap),
+  // rendered here as a marker on the pad. Deliberately NOT part of pad state:
+  // it belongs to the input device, not to the session/pad data.
+  const midiNotes = new Map();
   let selectedPosition = null;
   let padCount = 0;
   let capturingKey = false;
@@ -20,6 +26,22 @@ export function createPads(container, options = {}, initialCount = 9) {
   let gesture = null;
   const DRAG_THRESHOLD_PX = 8;
   const LONG_PRESS_MS = 500;
+
+  // Follows setMidiMap. Written as a data attribute (not a class) because
+  // render() resets className on empty pads, which would wipe a class marker.
+  function applyMidiMarker(el, position) {
+    const note = midiNotes.get(position);
+    if (note === undefined) {
+      el.removeAttribute('data-midi-note');
+      el.querySelector('.pad-midi-note').textContent = '';
+      return;
+    }
+    const name = noteName(note);
+    el.dataset.midiNote = String(note);
+    const badge = el.querySelector('.pad-midi-note');
+    badge.textContent = name;
+    badge.title = t('midi.padNoteTitle', { note: name });
+  }
 
   function createPadElement(position) {
     const el = document.createElement('div');
@@ -33,7 +55,9 @@ export function createPads(container, options = {}, initialCount = 9) {
       <span class="pad-label">PAD ${position}</span>
       <span class="pad-time"></span>
       <span class="pad-color-indicator"></span>
+      <span class="pad-midi-note"></span>
     `;
+    applyMidiMarker(el, position);
 
     el.addEventListener('pointerdown', (e) => {
       if (e.button > 0) return;
@@ -176,6 +200,18 @@ export function createPads(container, options = {}, initialCount = 9) {
     }
     for (const pos of pads.keys()) {
       render(pos);
+    }
+  }
+
+  // Replaces the whole position -> MIDI note map and repaints the markers.
+  // Called by the app whenever the controller mapping changes.
+  function setMidiMap(map) {
+    midiNotes.clear();
+    for (const [position, note] of map) {
+      midiNotes.set(position, note);
+    }
+    for (const [position, el] of pads) {
+      applyMidiMarker(el, position);
     }
   }
 
@@ -504,6 +540,7 @@ export function createPads(container, options = {}, initialCount = 9) {
     getData,
     getAll,
     setAll,
+    setMidiMap,
     resize,
     getCount,
     trigger,

@@ -89,6 +89,19 @@ body {
   margin-left: 4px;
 }
 
+/* The version badge links to the repository when it is the header's anchor
+   (the collapsed grip keeps a plain span — inside its toggle button an
+   interactive element would be invalid HTML). */
+a.version {
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+a.version:hover {
+  color: var(--accent);
+  background: var(--surface-hover);
+}
+
 .header-actions {
   display: flex;
   align-items: center;

@@ -631,6 +631,29 @@
   color: var(--text-muted);
 }
 
+/* MIDI-mapped marker: shows the note the controller uses for this PAD. Keyed
+   off the data attribute (not a class) because render() resets className on
+   empty pads, which would wipe a class-based marker. */
+.pad .pad-midi-note {
+  display: none;
+}
+
+.pad[data-midi-note] .pad-midi-note {
+  display: block;
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--success);
+  background: rgba(74, 222, 128, 0.12);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
 .pad-label {
   font-size: 0.95rem;
   font-weight: 700;
