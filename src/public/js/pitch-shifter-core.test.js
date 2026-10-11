@@ -39,6 +39,18 @@ function estimateFrequency(samples, sampleRate, skip) {
 const GRAIN_SIZE = 2048;
 const SKIP = GRAIN_SIZE * 4; // let a few grain cycles pass before measuring
 
+test('GranularPitchShifter: processSample reuses one output buffer (no per-call allocation)', () => {
+  // Audio-thread contract: the returned array is the same instance every call,
+  // and it carries the CURRENT frame's values. This is what keeps heavy
+  // polyphony from flooding the real-time thread with garbage.
+  const shifter = new GranularPitchShifter(2);
+  const first = shifter.processSample([0.5, -0.5], 1);
+  const second = shifter.processSample([0.25, -0.25], 1);
+  assert.equal(first, second);
+  assert.equal(second.length, 2);
+  assert.ok(second.every((v) => Number.isFinite(v)));
+});
+
 test('GranularPitchShifter: pitchRatio=1 leaves frequency unchanged', () => {
   const input = generateSine(440, 1.0);
   const output = runShifter(input, 1);

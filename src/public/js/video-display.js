@@ -101,7 +101,12 @@ export function createVideoDisplay(element, options = {}) {
       await video.play();
       setLoading(false, token);
     } catch (err) {
-      console.warn('Video play failed:', err);
+      // An overlapping pause()/re-trigger rejects a still-pending play() with
+      // AbortError; that's the expected race during fast pad rolls, not a real
+      // failure, so it isn't logged as one. Anything else is.
+      if (!err || err.name !== 'AbortError') {
+        console.warn('Video play failed:', err);
+      }
       setLoading(false, token);
       return false;
     }

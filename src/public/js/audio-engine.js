@@ -95,6 +95,7 @@ export function createAudioEngine() {
 
   let masterChain = null;
   let workletReady = null;
+  let workletLoaded = null; // resolved outcome of workletReady, for diagnostics
   let deckWorkletReady = null;
   let fallbackWarned = false;
 
@@ -114,13 +115,52 @@ export function createAudioEngine() {
   let desiredMasterBpm = 0;
   let desiredMasterTune = 0;
 
+  // Diagnostics counters for long-session stall hunting (getDiagnostics
+  // below): total voices started and how many times the context reported
+  // itself suspended. Cheap ints on the hot path, no behavior attached.
+  let voicesStarted = 0;
+  let suspends = 0;
+  let diagScratch = null; // reusable analyser read buffer (diagnostics only)
+  let lastSampleRate = 0; // so a reset to a different device rate can drop stale buffers
+
   function emit(name, detail) {
     window.dispatchEvent(new CustomEvent(name, { detail }));
   }
 
+  // Tab returning from background: resume a context that went suspended while
+  // hidden. Registered ONCE per engine (not per context creation) so repeated
+  // resetContext() calls can't stack duplicate listeners; reads the live
+  // variable and is null-safe while a reset is in flight.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
+    }
+  });
+
   async function init() {
     if (!audioContext) {
       audioContext = new AudioContext();
+      // A resetContext() may land on a different output device with a different
+      // sample rate: cached AudioBuffers belong to the old rate and cannot feed
+      // sources of the new context, so drop them and let the next trigger
+      // re-fetch/re-decode.
+      if (lastSampleRate && audioContext.sampleRate !== lastSampleRate) {
+        buffers.clear();
+        reversedBuffers.clear();
+      }
+      lastSampleRate = audioContext.sampleRate;
+      // Capture the instance: after resetContext() the engine variable is null
+      // while the old context is closing, and a statechange fired on the way
+      // out must not read through it (it threw "Cannot read properties of
+      // null" exactly there).
+      const ctx = audioContext;
+      ctx.onstatechange = () => {
+        if (ctx.state === 'suspended') {
+          suspends += 1;
+          console.warn('[audio] AudioContext suspended — attempting resume');
+          ctx.resume().catch(() => {});
+        }
+      };
     }
     if (audioContext.state === 'suspended') {
       await audioContext.resume();
@@ -132,9 +172,13 @@ export function createAudioEngine() {
     if (!ctx.audioWorklet) return Promise.resolve(false);
     if (!workletReady) {
       workletReady = ctx.audioWorklet.addModule('/js/pitch-shifter-processor.js')
-        .then(() => true)
+        .then(() => {
+          workletLoaded = true;
+          return true;
+        })
         .catch((err) => {
           console.warn('AudioWorklet unavailable, falling back to playbackRate pitch:', err);
+          workletLoaded = false;
           return false;
         });
     }
@@ -743,6 +787,7 @@ export function createAudioEngine() {
       hardStopTime: loop ? Infinity : now + duration,
     };
     activeSources.set(position, sourceRef);
+    voicesStarted += 1;
     emit('audiosourcestart', { position, videoId });
 
     source.onended = () => {
@@ -1192,6 +1237,111 @@ export function createAudioEngine() {
     return Math.max(ref.startTime, Math.min(ref.endTime, t));
   }
 
+  // Read-only snapshot for DevTools (window.__pumaAudioDiag in app.js) when
+  // hunting long-session stalls. A running context with no stuck voices but no
+  // audible output points at the master bus: masterPeak 0 with masterGain 0
+  // means something drove the volume to zero (e.g. an absolute CC on the
+  // Volume knob), while masterNan true means a non-finite sample poisoned the
+  // shared chain (delay feedback keeps it circulating forever).
+  function getDiagnostics() {
+    const analyser = masterChain ? masterChain.analyser : null;
+    let masterPeak = null;
+    let masterNan = null;
+    if (analyser) {
+      if (!diagScratch || diagScratch.length !== analyser.fftSize) {
+        diagScratch = new Float32Array(analyser.fftSize);
+      }
+      analyser.getFloatTimeDomainData(diagScratch);
+      let peak = 0;
+      let nan = false;
+      for (let i = 0; i < diagScratch.length; i++) {
+        const v = diagScratch[i];
+        if (!Number.isFinite(v)) {
+          nan = true;
+          break;
+        }
+        const a = Math.abs(v);
+        if (a > peak) peak = a;
+      }
+      masterNan = nan;
+      masterPeak = nan ? null : Number(peak.toFixed(4));
+    }
+    return {
+      state: audioContext ? audioContext.state : 'none',
+      sampleRate: audioContext ? audioContext.sampleRate : 0,
+      contextTime: audioContext ? Math.round(audioContext.currentTime) : 0,
+      voices: activeSources.size,
+      voicesStarted,
+      suspends,
+      buffers: buffers.size,
+      masterVolume: desiredMasterVolume,
+      masterGain: masterChain ? masterChain.masterGain.gain.value : null,
+      delayFeedback: masterChain ? masterChain.delayFeedback.gain.value : null,
+      masterPeak,
+      masterNan,
+      worklet: workletLoaded,
+    };
+  }
+
+  // Diagnostic probe (window.__pumaAudioTone in app.js): plays a short 440 Hz
+  // tone straight into the master chain input — the same node every dry voice
+  // feeds. Hearing it while the sampler seems silent proves the master bus and
+  // the output device are fine and the problem is upstream (voices/pads);
+  // hearing nothing narrows it to the master chain or the system output.
+  function testTone(durationMs = 800) {
+    if (!audioContext) return false;
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+    const chain = ensureMasterChain(audioContext);
+    const osc = audioContext.createOscillator();
+    const probeGain = audioContext.createGain();
+    const dur = Math.min(5, Math.max(0.1, durationMs / 1000));
+    const now = audioContext.currentTime;
+    osc.frequency.value = 440;
+    probeGain.gain.setValueAtTime(0.25, now);
+    probeGain.gain.linearRampToValueAtTime(0, now + dur);
+    osc.connect(probeGain);
+    probeGain.connect(chain.masterGain);
+    osc.start(now);
+    osc.stop(now + dur + 0.05);
+    osc.onended = () => {
+      try {
+        probeGain.disconnect();
+        osc.disconnect();
+      } catch {
+        // already disconnected
+      }
+    };
+    return true;
+  }
+
+  // In-place audio reset (window.__pumaAudioReset in app.js): closes the
+  // AudioContext and drops the master chain/worklet state so the next
+  // init()/play() rebuilds everything on a fresh context — exactly what a page
+  // reload does for audio, without reloading the app. Decoded buffers are kept
+  // (plain data; cleared only if the new context lands on a different sample
+  // rate, see init()).
+  async function resetContext() {
+    stopAll();
+    const old = audioContext;
+    audioContext = null;
+    masterChain = null;
+    workletReady = null;
+    workletLoaded = null;
+    deckWorkletReady = null;
+    fallbackWarned = false;
+    deck = null;
+    armToken += 1; // invalidate any pending async deck arm
+    if (old) {
+      old.onstatechange = null; // don't let the closing context poke back in
+      try {
+        await old.close();
+      } catch {
+        // already closed
+      }
+    }
+    return true;
+  }
+
   return {
     init,
     loadAudio,
@@ -1202,6 +1352,9 @@ export function createAudioEngine() {
     setVoiceVolume,
     getActivePositions,
     getVoiceTime,
+    getDiagnostics,
+    testTone,
+    resetContext,
     isLoaded,
     prefetchAudio,
     armDeck,

@@ -35,6 +35,91 @@ const store = createStore({
 
 const ws = createWebSocketClient();
 const audio = createAudioEngine();
+// Read-only diagnostics hooks for long-session audio stalls (DevTools):
+//   __pumaAudioDiag()      → AudioContext state, voices, master volume/gain,
+//                            live peak and NaN check on the master bus.
+//   __pumaAudioTone(ms)    → audible bisector: plays a 440Hz tone through the
+//                            MASTER chain input (same node dry voices feed).
+//   __pumaPadsDiag()       → per-pad FX/state snapshot, to spot a CC-driven
+//                            edit (e.g. a filter closed to 0) behind quiet pads.
+window.__pumaAudioDiag = () => audio.getDiagnostics();
+window.__pumaAudioTone = (ms) => audio.testTone(ms);
+window.__pumaPadsDiag = () => ({
+  selected: store.get().selectedPosition,
+  pads: pads.getAll().map((pad) => ({
+    position: pad.position,
+    key: pad.key,
+    videoId: pad.videoId,
+    volume: pad.volume,
+    cutoff: pad.cutoff,
+    resonance: pad.resonance,
+    drive: pad.drive,
+    pan: pad.pan,
+    pitch: pad.pitch,
+    speed: pad.speed,
+    stretchOn: pad.stretchOn,
+    pitchShiftOn: pad.pitchShiftOn,
+    reverbSend: pad.reverbSend,
+    delaySend: pad.delaySend,
+    attack: pad.attack,
+    release: pad.release,
+    fxEnabled: pad.fxEnabled,
+    bpm: pad.bpm,
+  })),
+});
+window.__pumaMidiDiag = () => ({
+  status: midi.getStatus(),
+  knobMode: midi.getKnobMode(),
+  autoSelect: midi.getAutoSelect(),
+  notes: Object.fromEntries(midi.getNoteMapping()),
+  ccs: Object.fromEntries(midi.getCcMapping()),
+});
+// One-shot check that measures the DEAD state instead of whatever is idle:
+// triggers the given PAD (default: the selected one) through the exact app
+// path, samples the master bus peak for ~800ms while it should be sounding,
+// then plays the 1.2s probe tone. Listen and report: did the PAD sound? did
+// the TONE sound? If padPeak > 0 but you hear nothing, the graph is producing
+// audio that never reaches your speakers (output device/routing — the reset
+// below is the fix). If padPeak is 0, the trigger path itself failed.
+window.__pumaAudioCheck = async (position) => {
+  const pos = position ?? store.get().selectedPosition ?? 1;
+  const data = pads.getData(pos);
+  const before = audio.getDiagnostics();
+  pads.trigger(pos);
+  let padPeak = 0;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 800) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const peak = audio.getDiagnostics().masterPeak;
+    if (typeof peak === 'number' && peak > padPeak) padPeak = peak;
+  }
+  const after = audio.getDiagnostics();
+  const tonePlayed = audio.testTone(1200);
+  const summary = {
+    pad: pos,
+    sliceMs: data ? Math.round((data.end - data.start) * 1000) : null,
+    voicesStartedDelta: after.voicesStarted - before.voicesStarted,
+    voices: after.voices,
+    padPeak: Number(padPeak.toFixed(4)),
+    tonePlayed,
+    diag: after,
+  };
+  console.log(
+    `[puma-check] pad=${pos} slice=${summary.sliceMs}ms started+=${summary.voicesStartedDelta}`
+    + ` voices=${summary.voices} padPeak=${summary.padPeak} tone=${tonePlayed}`
+    + ` state=${after.state} vol=${after.masterVolume} nan=${after.masterNan}`,
+  );
+  return summary;
+};
+// In-place audio recovery: closes the AudioContext and rebuilds it (plus the
+// master chain and worklets) on the next trigger — what a page reload does for
+// audio, without reloading. Use it when the sampler seems silent but the diag
+// says the context is running.
+window.__pumaAudioReset = async () => {
+  await audio.resetContext();
+  console.log('[puma-check] AudioContext cerrado — el próximo trigger reconstruye el motor');
+  return 'reset';
+};
 window.addEventListener('audioworkletfallback', () => showToast(t('toast.pitchFallbackActive'), 'info'));
 const videoDisplay = createVideoDisplay(document.getElementById('video-player'));
 function getMediaInfo(videoId) {
@@ -505,6 +590,11 @@ function openSettingsModal() {
       </select>
     </div>
     <div class="settings-section">
+      <label class="settings-label">${t('settings.audioResetLabel')}</label>
+      <button class="btn btn-secondary" id="settings-audio-reset">${t('settings.audioReset')}</button>
+      <p class="session-modal-hint">${t('settings.audioResetHint')}</p>
+    </div>
+    <div class="settings-section">
       <label class="settings-toggle-row">
         <input type="checkbox" id="settings-autosave-enabled">
         <span class="settings-label">${t('settings.autosaveLabel')}</span>
@@ -570,6 +660,14 @@ function openSettingsModal() {
   waveformStyleEl.value = getWaveformStyle();
   waveformStyleEl.addEventListener('change', () => {
     setWaveformStyle(waveformStyleEl.value);
+  });
+
+  // Restart-audio button: rebuilds the audio engine in place — the same thing
+  // a page reload does for audio — for the rare case where the sampler goes
+  // silent without any error (see audio-engine.js resetContext).
+  modal.querySelector('#settings-audio-reset').addEventListener('click', async () => {
+    await audio.resetContext();
+    showToast(t('toast.audioReset'), 'success');
   });
 
   const valueEl = modal.querySelector('#settings-font-value');

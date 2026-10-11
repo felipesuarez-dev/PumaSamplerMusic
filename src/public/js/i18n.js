@@ -483,6 +483,11 @@ export const dictionaries = {
     'import.localMissingPrompt': 'This session references local media that is missing on this server:\n{list}\n\nRestoring a local video brings it back as audio-only (its video track is not included in the export).\n\nClick OK to restore this media from the ZIP, or Cancel to skip it.',
     'import.localRestored': '{restored} of {total} local media restored',
     'import.localSkipped': '{count} local media skipped: {list}',
+
+    'settings.audioResetLabel': 'Audio engine',
+    'settings.audioReset': 'Restart audio',
+    'settings.audioResetHint': 'Use this only if the sampler goes silent without showing any error: it rebuilds the audio engine in place (no page reload) and keeps the media that is already decoded.',
+    'toast.audioReset': 'Audio engine restarted',
   },
   es: {
     'common.pressKey': 'Presiona una tecla...',
@@ -966,6 +971,11 @@ export const dictionaries = {
     'import.localMissingPrompt': 'Esta sesión hace referencia a medios locales que faltan en este servidor:\n{list}\n\nRestaurar un video local lo recupera solo como audio (su pista de video no se incluye en la exportación).\n\nHaz clic en Aceptar para restaurar estos medios desde el ZIP, o en Cancelar para omitirlos.',
     'import.localRestored': '{restored} de {total} medios locales restaurados',
     'import.localSkipped': 'Se omitieron {count} medios locales: {list}',
+
+    'settings.audioResetLabel': 'Motor de audio',
+    'settings.audioReset': 'Reiniciar audio',
+    'settings.audioResetHint': 'Úsalo solo si el sampler queda en silencio sin mostrar ningún error: reconstruye el motor de audio en el sitio (sin recargar la página) y conserva los medios ya decodificados.',
+    'toast.audioReset': 'Motor de audio reiniciado',
   },
 };
 

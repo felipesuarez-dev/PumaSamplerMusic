@@ -12,6 +12,13 @@ export class GranularPitchShifter {
       { phase: 0, readPos: -grainSize },
       { phase: grainSize / 2, readPos: -grainSize / 2 },
     ];
+    // Reused output scratch. processSample runs ~48000 times per second per
+    // voice INSIDE the audio rendering thread, where per-sample allocations
+    // (the previous `new Array(channelCount)` here, plus the caller's own
+    // input array) put real GC pressure on the real-time thread and, under
+    // heavy polyphony, degraded the whole context into silence until a
+    // reload. Callers consume the values before the next call.
+    this.outputSample = new Array(channelCount).fill(0);
   }
 
   readInterpolated(buffer, pos) {
@@ -24,7 +31,11 @@ export class GranularPitchShifter {
   }
 
   // inputSample: array of per-channel values for one audio frame.
-  // Returns an array of per-channel output values for that same frame.
+  // Returns a REUSED per-channel array (this.outputSample) — the contract is
+  // "consume before the next call", which is what the AudioWorklet processor
+  // does (it copies the values into the output bus immediately). Returning a
+  // fresh array here was 48000 allocations/second/voice in the real-time
+  // thread.
   processSample(inputSample, pitchRatio) {
     const channelCount = this.channelBuffers.length;
     const writeIdx = this.samplesWritten % this.bufferSize;
@@ -33,7 +44,7 @@ export class GranularPitchShifter {
       this.channelBuffers[ch][writeIdx] = inputSample[ch];
     }
 
-    const output = new Array(channelCount).fill(0);
+    const output = this.outputSample;
     for (let ch = 0; ch < channelCount; ch++) {
       let sample = 0;
       for (const grain of this.grains) {
