@@ -775,6 +775,11 @@ function collectSessionData({ silent = false } = {}) {
     pads: pads.getAll(),
     masterFx: masterFxControls ? masterFxControls.getState() : undefined,
     cols: selectedGridCols(),
+    // Explicit grid count: pad positions alone can't tell a deliberate 8-pad
+    // 4×2 grid from a 9-pad one with the last slot empty, and the loader would
+    // force it back to 9. Old sessions have no count — the loader keeps its
+    // previous max(9, maxPosition) fallback for those.
+    count: pads.getCount(),
   };
 }
 
@@ -3400,7 +3405,15 @@ const sessionManager = createSessionManager({
   onSessionLoad(session) {
     const padsArray = session.pads || [];
     const maxPosition = padsArray.reduce((max, p) => Math.max(max, p.position || 0), 0);
-    const newCount = Math.max(9, Math.min(MAX_PADS, maxPosition));
+    // Sessions saved from v1.5 on carry an explicit `count`, so an 8-pad 4×2
+    // grid round-trips (position data alone would force it back to 9). A saved
+    // count can still be overridden by an out-of-grid position (hand-edited
+    // session) — never drop pad data. Old sessions have no count → the
+    // previous max(9, maxPosition) fallback, unchanged.
+    const savedCount = Number.isInteger(session.count) && session.count >= 1 ? session.count : null;
+    const newCount = savedCount != null
+      ? Math.min(MAX_PADS, Math.max(savedCount, maxPosition))
+      : Math.max(9, Math.min(MAX_PADS, maxPosition));
     if (newCount !== pads.getCount()) {
       pads.resize(newCount);
     }
@@ -3488,6 +3501,7 @@ if (exportBtn) {
         pads: pads.getAll(),
         masterFx: masterFxControls ? masterFxControls.getState() : undefined,
         cols: selectedGridCols(),
+        count: pads.getCount(),
       });
       if (!saved) return;
       window.open(api.exportSession(saved.name, format), '_blank');
